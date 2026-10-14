@@ -4,7 +4,7 @@ import { PLAYTEST_CONFIG } from "../src/game/playtest.config";
 // Source downloads are pinned and hashed in scripts/.cache/source-metadata.json.
 // uv isolates the offline compiler's dependency; the browser and Pages build
 // need only the generated JSON files, not Python or Shapely.
-const result = spawnSync("uv", ["run", "--with", "shapely==2.2.0", "python", "scripts/prepare_maps.py"], {
+const result = spawnSync("uv", ["run", "--with", "shapely==2.2.0", "python", "scripts/prepare_maps.py", ...process.argv.slice(2)], {
   input: JSON.stringify(PLAYTEST_CONFIG),
   encoding: "utf8",
   stdio: ["pipe", "inherit", "inherit"],

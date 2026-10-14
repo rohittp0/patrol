@@ -135,8 +135,8 @@ def mission(t):
     s.runner((436,164))
     s.squad((396,219))
     s.squad((491,186), "B")
-    s.pill("WORLDWIDE BREAKOUT ALERT", RED)
-    s.text((320,315), "YOU COMMAND THE RESPONSE", 12, LIME, anchor="mm")
+    s.pill("THE CASE FILES ARE OPEN", RED)
+    s.text((320,315), "YOU LEAD THE CHASE", 12, LIME, anchor="mm")
     return s.finish()
 
 
@@ -158,7 +158,7 @@ def order(t):
     s.cards(.22 <= t < .78)
     if t < .22: s.cursor((453,178))
     elif t < .30: s.cursor((224,315))
-    s.pill("1. SELECT A POST" if t < .22 else "2. CHOOSE A SQUAD" if t < .30 else "OLD BORDER OPENS" if moving else "NEW BORDER SECURED")
+    s.pill("1. SELECT A POST" if t < .22 else "2. CHOOSE A SQUAD" if t < .30 else "OLD BORDER UNGUARDED" if moving else "NEW BORDER GUARDED")
     return s.finish()
 
 
@@ -174,8 +174,8 @@ def runner(t):
     s.squad(curve(a,b,progress,-30))
     s.runner((406+rp*105,233-rp*55))
     s.cards()
-    s.pill("THINKING TIME = PAUSED" if t < .18 or t >= .82 else "BOTH MOVE TOGETHER" if t < .52 else "POST SECURED. RUNNER MOVES.")
-    s.text((461,267), "RUNNER" if .18 <= t < .82 else "PAUSED", 9, RED, anchor="mm")
+    s.pill("THINKING TIME = PAUSED" if t < .18 or t >= .82 else "BOTH MOVE TOGETHER" if t < .52 else "POST GUARDED. FUGITIVE MOVES.")
+    s.text((461,267), "FUGITIVE" if .18 <= t < .82 else "PAUSED", 9, RED, anchor="mm")
     return s.finish()
 
 
@@ -193,11 +193,11 @@ def containment(t):
     s.runner((269+progress*57,185))
     s.text((503,110), "LAND EXIT", 9, MUTED, anchor="mm")
     s.line([(469,127),(548,127)], MUTED, 1)
-    s.pill("CLOSE THE LAST GAP" if not arrived else "RUNNER CONTAINED", LIME)
+    s.pill("CLOSE THE LAST GAP" if not arrived else "FUGITIVE CAUGHT", LIME)
     if arrived:
         s.rect((170,212,357,242),"#142d2a","#739958")
         s.text((263,227),"NO LAND ESCAPE ROUTE",9,LIME,anchor="mm")
-    s.text((320,313),"SECURED BORDERS + COASTLINE = A CLOSED NET",10,LIME,anchor="mm")
+    s.text((320,313),"GUARDED BMOVES AND SEA CLOSE THE NET",10,LIME,anchor="mm")
     return s.finish()
 
 
@@ -213,14 +213,14 @@ def hint(t):
     s.rect((65,78,233,114),"#122a2d","#88a866")
     s.text((149,96),"SHOW HINT / FREE",11,LIME,anchor="mm")
     s.rect((473,78,569,114),"#122a2d","#44614e")
-    s.text((521,96),f"{CONFIG['openingMaxOrders']} ORDERS",10,LIME,anchor="mm")
+    s.text((521,96),f"{CONFIG['openingMaxOrders']} MOVES",10,LIME,anchor="mm")
     if shown:
         s.rect((65,130,258,171),"#122a2d","#88a866")
         s.text((161,151),"SQUAD A > POST 02",11,LIME,anchor="mm")
         s.cursor((452,182))
     else: s.cursor((199,102))
     s.pill("FREE INTELLIGENCE. YOUR CALL.")
-    s.text((320,349),"NO TIME, ORDERS OR POINTS SPENT",8,MUTED,anchor="mm")
+    s.text((320,349),"NO TIME, MOVES OR POINTS SPENT",8,MUTED,anchor="mm")
     return s.finish()
 
 

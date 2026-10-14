@@ -2,6 +2,7 @@ import { PLAYTEST_CONFIG as CONFIG } from "./playtest.config";
 import { distanceKm, Navigation } from "./navigation";
 import type { CountryBoard, Position, StartingSetup } from "./types";
 import { countryScaleKm } from "./country-scale";
+import type { RunnerWaypoint } from "./runner-route";
 
 export interface GameRules {
   squadCount: number;
@@ -11,18 +12,24 @@ export interface GameRules {
   minimumRunnerTravelFraction?: number;
 }
 
-export function rulesForLevel(id: string): GameRules {
+/** Squad allocation belongs to the hunt. The first configured count is only
+ * the default for preparing new setups; existing supported allocations persist. */
+export function rulesForLevel(id: string, squadCount?: number): GameRules {
   const level = CONFIG.levels.find((candidate) => candidate.id === id);
   if (!level) throw new Error(`Unknown level: ${id}`);
-  return { ...level, runnerSpeedKmh: CONFIG.movement.runnerSpeedKmh, squadSpeedKmh: CONFIG.movement.runnerSpeedKmh * CONFIG.movement.squadSpeedMultiplier, minimumRunnerTravelFraction: CONFIG.movement.minimumRunnerTravelFraction };
+  const allocation = squadCount ?? level.squadCounts[0];
+  if (!(level.squadCounts as readonly number[]).includes(allocation)) throw new Error(`Unsupported squad allocation for ${id}: ${allocation}`);
+  return { ...level, squadCount: allocation, runnerSpeedKmh: CONFIG.movement.runnerSpeedKmh, squadSpeedKmh: CONFIG.movement.runnerSpeedKmh * CONFIG.movement.squadSpeedMultiplier, minimumRunnerTravelFraction: CONFIG.movement.minimumRunnerTravelFraction };
 }
 
-interface Waypoint { node: number | null; position: Position }
+type Waypoint = RunnerWaypoint;
 
 export interface Actor {
   position: Position;
   atNode: number | null;
   edge: [number, number] | null;
+  /** Reachable land anchor in the occupied face; need not be physically visited
+   * when a visibility shortcut skips triangle centres. */
   lastLandNode: number;
   route: Waypoint[];
   segment: { start: Position; target: Waypoint; length: number; travelled: number } | null;
@@ -68,7 +75,7 @@ export class PatrolGame {
   activeOrder: ActiveOrder | null = null;
   outcome: Outcome = { kind: "playing" };
 
-  constructor(readonly board: CountryBoard, readonly setup: StartingSetup, readonly rules = rulesForLevel(board.id), navigation?: Navigation) {
+  constructor(readonly board: CountryBoard, readonly setup: StartingSetup, readonly rules = rulesForLevel(board.id, setup.squadBorders.length), navigation?: Navigation) {
     if (setup.squadBorders.length !== rules.squadCount || new Set(setup.squadBorders).size !== rules.squadCount) throw new Error("Starting setup does not match the squad allocation");
     if (board.nodes[setup.runnerNode]?.kind !== "land") throw new Error("Runner must start on playable land");
     this.navigation = navigation ?? new Navigation(board);
@@ -108,31 +115,34 @@ export class PatrolGame {
   static fromSnapshot(board: CountryBoard, setup: StartingSetup, rules: GameRules, snapshot: GameSnapshot, navigation?: Navigation): PatrolGame {
     const game = new PatrolGame(board, setup, rules, navigation);
     Object.assign(game, structuredClone(snapshot));
+    // JSON storage duplicates references that structured-clone workers preserve.
+    // Reconnect active segments and history before advancing the saved clock.
+    for (const actor of [game.runner, ...game.squads.map((squad) => squad.actor)]) {
+      if (actor.segment && actor.route.length) actor.segment.target = actor.route[0];
+    }
+    if (game.activeOrder) game.history[game.ordersUsed - 1] = game.activeOrder;
     return game;
   }
 
-  private runnerStarts(): { node: number; cost: number }[] {
-    const secured = this.securedBorders;
-    const candidates = this.runner.atNode === null ? this.runner.edge ?? [] : [this.runner.atNode];
-    let usable = candidates.filter((node) => this.navigation.allowed(node, secured, true));
-    if (!usable.length) usable = [this.runner.lastLandNode];
-    return usable.map((node) => ({ node, cost: distanceKm(this.runner.position, this.board.nodes[node].p) }));
+  /** Remaining length of the current land escape route, in kilometres. */
+  get runnerEscapeDistanceKm(): number {
+    let previous = this.runner.position;
+    return this.runner.route.reduce((sum, point) => {
+      const distance = distanceKm(previous, point.position);
+      previous = point.position;
+      return sum + distance;
+    }, 0);
   }
 
   private replanRunner() {
+    const pending = this.activeOrder;
+    const closure = pending && this.squads[pending.squad].border === null
+      ? { border: pending.to, distanceBudgetKm: Math.max(0, pending.squadArrivalHours - pending.elapsedHours) * this.rules.runnerSpeedKmh }
+      : undefined;
+    const route = this.navigation.runnerPath(this.runner, this.securedBorders, closure);
     this.runner.segment = null;
-    const route = this.navigation.shortestPath(this.runnerStarts(), (node) => this.board.nodes[node].kind === "exit", this.securedBorders, true);
-    if (!route) {
-      this.runner.route = [];
-      this.outcome = { kind: "won", score: this.rules.maxOrders - this.ordersUsed };
-    } else {
-      // Prefer routes that remain usable when the moving squad closes its post.
-      // A failed prediction is not containment: actual borders still determine
-      // the outcome, so an unavoidable closure falls back to trying to escape.
-      const pending = this.activeOrder;
-      const anticipated = pending && this.squads[pending.squad].border === null ? this.navigation.shortestPath(this.runnerStarts(), (node) => this.board.nodes[node].kind === "exit", this.securedBorders, true, { border: pending.to, distanceBudgetKm: Math.max(0, pending.squadArrivalHours - pending.elapsedHours) * this.rules.runnerSpeedKmh }) : null;
-      this.runner.route = (anticipated ?? route).nodes.map((node) => ({ node, position: this.board.nodes[node].p }));
-    }
+    this.runner.route = route?.points ?? [];
+    if (!route) this.outcome = { kind: "won", score: this.rules.maxOrders - this.ordersUsed };
   }
 
   previewOrder(squadIndex: number, destination: number): { nodes: number[]; points: Position[]; distanceKm: number } | null {
@@ -173,6 +183,7 @@ export class PatrolGame {
       if (!actor.segment || actor.segment.target !== target) actor.segment = { start: [...actor.position], target, length: distanceKm(actor.position, position), travelled: 0 };
       const segment = actor.segment;
       const length = segment.length - segment.travelled;
+      if (canEscape && target.landNode !== undefined && Math.min(length, remaining) > 0) actor.lastLandNode = target.landNode;
       if (length <= remaining + CONFIG.movement.arrivalToleranceKm) {
         remaining = Math.max(0, remaining - length);
         actor.position = [...position];

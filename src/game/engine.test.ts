@@ -9,6 +9,7 @@ import { spawnClearance, validSpawn } from "./spawn";
 import { hasWinWithin } from "./setup-validation";
 import { countryScaleKm } from "./country-scale";
 import { setupRulesSignature } from "./difficulty";
+import { challengePolicy } from "./challenge-policy";
 import type { CountryBoard, StartingSetup } from "./types";
 
 function fixture() {
@@ -267,21 +268,25 @@ for (const level of CONFIG.levels) {
   });
   test(`${level.name}: every published setup has its verified difficulty and winning sequence`, async () => {
     assert.equal(board.setups.length, CONFIG.setups.poolSize);
+    assert(board.setups.every((setup) => board.setups.filter((other) => other.runnerNode === setup.runnerNode).length <= CONFIG.setups.maxSetupsPerRunner), "Too many hunts share one starting location");
+    assert.equal(new Set(board.setups.map((setup) => JSON.stringify([setup.runnerNode, [...setup.squadBorders].sort((a, b) => a - b)]))).size, board.setups.length, "Repeated starting position and squad assignments");
     const spawnRegions = new Set(board.setups.map((setup) => board.nodes[setup.runnerNode].region));
     assert(spawnRegions.size >= Math.ceil(CONFIG.setups.poolSize / CONFIG.setups.maxSetupsPerRegion));
     const navigation = new Navigation(board);
     const land = new LandRoute(board.land);
-    const signature = await setupRulesSignature(board, rulesForLevel(board.id));
     let previousScore = -Infinity;
-    for (const setup of board.setups) {
-      assert.equal(setup.witness.length, level.solutionOrders);
-      assert.equal(setup.difficulty?.minimumOrders, level.solutionOrders);
+    for (const [index, setup] of board.setups.entries()) {
+      const policy = challengePolicy(index);
+      const rules = rulesForLevel(board.id, setup.squadBorders.length);
+      const signature = await setupRulesSignature(board, rules);
+      assert(setup.witness.length >= policy.minimumOrders && setup.witness.length <= policy.maximumWitnessOrders);
+      assert.equal(setup.difficulty?.minimumOrders, policy.minimumOrders);
       assert.equal(setup.difficulty.rulesSignature, signature);
       assert(setup.difficulty.score >= previousScore);
       previousScore = setup.difficulty.score;
       assert(setup.difficulty.escapePressure >= level.escapePressureRange.min && setup.difficulty.escapePressure <= level.escapePressureRange.max);
       assert(validSpawn(spawnClearance(board, board.nodes[setup.runnerNode].p), level), `${setup.id}: runner spawned too close to a border`);
-      const game = new PatrolGame(board, setup, rulesForLevel(board.id), navigation);
+      const game = new PatrolGame(board, setup, rules, navigation);
       assert.equal(game.outcome.kind, "playing", setup.id);
       for (const order of setup.witness) {
         assert(game.issueOrder(order.squad, order.border), setup.id);
@@ -291,7 +296,7 @@ for (const level of CONFIG.levels) {
       }
       assert(game.won, setup.id);
       assert(game.ordersUsed <= game.rules.maxOrders);
-      assert.equal(hasWinWithin(new PatrolGame(board, setup, game.rules, navigation), level.solutionOrders - 1), false, `${setup.id}: a shorter solution exists`);
+      assert.equal(hasWinWithin(new PatrolGame(board, setup, game.rules, navigation), policy.minimumOrders - 1), false, `${setup.id}: a shorter solution exists`);
     }
   });
   test(`${level.name}: curved squad movement is independent of animation frame size`, () => {
@@ -312,9 +317,9 @@ for (const level of CONFIG.levels) {
   });
 }
 
-test("the complete country sequence progresses without a lower difficulty score", () => {
-  let previous = -Infinity;
+test("hunts progress within each country, then reset for the next introduction", () => {
   for (const level of CONFIG.levels) {
+    let previous = -Infinity;
     const board: CountryBoard = JSON.parse(readFileSync(`public/data/${level.id}.json`, "utf8"));
     for (const setup of board.setups) {
       assert(setup.difficulty && setup.difficulty.score >= previous, `${setup.id}: difficulty dropped`);

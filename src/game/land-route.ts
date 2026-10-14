@@ -71,7 +71,8 @@ export class LandRoute {
     return points.slice(1).every((point, i) => this.allows(points[i], point));
   }
 
-  smooth(points: Position[]): Position[] {
+  /** Shorten a path without adding decorative curves or crossing this polygon. */
+  taut(points: Position[]): Position[] {
     if (points.length < 2 || !this.rings.length) return points;
     // Pull the route taut across visible land, removing triangle-centre zigzags.
     const pulled = [points[0]];
@@ -81,6 +82,12 @@ export class LandRoute {
       pulled.push(points[next]);
       i = next;
     }
+    return pulled;
+  }
+
+  smooth(points: Position[]): Position[] {
+    const pulled = this.taut(points);
+    if (pulled.length < 2 || !this.rings.length) return pulled;
     const tuning = CONFIG.movement.routeSmoothing;
     if (pulled.length === 2) {
       const [a, b] = pulled, cosine = Math.cos((a[1] + b[1]) / 2 * radians);

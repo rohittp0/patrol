@@ -40,11 +40,7 @@ export function findHint(game: PatrolGame, tuning: HintTuning = CONFIG.hints): H
     if (state === game) {
       roots.set(key, branch);
       if (branch.outcome.kind === "playing") {
-        const actor = branch.runner;
-        let nodes = (actor.atNode === null ? actor.edge ?? [] : [actor.atNode]).filter((node) => branch.navigation.allowed(node, branch.securedBorders, true));
-        if (!nodes.length) nodes = [actor.lastLandNode];
-        const path = branch.navigation.shortestPath(nodes.map((node) => ({ node, cost: distanceKm(actor.position, branch.board.nodes[node].p) })), (node) => branch.board.nodes[node].kind === "exit", branch.securedBorders, true);
-        const distance = path?.distanceKm ?? 0;
+        const distance = branch.runnerEscapeDistanceKm;
         const duration = branch.history.at(-1)!.durationHours;
         if (!safest || distance > safest.distance || (distance === safest.distance && duration < safest.duration)) safest = { order, distance, duration };
       }

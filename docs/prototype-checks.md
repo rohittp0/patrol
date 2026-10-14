@@ -118,3 +118,38 @@ worker URL, and post-state updates must preserve MapLibre's positioning classes.
 Playback now advances at least ten times faster than the initial prototype;
 long journeys use a six-second cap while preserving both actors' relative
 simulation speeds and distances. The initial camera adds clearance for the HUD.
+
+## 2026-10-15 — per-hunt difficulty, squad counts, and refresh recovery
+
+- `npm test`: all 72 tests passed. Every country has two exactly two-move
+  introductions and four later hunts with an exhaustive rejection of all
+  one- and two-move wins. All eighteen winning sequences replay successfully.
+  Each country starts its six hunts in six distinct administrative regions.
+- Existing verified three-squad India setups were retained. India's hunt
+  allocations are now 3, 3, 4, 3, 4, 4; USA and Hungary use four throughout.
+  Runtime rules, proof signatures, worker hints, saved games and newspaper
+  reports use the individual hunt's allocation. Unsupported counts are rejected.
+- Later hunts begin with at most one third of the actual final enclosure
+  guarded, and meet the configured country-scaled squad travel floor. Three-
+  and four-move witnesses are separate from the proved three-move lower bound.
+  Hungary's final four-move witness does not claim an exact four-move minimum.
+- Browser checks followed India's first two introductions and third hunt with
+  free hints. The third remained playing after two moves and won on the third.
+  Reload during movement preserved hunt, allocation, moves and attempt ID for
+  both three- and four-squad hunts. Squad cards matched the actual allocation.
+- Previous hunt replayed a four-squad hunt from a three-squad hunt, resetting
+  the chase correctly. From Hungary's opening it returned to India's final
+  hunt; reload retained that country and hunt. Earlier browser checks verified
+  it is disabled at campaign start and replay preserves best scores. These
+  functional checks produced no page errors; the existing style warning remains.
+- `npm run build` passed; the existing MapLibre bundle-size advisory remains.
+  Preparation publishes complete pools atomically and supports checkpoint resume.
+- A desktop Chromium warm comparison used the same first move of IN-006 with
+  saving enabled, then temporarily disabled. Both recorded 150 frames, median
+  and p95 frame intervals of 16.7 ms, and a maximum of 16.8 ms. Five save calls
+  had p95 0.2 ms and maximum 0.3 ms, storing 2,648 bytes. Browser task CPU was
+  163.7 ms / 2,518.6 ms wall time with saving and 154.5 ms / 2,520.7 ms without.
+  Used heap ranged 30.9–32.4 MiB across the samples; GC affected the deltas.
+  This is a single warm comparison, not a cold-start, retained-memory or device
+  benchmark. Instrumentation was removed by reloading the app.
+- Development preview remains at `http://localhost:3000/patrol/`.

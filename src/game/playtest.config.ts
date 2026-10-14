@@ -29,8 +29,8 @@
  * - Crossing the zone's outer land boundary or exceeding the order budget loses.
  * - Winning score = the level's maxOrders minus orders used.
  * - Current levels use non-island countries, with detached islands excluded.
- * - Every challenge has a verified exact minimum solution length, remains
- *   winnable within its budget, and is ordered by measured difficulty.
+ * - Every challenge has a verified minimum move requirement and a replayed
+ *   winning sequence within budget; introductions reset in each country.
  *
  * Add new tuning values to this file as mechanics are agreed. Current boards
  * and winning setup sequences are generated and checked; balance still needs
@@ -98,6 +98,19 @@ export const PLAYTEST_CONFIG = {
     /** Numerical distance tolerance in kilometres for reaching a route node. */
     arrivalToleranceKm: 0.000001,
 
+    runnerRouting: {
+      /** STARTER: nearest visible land nodes seeded from the runner's actual
+       * position. Positive integer; bounds route search after a mid-path stop. */
+      visibleLandStarts: 8,
+      /** STARTER: visible crossings seeded per border or neighboring face.
+       * Positive integer; higher values explore more escape approaches. */
+      visibleCrossingsPerBorder: 3,
+      /** STARTER: entries in each visibility/escape-route cache per board.
+       * Positive integer; bounds hint-search memory. Eviction affects only
+       * performance, never route choices or proof signatures. */
+      cacheEntries: 256,
+    },
+
     routeSmoothing: {
       /** STARTER: maximum corner rounding radius and direct-route bow, in kilometres. */
       cornerRadiusKm: 30,
@@ -142,6 +155,9 @@ export const PLAYTEST_CONFIG = {
       junctionToleranceKm: 0.00001,
       /** Coordinate decimal places in generated GeoJSON and navigation data. */
       coordinateDecimals: 7,
+      /** STARTER: remove mapped inland lakes at least this large from the USA
+       * board, in projected km². Keeps the Great Lakes out of land routes. */
+      minimumInlandLakeAreaKm2: 500,
     },
 
     /** STARTER: camera edge margin in CSS pixels; HUD clearance is added automatically. */
@@ -216,28 +232,72 @@ export const PLAYTEST_CONFIG = {
     /** STARTER: minimum stored winning-sequence length, an integer >= 2; one-order wins are separately rejected. */
     minWitnessOrders: 2,
     /** STARTER: deepest order sequence explored when preparing the initial pool. */
-    searchDepth: 3,
+    searchDepth: 4,
     /** STARTER: cap on candidate starting positions examined per region. */
-    runnerCandidatesPerRegion: 12,
+    runnerCandidatesPerRegion: 32,
+    /** STARTER: maximum hunts at one spawn point. Positive integer; one keeps
+     * every starting location distinct. The per-region cap also applies. */
+    maxSetupsPerRunner: 1,
     /** STARTER: deterministic seed used by the offline setup preparation script. */
     preparationSeed: 42,
-    /** STARTER: avoid filling the entire pool with one runner region. */
-    maxSetupsPerRegion: 3,
+    /** STARTER: test previously prepared areas and nearby spawn candidates
+     * first after tuning. Every result still requires fresh simulation proofs. */
+    preferPreparedAreas: true,
+    /** STARTER: prioritize traps on land exits, where an escaping fugitive is
+     * naturally headed. All other eligible enclosures remain searchable. */
+    preferLandExitEnclosures: true,
+    /** STARTER: entries in the shared static-enclosure cache. Positive integer;
+     * eviction affects performance only, not simulation or proof results. */
+    enclosureCacheEntries: 50000,
+    /** AGREED: every hunt in a country starts in a different state/province. */
+    maxSetupsPerRegion: 1,
     /** STARTER: nearest border posts considered for initial squads, plus all enclosure borders. */
     initialBorderCandidates: 16,
     /** STARTER: bound offline search per runner region; a failed search is not an impossibility proof. */
-    maxAttemptsPerRegion: 12000,
+    maxAttemptsPerRegion: 48000,
     /** STARTER: spread search effort across runner positions instead of exhausting one spawn. */
     maxAttemptsPerRunner: 1000,
+    /** STARTER: temporary posts per squad considered for a necessary
+     * repositioning move before the final trap is completed. Positive integer. */
+    repositionCandidatesPerSquad: 4,
     /** STARTER: adjacent administrative regions considered as one enclosure during setup search. */
     maxEnclosureRegions: 3,
+    /** STARTER: also test spawns in adjacent regions, allowing a chase into
+     * an enclosure instead of requiring capture in the starting region. */
+    neighboringSpawnCountries: ["usa", "india", "hungary"] as readonly string[],
+  },
+
+  persistence: {
+    /** STARTER: milliseconds between saves during movement. Positive; starts,
+     * arrivals, finished moves and page exit also save immediately. */
+    autosaveIntervalMs: 1000,
   },
 
   progression: {
-    /** STARTER: nearest legal opening orders probed for successful continuations. */
-    openingProbeCount: 12,
+    /** AGREED: the first two hunts of EVERY country allow a two-move capture.
+     * Every later hunt must reject all one- and two-move winning sequences. */
+    introductoryHunts: 2,
+    introductory: {
+      minimumOrders: 2,
+      maximumWitnessOrders: 2,
+      /** STARTER: maximum share of the final trap guarded at spawn, in [0,1]. */
+      maximumInitiallyGuardedFraction: 0.75,
+      /** STARTER: mean squad journey / sqrt(country land area), dimensionless. */
+      minimumMeanTravelFraction: 0,
+    },
+    main: {
+      minimumOrders: 3,
+      /** STARTER: allow a verified four-move route while proving no <=2 win.
+       * A four-move witness alone is not a claim that three moves are impossible. */
+      maximumWitnessOrders: 4,
+      /** STARTER: at most one border of a three- or four-border trap starts
+       * guarded. Most of the enclosure must be built during the chase. */
+      maximumInitiallyGuardedFraction: 1 / 3,
+      /** STARTER: country-scaled mean journey floor for later hunts. */
+      minimumMeanTravelFraction: 0.02,
+    },
     /** STARTER: difficulty weights; order weight must exceed both tie-break weights combined. */
-    weights: { minimumOrders: 1000, openingScarcity: 100, escapePressure: 100 },
+    weights: { minimumOrders: 1000, extraSolutionMove: 200, travelFraction: 100, unguardedFraction: 100, escapePressure: 100 },
   },
 
   hints: {
@@ -258,7 +318,7 @@ export const PLAYTEST_CONFIG = {
     /** AGREED: show on first visit; How to play always reopens slide one. */
     showOnFirstVisit: true,
     /** STARTER: increment to show an updated briefing to returning players. */
-    version: 1,
+    version: 2,
     /** STARTER: locally generated GIF size, frames per second and duration.
      * Run npm run prepare:tutorial after changing these positive values. */
     animation: { widthPx: 640, heightPx: 360, framesPerSecond: 10, durationSeconds: 6 },
@@ -275,13 +335,47 @@ export const PLAYTEST_CONFIG = {
     maxTouchScreenShortSidePx: 767,
   },
 
+  poster: {
+    /** STARTER: exported newspaper dimensions, in pixels, at a 4:5 aspect ratio. */
+    widthPx: 1200, heightPx: 1500,
+    /** STARTER: player-name length in Unicode characters; keeps headlines legible. */
+    maxNameLength: 32,
+    /** STARTER: largest accepted photo upload, in MiB. Original files stay local. */
+    maxPhotoMiB: 15,
+    /** STARTER: final circular head crop's side in pixels. Never store the original. */
+    storedPhotoSizePx: 512,
+    /** STARTER: crop preview size in pixels, zoom range, and arrow-key pan distance. */
+    cropSizePx: 240, maxPhotoZoom: 3, keyboardPanPx: 10,
+    /** STARTER: head centres (fraction of source width/height) and circular
+     * radii (fraction of source width) calibrated to newspaper/arrest-scene.webp.
+     * Update these together with that illustration; values must be in [0,1]. */
+    sceneHeads: {
+      player: { x: 0.3236, y: 0.1807, radius: 0.081 },
+      fugitive: { x: 0.654, y: 0.1885, radius: 0.0795 },
+    },
+  },
+
+  telemetry: {
+    /** AGREED: internal release uses Analytics without a consent-screen flow. */
+    enabled: true,
+    /** STARTER: do not send local playtests to production; ?telemetry_debug=1 opts in. */
+    enableInDevelopment: false,
+    /** STARTER: fraction of browser sessions with custom Performance traces, in [0,1].
+     * Automatic network instrumentation is disabled; there are no frame traces. */
+    performanceSampleRate: 0.1,
+    /** STARTER: defer SDK loading until idle, with this millisecond fallback. */
+    idleTimeoutMs: 3000,
+    /** STARTER: bounded early-event queue and local debug history. */
+    maxQueuedEvents: 200,
+  },
+
   /**
    * Ordered level sequence. Array order is progression order; do not sort it
    * automatically by country name, size, or coastline.
    *
-   * India precedes Hungary. Prepared challenges prove their required solution
-   * depth and satisfy separate escape-pressure bands. Opening choices and
-   * pressure order challenges within a country; playtesting refines these metrics.
+   * USA precedes India, then Hungary. Prepared challenges prove their required solution
+   * depth and satisfy separate escape-pressure bands. Move count, squad travel,
+   * initial trap coverage and pressure rank hunts within each country.
    *
    * countryCodes uses ISO 3166-1 alpha-2 codes. Each entry currently contains
    * one non-island country. The array leaves room for future combined zones
@@ -291,17 +385,48 @@ export const PLAYTEST_CONFIG = {
    */
   levels: [
     {
+      /** AGREED: USA opens the campaign; detached Alaska and islands are excluded. */
+      id: "usa",
+      name: "USA",
+      countryCodes: ["US"],
+      /** Natural Earth administrative country code used by the map compiler. */
+      admin0Code: "USA",
+      /** AGREED: Great Lakes and other large inland waters are impassable. */
+      excludeInlandWater: true,
+      /** STARTER: allowed squads per hunt, in preparation preference order.
+       * Existing verified allocations remain valid; each hunt owns its count. */
+      squadCounts: [4],
+      /** STARTER: runner travel floor / escape-route distance, in [0,1].
+       * Spawn clearance and per-hunt move proofs determine eligibility too. */
+      escapePressureRange: { min: 0, max: 0.3 },
+      /** STARTER: one hunt per spawn state; at least four internal borders at
+       * the start and four guarded borders in the final enclosure. Avoid easy
+       * three-border coastal traps. Optional state changes can be tested later.
+       * These constrain curation, not movement. */
+      setupCuration: { maxPerSpawnRegion: 1, minimumSpawnInternalBorders: 4, minimumEnclosureBorders: 4, requireRunnerRegionChange: false },
+      minimumInternalBorders: 50,
+      /** STARTER: camera radius and spawn clearance distances, in kilometres. */
+      initialViewRadiusKm: 400,
+      minimumRunnerZoneEdgeKm: 30,
+      minimumRunnerExitKm: 100,
+      minimumRunnerInternalBorderKm: 15,
+      /** AGREED starter budget, in moves. */
+      maxOrders: 8,
+    },
+    {
       /** Stable level identifier; keep it unchanged when reordering levels. */
       id: "india",
       /** Display name for this level's patrol zone. */
       name: "India",
       countryCodes: ["IN"],
-      /** STARTER: positive integer; per-country squad allocation. */
-      squadCount: 3,
-      /** STARTER: exact minimum winning orders, verified by exhausting shorter solutions. */
-      solutionOrders: 2,
-      /** STARTER: runner-step / open escape-route distance; low pressure for the introductory country. */
-      escapePressureRange: { min: 0, max: 0.1 },
+      admin0Code: "IND",
+      /** AGREED: hunts in the same country may have different squad counts.
+       * STARTER: prefer four for new traps; retain verified three-squad hunts.
+       * Positive integers in preparation preference order. */
+      squadCounts: [4, 3],
+      /** STARTER: runner travel floor / escape-route distance, in [0,1].
+       * Spawn clearance and per-hunt move proofs determine eligibility too. */
+      escapePressureRange: { min: 0, max: 0.4 },
       /** STARTER: guard against accidentally reverting to a sparse internal network. */
       minimumInternalBorders: 30,
       /** STARTER: starting camera radius around the runner, in kilometres. */
@@ -321,12 +446,12 @@ export const PLAYTEST_CONFIG = {
       /** Display name for this level's patrol zone. */
       name: "Hungary",
       countryCodes: ["HU"],
-      /** STARTER: positive integer; tune independently of India's allocation. */
-      squadCount: 4,
-      /** STARTER: exact minimum winning orders; strictly harder than India's two-order puzzles. */
-      solutionOrders: 3,
-      /** STARTER: tighter escape pressure than India, without near-instant escape. */
-      escapePressureRange: { min: 0.12, max: 0.35 },
+      admin0Code: "HUN",
+      /** STARTER: allowed squads per hunt, in preparation preference order. */
+      squadCounts: [4],
+      /** STARTER: runner travel floor / escape-route distance, in [0,1].
+       * Spawn clearance and per-hunt move proofs determine eligibility too. */
+      escapePressureRange: { min: 0, max: 0.5 },
       /** STARTER: guard against accidentally reverting to a sparse internal network. */
       minimumInternalBorders: 25,
       /** STARTER: starting camera radius around the runner, in kilometres. */

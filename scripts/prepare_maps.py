@@ -28,6 +28,8 @@ CACHE.mkdir(parents=True, exist_ok=True)
 OUT.mkdir(parents=True, exist_ok=True)
 SOURCE_REVISION = "ca96624a56bd078437bca8184e78163e5039ad19"
 SOURCE_NAMES = ["ne_10m_admin_1_states_provinces", "ne_10m_admin_0_boundary_lines_land"]
+if any(level.get("excludeInlandWater") for level in CONFIG["levels"]):
+    SOURCE_NAMES.append("ne_10m_lakes")
 source = {"revision": SOURCE_REVISION, "files": {}}
 for source_name in SOURCE_NAMES:
     source_url = f"https://raw.githubusercontent.com/nvkelso/natural-earth-vector/{SOURCE_REVISION}/geojson/{source_name}.geojson"
@@ -57,7 +59,7 @@ def haversine(a, b):
 
 
 def build(level):
-    iso = "IND" if level["id"] == "india" else "HUN"
+    iso = level["admin0Code"]
     features = [f for f in states if f["properties"]["adm0_a3"] == iso]
     raw_country = max(parts(make_valid(unary_union([shape(f["geometry"]) for f in features])), "Polygon"), key=lambda p: p.area)
     latitude = raw_country.centroid.y
@@ -66,14 +68,19 @@ def build(level):
     project = lambda x, y, z=None: (x*sx, y*sy)
     inverse = lambda p: [round(p[0]/sx, CONFIG["map"]["geometry"]["coordinateDecimals"]), round(p[1]/sy, CONFIG["map"]["geometry"]["coordinateDecimals"])]
     country = transform(project, raw_country)
+    if level.get("excludeInlandWater"):
+        lakes = json.loads((CACHE / "ne_10m_lakes.geojson").read_text())["features"]
+        water = [transform(project, make_valid(shape(feature["geometry"]))) for feature in lakes if shape(feature["geometry"]).intersects(raw_country)]
+        water = [lake for lake in water if lake.area >= CONFIG["map"]["geometry"]["minimumInlandLakeAreaKm2"]]
+        country = max(parts(make_valid(country.difference(unary_union(water))), "Polygon"), key=lambda polygon: polygon.area)
     tol = CONFIG["map"]["geometry"]["junctionToleranceKm"]
     simplify = CONFIG["map"]["geometry"]["simplificationKm"]
     groups = defaultdict(list)
 
-    if iso == "IND":
+    if iso in ("IND", "USA"):
         # Preserve mainland states instead of merging most of India into one
         # Interior region. Enclaved union territories join their actual host.
-        merged = {"IN-PY", "IN-DL", "IN-CH", "IN-DH", "IN-LD", "IN-AN"}
+        merged = {"IN-PY", "IN-DL", "IN-CH", "IN-DH", "IN-LD", "IN-AN"} if iso == "IND" else {"US-DC"}
         named = {f["properties"]["iso_3166_2"]: f["properties"]["iso_3166_2"].lower() for f in features if f["properties"]["iso_3166_2"] not in merged}
         labels = {named[f["properties"]["iso_3166_2"]]: f["properties"]["name"] for f in features if f["properties"]["iso_3166_2"] in named}
         hosts = [(named[f["properties"]["iso_3166_2"]], transform(project, shape(f["geometry"]))) for f in features if f["properties"]["iso_3166_2"] in named]
@@ -251,5 +258,11 @@ def build(level):
     print(f"{level['name']}: {len(faces)} land faces, {len(borders)} borders, {len(nodes)} navigation nodes, {sum(n['kind']=='exit' for n in nodes)} exits", flush=True)
 
 
+requested = set(sys.argv[1:])
+known = {level["id"] for level in CONFIG["levels"]}
+if requested - known:
+    raise ValueError(f"Unknown countries: {sorted(requested - known)}")
 for current_level in CONFIG["levels"]:
+    if requested and current_level["id"] not in requested:
+        continue
     build(current_level)

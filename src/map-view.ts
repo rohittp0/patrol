@@ -1,4 +1,6 @@
 import { Map, Marker, NavigationControl, setWorkerUrl } from "maplibre-gl";
+import { track } from "./telemetry";
+import { borderName } from "./game/presentation";
 import mapWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import type * as GeoJSON from "geojson";
 import type { GeoJSONSource, StyleSpecification } from "maplibre-gl";
@@ -30,6 +32,8 @@ export class PatrolMap {
   constructor(private board: CountryBoard, onPost: (border: number) => void, onMapStatus: (fallback: boolean) => void) {
     this.map = new Map({ container: "map", style: CONFIG.map.styleUrl, attributionControl: { compact: true }, dragRotate: false, pitchWithRotate: false, maxPitch: 0 });
     this.map.addControl(new NavigationControl({ showCompass: false }), "bottom-right");
+    this.map.on("dragend", (event) => { if (event.originalEvent) track("map_gesture", { action: "pan", zoom: Math.round(this.map.getZoom() * 10) / 10 }); });
+    this.map.on("zoomend", (event) => { if (event.originalEvent) track("map_gesture", { action: "zoom", zoom: Math.round(this.map.getZoom() * 10) / 10 }); });
     this.map.on("error", () => {
       // Do not log the remote style or tile URLs: they contain the owner's key.
       if (!this.ready && !this.usedFallback) {
@@ -52,7 +56,7 @@ export class PatrolMap {
     runnerElement.style.setProperty("--actor-size", `${CONFIG.appearance.runnerMarker.sizePx}px`);
     runnerElement.style.setProperty("--actor-colour", CONFIG.appearance.runnerMarker.iconColor);
     runnerElement.setAttribute("role", "img");
-    runnerElement.setAttribute("aria-label", "Runner position");
+    runnerElement.setAttribute("aria-label", "Fugitive position");
     this.runner = new Marker({ element: runnerElement, anchor: "center" }).setLngLat(board.nodes[0].p).addTo(this.map);
     const squadElement = document.createElement("div");
     squadElement.className = "actor-marker squad-marker";
@@ -69,6 +73,13 @@ export class PatrolMap {
   }
 
   private onPost: (border: number) => void;
+
+  setTarget(name: string, portrait: string) {
+    const element = this.runner.getElement();
+    const image = document.createElement("img"); image.src = portrait; image.alt = "";
+    element.replaceChildren(image); element.dataset.name = name;
+    element.setAttribute("aria-label", `${name}'s position`);
+  }
 
   setBoard(board: CountryBoard) {
     this.board = board;
@@ -143,7 +154,7 @@ export class PatrolMap {
       element.style.setProperty("--border-colour", CONFIG.appearance.borderPalette[index][squad >= 0 ? "secured" : "open"]);
       element.innerHTML = `<span>${squad >= 0 ? String.fromCharCode(65 + squad) : String(index + 1).padStart(2, "0")}</span>`;
       element.disabled = !!game.activeOrder || game.outcome.kind !== "playing";
-      const name = this.board.borders[index].name;
+      const name = borderName(this.board.borders[index]);
       element.title = squad >= 0 ? `Squad ${String.fromCharCode(65 + squad)} · ${name}` : `Post ${index + 1} · ${name}`;
       element.setAttribute("aria-label", `Inspect post ${String(index + 1).padStart(2, "0")}: ${name}${squad >= 0 ? ` · Squad ${String.fromCharCode(65 + squad)}` : ""}`);
       element.setAttribute("aria-pressed", String(index === selected));
@@ -181,7 +192,7 @@ export class PatrolMap {
     const margin = CONFIG.map.fitPaddingPx;
     const height = this.map.getContainer().clientHeight;
     const top = Math.max(...[".topbar", ".objective", ".map-caption"].map((selector) => document.querySelector(selector)!.getBoundingClientRect().bottom));
-    const bottom = Math.min(...[".squad-dock", ".map-legend"].map((selector) => document.querySelector(selector)!.getBoundingClientRect().top));
+    const bottom = document.querySelector(".squad-dock")!.getBoundingClientRect().top;
     return { top: Math.max(margin, top + margin / 2), bottom: Math.max(margin, height - bottom + margin / 2), left: margin, right: margin };
   }
 

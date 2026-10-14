@@ -22,12 +22,17 @@ export interface Border {
 export interface StartingSetup {
   id: string;
   runnerNode: number;
+  /** One initial post per squad; length is this hunt's allocation. Must be
+   * supported by its country's configured squadCounts. */
   squadBorders: number[];
   witness: { squad: number; border: number }[];
   difficulty?: {
+    /** Proven lower bound; exact when it equals solutionOrders. */
     minimumOrders: number;
-    winningOpenings: number;
-    testedOpenings: number;
+    /** Length of a replayed winning sequence, within the move budget. */
+    solutionOrders: number;
+    initiallyGuardedFraction: number;
+    meanSquadTravelKm: number;
     escapePressure: number;
     score: number;
     rulesSignature: string;

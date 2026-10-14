@@ -1,9 +1,10 @@
 # Patrol
 
-A single-player map game: relocate squads to close an enclosure around a runner
-before it escapes the patrol zone by land. The first playable prototype includes
-India and Hungary, each with six verified challenges. The campaign starts at
-India’s easiest challenge and progresses through all twelve in difficulty order.
+A single-player map game: move squads to surround a fugitive before they escape
+the patrol zone by land. Eighteen historical case files span the USA, India, and
+Hungary, with six verified hunts per country. The campaign starts in the mainland
+USA and progresses through all eighteen in measured difficulty order. Each hunt
+introduces a different fugitive; a capture reveals how the real manhunt ended.
 
 ## Play locally
 
@@ -19,7 +20,7 @@ allows this browser origin. Select a white border post to highlight its border,
 then choose the squad to send there. Clicking a squad without a selected open
 post brings it into view without issuing an order. Number keys choose squads;
 Escape clears the selected post. Games start moderately zoomed around the
-runner. Country view fits the entire zone, and Focus runner centres and zooms to the runner. The selected squad’s
+fugitive. Country view fits the entire zone, and Find fugitive centres and zooms to the fugitive. The selected squad’s
 post receives a bright ring; the counters sit on the right side of the map.
 
 First-time visitors see a five-slide mission briefing with original animated GIFs.
@@ -30,7 +31,7 @@ message asking the player to open Patrol on a laptop or desktop, including in
 landscape. Narrow desktop windows show the same message until enlarged.
 
 **Show hint** is free and highlights a destination post and squad without spending
-orders, points, or game time. Click the suggested squad to issue the order.
+moves, points, or game time. Click the suggested squad to issue the order.
 Advice is recalculated from the exact current state, including after a different
 opening. Every claimed winning continuation is checked in the game simulation.
 “Best move” means a shortest win has been proved. A bounded search can instead
@@ -40,37 +41,81 @@ It does not label an incomplete search as an unwinnable position. Searches run
 in a cancellable web worker; hints clear when the game state changes.
 
 Thinking time is paused. During an order, the old border opens immediately,
-both actors travel, and the new border becomes secured on arrival. The runner
+both actors travel, and the new border becomes guarded on arrival. The fugitive
 has a minimum travel distance per order, scaled to the square root of the
-country’s playable land area: currently about 71 km in India and 12 km in Hungary.
-After a short transfer, the squad secures its post while the runner finishes
+country’s playable land area: currently about 113 km in USA, 71 km in India, and 12 km in Hungary.
+After a short transfer, the squad guards its post while the fugitive finishes
 that travel. Escape or containment ends the order immediately; longer transfers
-can allow more runner travel. Both actors keep their constant simulated speeds. Open borders
-use muted colours; secured borders use bright colours and a glow. Squads move
-at twice the runner's simulated speed. Playback is accelerated for playtesting:
+can allow more fugitive travel. Both actors keep their constant simulated speeds. Open borders
+use muted colours; guarded borders use bright colours and a glow. Squads move
+at twice the fugitive's simulated speed. Playback is accelerated for playtesting:
 100 km takes approximately one second, and long journeys take at most six
 seconds of active playback. Acceleration applies equally to both actors and
 does not change their relative travel distances or puzzle outcomes. Squad routes
 remove triangle-centre zigzags and use land-checked arcs with rounded corners.
-Their actual curved distance determines travel time and runner advancement.
+Their actual curved distance determines travel time and fugitive advancement.
+The fugitive takes direct visible paths within each region, retains border
+crossings, and avoids water. It races across a closing border when it can beat
+the arriving squad; crossing time is measured along the route it actually runs.
 
-Win by sealing every land escape route with secured borders and coastline.
-Lose if the runner escapes or remains free after the final allowed order.
-The score is the order budget minus orders used to win.
+Win by sealing every land escape route with guarded borders and coastline.
+Lose if the fugitive escapes or remains free after the final allowed order.
+The score is the move budget minus moves used to win.
 
-India has 57 internal borders and three squads. Hungary has 36 internal borders
-and four squads. India’s challenges require exactly two orders to win; Hungary’s
-require exactly three. Shorter solutions are exhaustively rejected. Within each
-country, measured successful opening choices and escape pressure rank challenges
-from easier to harder. India’s pressure band is lower than Hungary’s.
+USA has 109 internal borders, India has 57, and Hungary has 36. Squad counts
+belong to each hunt: USA and Hungary currently use four; India supports both
+three and four, keeping existing verified three-squad missions. Each country contains six hunts starting in six
+different states or provinces. The first two have a verified two-move solution.
+Every later hunt rejects all one- and two-move wins and has a replayed winning
+route within the budget. Some verified routes take four moves; that alone does
+not prove a three-move solution is impossible.
 
-Wins advance to the next challenge, with Hungary following all six India
-challenges. The header button explicitly skips a challenge; replay restarts the
-same one. The final challenge offers an explicit campaign restart.
+Later hunts start with at most one border of a three- or four-border final trap
+already guarded. Squad travel has a country-scaled minimum, so closing the net
+requires real deployment. Difficulty ranks hunts within each country, then
+returns to the introductory tier when the next country begins.
 
-Both countries’ starts span at least two runner regions. An initially winnable
-puzzle can still be lost through later
-orders; setup verification proves a solution exists from the starting position.
+The chase is saved in this browser, including the current hunt, moves, squads,
+fugitive position, and a move in progress. Refresh resumes it. **Previous hunt**
+replays the preceding hunt and is disabled at the campaign's first hunt; from a
+country's opening hunt it returns to the previous country's last hunt. Wins
+advance through the result screen's **Next hunt** button. Replay starts the
+current hunt again. Best scores remain saved when replaying earlier hunts.
+
+A lost position can result from later choices even when the starting setup is
+winnable. Saved chases are tied to their exact setup and rules: after a changed
+mission is released, Patrol keeps the hunt position and starts its updated chase.
+
+## Case files and your front page
+
+[src/game/case-files.ts](src/game/case-files.ts) assigns one historical case to
+each hunt, including its introduction, real ending, source, and illustrated
+portrait. These are imagined chases, not reenactments. Real endings distinguish
+arrest, surrender, and death. [Portrait art notes](docs/portrait-art.md) document
+the built-in image generation prompt set and saved assets.
+
+After a capture, **Make headlines** opens a newspaper editor. Add a name and photo,
+drag/zoom the circular head crop, and download the 1200 × 1500 PNG. The front page uses a traditional blackletter masthead, justified story columns,
+a sourced historical sidebar, and a detailed monochrome street illustration. It
+combines actual capture region, squad count, moves, and score with sourced case
+facts. The same fugitive portrait appears on the map, case card, and newspaper.
+Native file sharing includes an invitation to https://rohittp.com/patrol; browsers
+without file sharing download the PNG and offer invitation text to copy.
+
+Only the finished 512-pixel circular crop, name, and random profile ID are saved
+in `patrol:player:v1` in localStorage. Full uploads and crop coordinates stay in
+memory while editing and are discarded on close. No image is uploaded. Removing
+the photo clears the saved crop. Storage failure leaves export available.
+
+## Analytics and performance
+
+Firebase Analytics covers the entry, tutorial, device gate, case introductions,
+country loading, selections, moves, hints, outcomes, historical sources, and
+newspaper creation/export/share journey. The central research contract is
+[src/telemetry/events.ts](src/telemetry/events.ts): every event, allowed parameter,
+user property, and custom trace has a description and emitting module.
+[Telemetry notes](docs/telemetry.md) explain DebugView, reporting, sampling, and
+what stays local. There is no consent screen for this internal release.
 
 ## Tuning and validation
 
@@ -88,14 +133,14 @@ npm run build
 npm run preview
 ```
 
-The runner anticipates the destination border closing and chooses the shortest
+The fugitive anticipates the destination border closing and chooses the shortest
 escape route it can still traverse in time, falling back to an escape attempt
 when closure is unavoidable. It remains deterministic for setup verification.
 
 The engine tests check order timing, escape, containment, scoring, frame
 independence, connected navigation, border constraints, spawn clearance, and
 every stored winning sequence. Searches exhaust every solution shorter than
-the country’s required minimum, including two-order shortcuts in Hungary.
+that hunt’s required minimum, including every two-move shortcut in later hunts.
 Difficulty metadata is bound to the exact geography, movement rules, and policy
 with a SHA-256 signature. The browser checks this signature, pressure bands,
 winning sequences, one-order shortcuts, and spawn clearance before play.
@@ -111,7 +156,11 @@ geometry tolerances, install `uv`, then run:
 ```sh
 npm run prepare:maps
 npm run prepare:setups
+# Continue from verified candidates after an interrupted search:
+npm run prepare:setups -- --resume india
 # Or regenerate just one country: npm run prepare:setups -- hungary
+# Replay, remeasure, and re-sign existing setups without searching for replacements:
+npm run prepare:setups -- --revalidate
 npm test
 ```
 
@@ -119,12 +168,12 @@ The map compiler downloads pinned Natural Earth data into ignored
 `scripts/.cache/` and uses Shapely 2.2.0 through an isolated `uv` environment.
 It records source URLs, revision, SHA-256 hashes, and byte sizes in each board.
 Regenerate setups after changing geometry, simulated speed ratios, squad counts,
-order budgets, runner travel floors, difficulty criteria, or runner rules. Playback speed and visual changes alone do not
+move budgets, fugitive travel floors, difficulty criteria, or fugitive rules. Playback speed and visual changes alone do not
 alter the simulation outcomes.
 
 The tutorial GIFs and static PNG posters are included under `public/tutorial/`.
 They are original code-drawn illustrations, with no external artwork or map key.
-To regenerate them after editing the animation settings or opening order budget,
+To regenerate them after editing the animation settings or opening move budget,
 install Pillow for Python 3 and run `npm run prepare:tutorial`. Ordinary builds
 use the included assets and do not need Python.
 

@@ -1,7 +1,8 @@
 # Level geometry and validation
 
-The first prototype compiles two country boards from pinned Natural Earth data.
-India has 79 guardable borders (57 internal) and Hungary has 50 (36 internal).
+The prototype compiles three country boards from pinned Natural Earth data.
+Mainland USA has 126 guardable borders (109 internal), India has 79 (57 internal),
+and Hungary has 50 (36 internal).
 Each country has six starting
 setups whose winning sequences replay successfully through the browser engine.
 These establish playability; country ordering and puzzle difficulty still need
@@ -65,9 +66,16 @@ remains an escape boundary, including portions not chosen as squad destinations.
 
 The compiler polygonizes the shared border network and triangulates its land
 faces. Triangle centres, shared-edge portals, border posts, and land exits form
-an undirected graph. Routes are shortest on this graph, an approximation of
-free movement across land rather than exact continuous geodesic shortest paths.
-The runner interpolates continuously along graph edges at its configured speed.
+an undirected graph. The graph proves connectivity and supplies candidate routes;
+it does not dictate a zigzag through every triangle centre. From its actual
+position, the fugitive seeds visible land nodes and border crossings, then pulls
+each route taut inside its polygonized land face. Every border and outer-exit
+checkpoint is retained. Visibility checks include water holes and never shortcut
+across an administrative boundary. A face anchor tracks which side the fugitive
+occupies after crossing, including when an order ends between graph nodes.
+The fugitive follows this shortened path at its configured constant speed.
+These bounded candidate routes approximate free land movement; they are not
+claimed to be exact continuous geodesic shortest paths.
 Squad routes are pulled taut through visible land and rounded into sampled
 quadratic curves. Every candidate curve segment is checked against the playable
 polygon, including holes; unsafe curvature is reduced or falls back to the land
@@ -78,8 +86,12 @@ The same compiled borders classify visible lines and blocked runner portals.
 Squads can cross secured borders; those barriers restrict the runner.
 
 Route selection is separate from movement. During an order, the runner searches
-for the shortest escape route whose crossings of the destination border occur
-before the squad arrives. It can take an alternative exit instead of running
+for an escape route whose crossings of the destination border occur
+before the squad arrives. Deadlines use distance along the shortened route to
+the crossing, not the full journey to an exit. The destination stays unguarded
+until arrival: a fugitive that beats the squad can cross and continue escaping
+after the squad arrives. Virtual start nodes reached from a mid-path position
+have the same deadline checks as later crossings. It can take an alternative exit instead of running
 into a predictable closure. If no such route exists, it still attempts the
 shortest currently open escape route; anticipated closure alone never declares
 a win. Choices are deterministic and recalculated when borders open or close.
@@ -99,22 +111,45 @@ containment ends the order immediately. Between resolved orders, time is paused.
 
 ## Verified starting setups
 
-`scripts/prepare-setups.ts` performs a deterministic candidate search and keeps
-six verified setups per country, with at most three from any runner region.
-The search considers single regions and connected groups of up to three regions,
-so an enclosure can span several states. Initial squad posts are sampled from
-nearby borders plus enclosure borders.
-Static cuts that still leak through unguardable fragments are skipped, and a
-per-region attempt cap bounds offline search without claiming impossibility.
-The browser starts at the easiest entry and advances through the ordered pool
-before moving to the next country. Each setup stores a winning
-sequence replayed through `PatrolGame`, including actual travel time, runner
-policy, border changes, and escape checks. A sequence proves existence of a
-solution within the budget. India requires an exact minimum of two orders;
-Hungary requires three. The search exhausts all shorter legal sequences, not
-just the stored witness. Static reachability prunes only final border sets that
-cannot enclose any land. Simulation forks share immutable geography/navigation
-caches while independently copying actors, orders, and history.
+`scripts/prepare-setups.ts` keeps six verified hunts per country, each starting
+in a different state or province. Every country begins with two hunts whose
+minimum solution is exactly two moves. The remaining four prove that no one- or
+two-move win exists, and store a successful three- or four-move route. The proven
+lower bound and the known solution length are separate fields; a four-move
+witness is not an exact four-move minimum claim.
+
+Search considers individual regions and connected groups of up to three regions.
+It prioritizes known hunt areas and land exits, samples cleared land nodes and
+nearby posts, and tests promising transfers first. Spawns in neighboring regions
+allow a fugitive to run into the final enclosure. Necessary repositioning moves
+can precede or interrupt closure of the final borders. Candidate search is
+bounded; failure to find a setup is not an impossibility proof.
+
+Later hunts begin with at most one third of the final enclosure guarded (one
+border in a three- or four-border trap). Their mean squad journey must meet the
+configured fraction of square-root country land area. These checks use the
+actual capture component and actual travelled routes, not the target enclosure
+the generator hoped to form.
+
+Squad allocations belong to individual hunts. Each country configures supported
+`squadCounts` in preparation preference order. New searches prefer the first
+count large enough for the target enclosure; existing verified setups retain
+their own supported allocation. Runtime validation, hints, saved games and
+newspaper facts all use that hunt's actual count. Each allocation has a separate
+rules signature, so proofs for three squads cannot validate a four-squad hunt.
+
+Every accepted candidate replays its complete witness and exhausts all legal
+sequences shorter than its required lower bound. Static reachability only prunes
+branches whose final guarded borders cannot enclose any land; it ignores runner
+position and timing conservatively. A tiny-board regression compares this
+pruning with entirely unpruned two-move simulation. Immutable geography and
+bounded navigation caches are shared by independent simulation forks.
+
+Verified candidates are checkpointed under ignored `scripts/.cache/`. Resume
+with `npm run prepare:setups -- --resume [country]`. Saved candidates remain
+suggestions even after tuning changes; their witnesses, allocation, placement
+and shorter-solution proofs are rebuilt before acceptance. Only a complete pool with two introductory
+and four later hunts is published. Publication uses an atomic file replacement.
 
 Static enclosure checks alone do not prove a setup is winnable: travel time and
 the temporary opening at the departing post can let the runner escape. Reject
@@ -125,6 +160,11 @@ from any zone edge, 75 km from land exits, and 15 km from internal borders; Hung
 requires 30 km from the zone edge/land exits and 6 km from internal borders.
 These playtest values live in the central configuration.
 
+`npm run prepare:setups -- --revalidate [country]` replays existing witnesses,
+exhausts shorter solutions, remeasures difficulty, and refreshes signatures. It
+refuses to publish if any entry fails. Use the normal preparation command to
+search for replacement setups when a witness is no longer valid.
+
 Revalidate the pool when relevant geometry, squad allocations, order budgets,
 speeds, runner behaviour, or simulation rules change. A future generator can
 publish new setups only after successfully replaying a winning sequence; failure
@@ -132,34 +172,69 @@ to find a sequence does not prove a candidate is impossible.
 
 ## Country progression and presentation
 
-Use the authored country order, India followed by Hungary. The campaign contains
-six challenges per country. Every India challenge has a verified two-order
-minimum; every Hungary challenge has a verified three-order minimum.
+Use the authored country order: USA, India, then Hungary. The six-hunt
+progression restarts in each country: two introductions, then four harder hunts.
+Tests enforce six distinct spawn regions, the per-hunt move floor, successful
+witnesses, physical placement constraints, and increasing scores within each
+country. A deliberate introductory reset replaces the old requirement for one
+nondecreasing score across the entire world campaign.
 
-Escape pressure is minimum runner travel divided by the initial available
-escape-route distance. India accepts pressure in [0, 0.10]; Hungary accepts
-[0.12, 0.35], so the introduction cannot randomly receive a time-critical start.
-Within each country, difficulty combines solution depth, successful opening
-choices, and pressure. Opening breadth probes the twelve geographically nearest
-legal orders plus the known winning opening when needed; it is a sampled metric,
-not a count of every possible opening. Each probe must have a verified winning
-continuation within the minimum order count.
+Difficulty combines the proven move floor, any extra moves in the verified
+solution, country-scaled mean squad travel, the unguarded share of the final trap,
+and escape pressure. All weights and thresholds live in `playtest.config.ts`.
+Escape pressure is minimum runner travel divided by initial land escape-route
+length. These metrics help curate hunts; they do not predict every player's
+experience. The old sampled opening-breadth constraints no longer govern curation.
 
-The minimum-order weight exceeds both tie-break weights combined, and tests
-verify nondecreasing scores throughout the entire campaign. These metrics are
-explicit playtest controls rather than a claim about every player’s experience.
-Offline difficulty proofs carry a SHA-256 signature of geometry, movement rules,
-runner policy version, and difficulty criteria. Runtime checks reject stale
-proofs; changing policy semantics requires updating the policy version.
+Proofs carry a SHA-256 signature of geometry, movement, runner policy, per-hunt
+tiers and country curation. Runtime rejects stale proofs. Saved gameplay also
+checks the exact starting setup, so new generated hunts cannot inherit actors
+or clocks from an unrelated older setup.
 
 Start moderately zoomed around the runner, using a configured 350 km radius
-for India and 100 km for Hungary. Country view fits the whole zone; Focus runner
+for India, 400 km for USA, and 100 km for Hungary. Country view fits the whole zone; Find fugitive
 centres the runner more closely. Selecting a squad highlights its post and pans
 only if its position is outside the useful viewport. Validate camera fit and
 legibility on representative screen sizes. Keep all new numeric tolerances and tuning values in
 `src/game/playtest.config.ts`.
 
+USA retains its extra curation: at least four internal borders at each spawn
+and four guarded borders in the final enclosure. Tests check that releasing any
+one squad reopens escape. Its six starting states are distinct, as are India's
+states and Hungary's counties. Country-scale differences are handled by travel
+fractions and spawn clearances rather than fixed travel distances.
+
+Exact enclosure connectivity is contracted for pruning: unguardable components
+become vertices and equivalent guardable portals share vertices. Movement uses
+the full distance graph and land-face visibility. Tests compare contraction with
+full graph reachability on every board.
+
+## Refresh recovery and replay
+
+`patrol:progress:v1` stores the current country/hunt, a simulation snapshot,
+selection, attempt ID and elapsed active-session time. It saves on state changes,
+once per configured interval during movement, and on visibility/page-exit events.
+It does not write localStorage every frame. Thinking remains paused, and time
+spent off the page does not advance either actor.
+
+JSON restoration reconnects each actor segment to its route's first waypoint and
+the active order to its history entry before resuming. Validation checks board
+indices, clocks, outcomes, rules signatures and setup identity. Damaged or stale
+snapshots restart the same hunt safely. A restored completed result retains its
+attempt's ended flag, avoiding duplicate completion events.
+
+Previous hunt is disabled at the first campaign hunt and while moving. It starts
+the preceding hunt afresh, including across country boundaries. The result screen
+advances after capture; best scores remain independent of replay navigation.
+
 ## Prototype scope
+
+USA uses the contiguous mainland: Alaska, Hawaii, and detached islands are
+excluded. Washington DC joins its host; state lines remain internal borders.
+Pinned Natural Earth lake polygons of at least 500 km² are removed before graph
+construction, so the Great Lakes cannot become land shortcuts. This creates
+additional land faces without treating a lake as a country exit. The current
+fugitive travel floor is 113.38 km for this board.
 
 India preserves mainland state boundaries instead of merging the interior into
 one large region. Enclaved union territories (Delhi, Chandigarh, Puducherry,
