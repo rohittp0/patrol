@@ -11,3 +11,10 @@ yarn-error.log*
 .vscode/*
 .idea/
 .junie/
+
+dist/
+scripts/.cache/
+.playwright-cli/
+output/playwright/
+*.tsbuildinfo
+.DS_Store

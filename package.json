@@ -1,0 +1,25 @@
+{
+  "name": "patrol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host localhost",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host localhost --port 3000 --strictPort",
+    "test": "node --import tsx --test src/game/*.test.ts",
+    "prepare:maps": "node --import tsx scripts/prepare-maps.ts",
+    "prepare:setups": "node --import tsx scripts/prepare-setups.ts",
+    "prepare:tutorial": "node --import tsx scripts/prepare-tutorial.ts"
+  },
+  "dependencies": {
+    "maplibre-gl": "6.14.0"
+  },
+  "devDependencies": {
+    "@types/geojson": "^7946.0.16",
+    "@types/node": "^22.0.0",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vite": "8.3.4"
+  }
+}
