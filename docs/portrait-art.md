@@ -4,7 +4,9 @@ Mode: **built-in image generation**, one generation per portrait. These are
 illustrated interpretations, not archival photographs or forensic likenesses.
 No downloaded portrait photographs are distributed. Final assets are 512 × 512
 WebP files under `public/portraits/`. The map, introduction, result, and newspaper
-all use the same case asset. Newspaper typography is composed in
+all use the same case illustration. The newspaper derives a transparent mask
+in memory; it never changes the original ivory-backed map assets.
+Newspaper typography is composed in
 `src/poster-renderer.ts`; its arrest scene is a separate editorial illustration.
 
 ## Prompt set
@@ -55,10 +57,36 @@ head crop is persisted.
   WebP.
 
 The original generated PNGs were converted to WebP for delivery. The scene's
-head centres and radii are documented in `PLAYTEST_CONFIG.poster.sceneHeads`.
+head centres and radii are documented in `PLAYTEST_CONFIG.poster.artwork`.
 Artwork and the masthead font load only when the newspaper editor opens.
 
-Exact scene prompt:
+## Newspaper clipping, third version
+
+The shared USA/Hungary scene is [arrest-scene-v3.webp](../public/newspaper/arrest-scene-v3.webp),
+1536 × 1024, saved with **built-in imagegen edit mode** and converted to WebP at
+quality 88. The older scene remains available as the edit source. The two blank
+head disks were inpainted with street detail so transparent portrait edges reveal
+the scene rather than another ivory circle. Bodies, necks and handcuffs retain
+their original composition; head placements remain in the tuning configuration.
+
+The renderer removes only pixels close to the corner ivory and connected to an
+image edge. Dark outlines and enclosed highlights remain opaque. Masks are cached
+per decoded image during editing. Player-uploaded circular crops retain their
+chosen content. A deterministic canvas paper stock supplies grain, ageing, folds,
+uneven cut edges and transparency around the clipping without an additional asset.
+Headlines, stamp, statistics, historical copy and the prominent classified-style
+invitation are drawn as crisp export-resolution text, not baked into artwork.
+
+Exact edit prompt (input image: `public/newspaper/arrest-scene.webp`):
+
+```text
+Use case: precise-object-edit.
+Asset type: reusable arrest-scene background for the Patrol newspaper compositor.
+Input image 1 is the edit target. Remove ONLY the two large blank ivory circular head placeholders and their thin dark circular outlines. Inpaint those circles with a seamless continuation of the street, masonry facades, windows, distant trees and soft light directly behind them. There must be no head, face, hair, hat, circle, silhouette, light disk or empty slot in either removed area; runtime portraits will be placed here later.
+Preserve everything outside the two circles exactly: the officer's and fugitive's bodies, visible necks below the circles, collars, uniform, jacket, both cuffed wrists, hands, handcuffs, pose, sizes, positions, street, car, composition, cross-hatching, warm grey editorial ink style and lighting. Do not add people, text, watermark or props. Keep the original landscape 3:2 framing at 1536 by 1024. Opaque background. This is a compositing plate, so the two necks may end naturally where the removed circles used to overlap.
+```
+
+Original second-version scene prompt:
 
 ```text
 Use case: illustration-story.
@@ -84,3 +112,47 @@ distributed under the SIL Open Font License. The complete copyright/license is
 included in [UnifrakturCook-OFL.txt](../public/fonts/UnifrakturCook-OFL.txt).
 Body copy uses system serif fonts. If the masthead font cannot load, export uses
 a serif fallback.
+
+## India-specific newspaper illustration
+
+USA and Hungary share the existing `shared_v3` artwork. India uses `india_v1`:
+
+- [Indian arrest scene](../public/newspaper/arrest-scene-india-v1.webp): 1536 × 1024 WebP.
+- [Fictional Indian default officer](../public/newspaper/officer-portrait-india-v1.webp): 512 × 512 WebP.
+
+Both were created with **built-in imagegen edit mode**, using the shared scene
+and officer portrait as composition references, then converted to WebP at quality
+88 (the officer output was resized to 512 pixels). The khaki police shirt,
+epaulettes and trousers, cotton kurta, utility jeep, auto-rickshaw, shop shutters,
+awnings and overhead wires distinguish the Indian street scene. It remains an
+imagined illustration, not an archival arrest photograph or a specific police
+force's uniform. The same six original Indian case portraits are composited
+without their ivory backgrounds; a saved player head crop still replaces the
+default officer.
+
+`PLAYTEST_CONFIG.poster.artwork` contains each preset's paths and calibrated head
+positions. Assets are selected from the capture report's country, loaded only
+when the editor opens, and cached by artwork ID. USA and Hungary share one cache
+entry; India's scene and officer have a separate entry. A failed preset load can
+be retried without clearing the other preset. The masthead font is shared.
+
+Exact India scene edit prompt:
+
+```text
+Use case: precise-object-edit.
+Asset type: India-specific newspaper arrest-scene compositing plate for the web game Patrol.
+Input image 1 is the edit target. Adapt this exact scene into an everyday Indian setting. Replace the officer's American dark tactical uniform with a neatly worn khaki Indian police shirt and khaki trousers, shoulder epaulettes, two buttoned chest pockets, a simple brown leather waist belt and a small unlettered badge. Remove the American shield patch, heavy tactical equipment and large holster. Replace the fugitive's American zip jacket and T-shirt with a rumpled light cotton kurta, rolled sleeves and loose plain trousers; keep the body shape neutral enough for different fugitive portraits. Both people have medium-brown Indian skin on their visible necks and hands.
+Replace the European/American masonry street, American patrol car and decorative street lamps with a convincing ordinary Indian town lane: weathered plaster and brick shopfronts, closed steel shutters, simple fabric awnings, overhead utility wires, uneven paved roadside, a small parked auto-rickshaw and an older plain utility jeep in the distance. Subtle everyday local detail, no tourist landmark or dramatic poverty imagery. No American cars, uniforms or architecture.
+CRITICAL: preserve the exact 1536 x 1024 landscape 3:2 framing, two-person scale, shoulder positions, body poses, visible neck endpoints and central handcuffing action. Officer remains left, fugitive right. Both fugitive wrists are cuffed together in front; officer's wrists are free and officer holds the cuffs. Preserve natural anatomically correct hands.
+This is a compositing plate: keep BOTH heads absent, exactly as in the reference. Do NOT draw faces, hair, hats, head silhouettes, blank circles or pale head placeholders. The original head areas at x=32.36%, y=18.07% and x=65.4%, y=18.85% must show continuous street background above the preserved necks. Runtime portraits will be composited there.
+Preserve the detailed graphite and fine ink cross-hatching, realistic proportions, warm grey monochrome newspaper illustration style and soft daylight. Full opaque background. No text, lettering, labels, flags, watermark or newspaper layout.
+```
+
+Exact Indian officer edit prompt:
+
+```text
+Use case: identity-preserve.
+Asset type: default Indian police officer portrait for the Patrol newspaper compositor.
+Input image 1 is the edit target and composition reference. Create a fictional Indian adult police officer with medium-brown skin, short neatly kept dark hair, and a calm capable expression. Keep a neutral androgynous appearance and do not resemble a celebrity. Replace the dark shirt shoulders with khaki police shirt shoulders and simple epaulettes. No hat.
+Preserve exactly the square 512 x 512 composition, front-facing head size and placement, generous margin around the complete head, short neck, and ivory background. Match the original detailed graphite and fine ink cross-hatching with restrained warm-grey washes, realistic proportions and mostly monochrome newspaper rendering. The head must fit inside the same circular crop. No body below the short neck and shoulder tops, no props, text or watermark.
+```

@@ -1,7 +1,7 @@
 import { PLAYTEST_CONFIG as CONFIG } from "../game/playtest.config";
 import { playerProfile } from "../player-profile";
 import { COMMON_PARAMETERS, EVENTS, PERFORMANCE_TRACES, type AnalyticsParams, type EventName } from "./events";
-import { FIREBASE_CONFIG } from "./firebase.config";
+import { POSTHOG_CONFIG, POSTHOG_TOKEN } from "./posthog.config";
 
 type Packet = { name: EventName; params: AnalyticsParams };
 const queued: Packet[] = [], recent: Packet[] = [];
@@ -32,8 +32,8 @@ export function track(name: EventName, params: AnalyticsParams = {}) {
 
 export function profileChanged() { try { setProfile?.(); } catch { /* Profile collection is optional. */ } }
 
-/** Uses retroactive SDK trace recording, so lazy SDK loading doesn't inflate
- * measured duration. No performance observer or timer runs in the frame loop. */
+/** Captures actual work duration even if the SDK loads after the work finishes.
+ * No performance observer or timer runs in the frame loop. */
 export function measure(name: keyof typeof PERFORMANCE_TRACES, start: number, country?: string) {
   const value = { name, start: performance.timeOrigin + start, duration: performance.now() - start, country };
   if (recordTrace) recordTrace(name, value.start, value.duration, country);
@@ -48,24 +48,23 @@ export function initTelemetry() {
   if (!allowed) { traceQueue = []; return; }
   const load = async () => {
     try {
-      const [{ initializeApp }, analytics] = await Promise.all([import("firebase/app"), import("firebase/analytics")]);
-      const app = initializeApp(FIREBASE_CONFIG);
-      if (await analytics.isSupported()) {
-        const instance = analytics.initializeAnalytics(app, { config: { send_page_view: false, allow_google_signals: false, allow_ad_personalization_signals: false, page_location: `${location.origin}${location.pathname}` } });
-        setProfile = () => {
-          const profile = playerProfile();
-          analytics.setUserId(instance, profile.id);
-          analytics.setUserProperties(instance, { profile_name_set: profile.name ? "yes" : "no", profile_photo_set: profile.photo ? "yes" : "no" });
-        };
-        setProfile();
-        send = ({ name, params }) => analytics.logEvent(instance, name, { ...params, ...(debug ? { debug_mode: true } : {}) });
-        for (const packet of queued.splice(0)) send(packet);
-      }
+      const { default: posthog } = await import("posthog-js");
+      const instance = posthog.init(POSTHOG_TOKEN, POSTHOG_CONFIG);
+      if (!instance) return;
+      setProfile = () => {
+        const profile = playerProfile();
+        instance.identify(profile.id, { name: profile.name || null, profile_name_set: profile.name ? "yes" : "no", profile_photo_set: profile.photo ? "yes" : "no" });
+      };
+      setProfile();
+      instance.startSessionRecording();
+      send = ({ name, params }) => { instance.capture(name, { ...params, ...(debug ? { debug_mode: true } : {}) }); };
+      for (const packet of queued.splice(0)) send(packet);
       if (Math.random() < CONFIG.telemetry.performanceSampleRate || debug) {
-        const perf = await import("firebase/performance");
-        const instance = perf.initializePerformance(app, { instrumentationEnabled: false, dataCollectionEnabled: true });
         recordTrace = (name, start, duration, country) => {
-          try { const trace = perf.trace(instance, name); trace.record(start, duration, { attributes: country ? { country } : {} }); tracesRecorded++; }
+          try {
+            instance.capture(name, { duration_ms: Math.round(duration), ...(country ? { country } : {}), ...(debug ? { debug_mode: true } : {}) }, { timestamp: new Date(start + duration) });
+            tracesRecorded++;
+          }
           catch { /* Monitoring cannot interrupt later country/poster work. */ }
         };
         for (const item of traceQueue) recordTrace(item.name, item.start, item.duration, item.country);

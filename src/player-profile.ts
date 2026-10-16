@@ -19,7 +19,8 @@ export function playerProfile(): PlayerProfile {
 
 const validPhoto = (value: unknown) => typeof value === "string" && /^data:image\/(webp|png|jpeg);base64,/.test(value) && value.length < 2_000_000 ? value : null;
 
-/** A local convenience profile. No name, photo, crop, or filename goes to Firebase. */
+/** A local convenience profile. Telemetry identifies the saved name separately;
+ * photos, crops, and filenames are never sent to PostHog. */
 export function savePlayerProfile(update: Partial<Pick<PlayerProfile, "name" | "photo">>): boolean {
   const profile = cached ?? playerProfile();
   if (update.name !== undefined) profile.name = [...update.name].slice(0, CONFIG.poster.maxNameLength).join("");

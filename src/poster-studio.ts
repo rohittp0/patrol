@@ -3,8 +3,11 @@ import type { CaptureReport } from "./game/capture-report";
 import { portraitPath } from "./game/case-files";
 import { playerProfile, savePlayerProfile } from "./player-profile";
 import { newspaperCopy } from "./poster-content";
-import { drawNewspaper, prepareNewspaperAssets, type NewspaperAssets } from "./poster-renderer";
+import { drawNewspaper, newspaperArtwork, prepareNewspaperAssets, type NewspaperAssets } from "./poster-renderer";
 import { measure, profileChanged, track } from "./telemetry";
+import type { AnalyticsParams, EventName } from "./telemetry/events";
+
+interface PosterOptions { entry: "first_country_win" | "result_button"; onSkip?: () => void }
 
 const loadImage = (src: string) => new Promise<HTMLImageElement>((resolve, reject) => {
   const image = new Image(); image.onload = () => resolve(image); image.onerror = reject; image.src = src;
@@ -29,23 +32,24 @@ export class PosterStudio {
   private generation = 0;
   private photoGeneration = 0;
   private openedAt = 0;
+  private options: PosterOptions = { entry: "result_button" };
 
   constructor() {
     this.dialog = document.createElement("dialog");
     this.dialog.className = "poster-dialog";
     this.dialog.setAttribute("aria-labelledby", "poster-title");
-    this.dialog.innerHTML = `<div class="poster-toolbar"><div><span class="eyebrow">THE PATROL POST</span><h2 id="poster-title">You made the front page.</h2></div><button id="poster-close" class="icon-button" aria-label="Close newspaper">✕</button></div>
+    this.dialog.innerHTML = `<div class="poster-toolbar"><div><span class="eyebrow">THE PATROL POST</span><h2 id="poster-title">You made the front page.</h2><p>A good chase deserves a clipping. Make it yours, then pass it around.</p></div><button id="poster-close" class="icon-button" aria-label="Close newspaper">✕</button></div>
       <div class="poster-layout"><div class="poster-preview"><canvas id="newspaper" aria-label="Your shareable Patrol newspaper"></canvas></div>
-      <section class="poster-controls" aria-label="Personalize your newspaper"><label for="player-name">Who's leading the squad?</label><input id="player-name" autocomplete="off" placeholder="Your name" maxlength="64">
+      <section class="poster-controls" aria-label="Personalize your newspaper"><p class="poster-share-note">One closed case. Unlimited bragging rights.</p><label for="player-name">Who's leading the squad?</label><input id="player-name" autocomplete="off" placeholder="Your name" maxlength="64">
       <label class="photo-upload" for="player-photo">Put yourself in the picture<input id="player-photo" type="file" accept="image/jpeg,image/png,image/webp"></label>
       <div id="crop-editor" hidden><p>Drag to frame your face.</p><canvas id="head-crop" tabindex="0" role="img" aria-label="Circular head crop. Drag or use arrow keys to move your photo."></canvas><label for="photo-zoom">Zoom</label><input id="photo-zoom" type="range" min="1" max="${CONFIG.poster.maxPhotoZoom}" step="0.01" value="1"></div>
-      <button id="photo-remove" class="text-button" hidden>Remove photo</button><p class="poster-local-note">Your name and finished head crop stay in this browser.</p>
-      <p id="poster-message" role="status" aria-live="polite"></p><div class="poster-export"><button id="poster-download" class="primary-button" disabled>Download newspaper</button><button id="poster-share" class="secondary-button" disabled>Share the scoop</button></div>
+      <button id="photo-remove" class="text-button" hidden>Remove photo</button><p class="poster-local-note">Your finished head crop stays in this browser.</p>
+      <p id="poster-message" role="status" aria-live="polite"></p><div class="poster-export"><button id="poster-share" class="primary-button" disabled>Share the scoop ↗</button><button id="poster-download" class="secondary-button" disabled>Keep the clipping ↓</button></div>
       <div id="share-caption" hidden><label for="poster-caption">Send this with your newspaper</label><textarea id="poster-caption" readonly rows="5"></textarea><button id="copy-caption" class="text-button">Copy invitation</button></div></section></div>`;
     document.body.append(this.dialog);
     this.canvas = this.get<HTMLCanvasElement>("newspaper"); this.crop = this.get<HTMLCanvasElement>("head-crop"); this.name = this.get<HTMLInputElement>("player-name");
-    this.get("poster-close").onclick = () => this.close();
-    this.dialog.addEventListener("cancel", (event) => { event.preventDefault(); this.close(); });
+    this.get("poster-close").onclick = () => this.dismiss("button");
+    this.dialog.addEventListener("cancel", (event) => { event.preventDefault(); this.dismiss("escape"); });
     this.name.oninput = () => { this.name.value = [...this.name.value].slice(0, CONFIG.poster.maxNameLength).join(""); this.render(); };
     this.name.onblur = () => this.saveName(true);
     this.get<HTMLInputElement>("player-photo").onchange = (event) => void this.choosePhoto((event.target as HTMLInputElement).files?.[0]);
@@ -69,32 +73,45 @@ export class PosterStudio {
     };
     this.get("photo-remove").onclick = () => {
       this.discardOriginal(); this.head = null; this.get("crop-editor").hidden = true; this.get("photo-remove").hidden = true;
-      this.store({ photo: null }); track("poster_photo_remove"); this.render();
+      this.store({ photo: null }); this.log("poster_photo_remove"); this.render();
     };
     this.get("poster-download").onclick = () => void this.download();
     this.get("poster-share").onclick = () => void this.share();
     this.get("copy-caption").onclick = async () => {
-      try { await navigator.clipboard.writeText(this.get<HTMLTextAreaElement>("poster-caption").value); this.message("Invitation copied. Send it with your newspaper."); track("poster_caption_copy", { reason: "success" }); }
-      catch { this.get<HTMLTextAreaElement>("poster-caption").select(); this.message("Select and copy the invitation above."); track("poster_caption_copy", { reason: "manual" }); }
+      try { await navigator.clipboard.writeText(this.get<HTMLTextAreaElement>("poster-caption").value); this.message("Invitation copied. Send it with your newspaper."); this.log("poster_caption_copy", { reason: "success" }); }
+      catch { this.get<HTMLTextAreaElement>("poster-caption").select(); this.message("Select and copy the invitation above."); this.log("poster_caption_copy", { reason: "manual" }); }
     };
   }
 
   get blocked() { return this.dialog.open; }
+  get automatic() { return this.dialog.open && this.options.entry === "first_country_win"; }
+  private log(name: EventName, parameters: AnalyticsParams = {}) { track(name, { entry: this.options.entry, newspaper_version: CONFIG.poster.designVersion, newspaper_artwork: newspaperArtwork(this.report?.countryId ?? "").id, ...parameters }); }
+  private dismiss(reason: "button" | "escape") {
+    const advance = this.options.onSkip;
+    if (advance) this.log("poster_skip", { reason, duration_ms: Math.round(performance.now() - this.openedAt) });
+    this.close(reason);
+    advance?.();
+  }
   private get<T extends HTMLElement = HTMLElement>(id: string) { return this.dialog.querySelector<T>(`#${id}`)!; }
   private message(value: string) { this.get("poster-message").textContent = value; }
   private store(update: Parameters<typeof savePlayerProfile>[0]) {
     const saved = savePlayerProfile(update); profileChanged();
-    if (!saved) { this.message("This browser couldn't save your profile. You can still download your newspaper."); track("poster_error", { reason: "storage" }); }
+    if (!saved) { this.message("This browser couldn't save your profile. You can still download your newspaper."); this.log("poster_error", { reason: "storage" }); }
   }
   private saveName(log: boolean) {
     const value = [...this.name.value.replace(/\s+/g, " ").trim()].slice(0, CONFIG.poster.maxNameLength).join("");
     this.name.value = value;
-    if (value !== playerProfile().name) { this.store({ name: value }); if (log) track("poster_profile_edit", { has_name: !!value, name_length: [...value].length }); }
+    if (value !== playerProfile().name) { this.store({ name: value }); if (log) this.log("poster_profile_edit", { has_name: !!value, name_length: [...value].length }); }
     this.render();
   }
 
-  async open(report: CaptureReport) {
+  async open(report: CaptureReport, options: PosterOptions = { entry: "result_button" }) {
     if (this.dialog.open) this.close();
+    this.options = options;
+    const close = this.get<HTMLButtonElement>("poster-close"), automatic = options.entry === "first_country_win";
+    close.className = automatic ? "secondary-button poster-skip" : "icon-button";
+    close.textContent = automatic ? "Skip →" : "✕";
+    close.setAttribute("aria-label", automatic ? "Skip newspaper and start next hunt" : "Close newspaper");
     const generation = ++this.generation, started = performance.now(); this.openedAt = started;
     this.report = report; this.fugitive = null; this.head = null;
     const profile = playerProfile(); this.name.value = profile.name;
@@ -102,21 +119,21 @@ export class PosterStudio {
     this.get<HTMLInputElement>("player-photo").disabled = true;
     this.get<HTMLButtonElement>("poster-download").disabled = true; this.get<HTMLButtonElement>("poster-share").disabled = true;
     this.message("Setting the front page…"); this.dialog.showModal();
-    track("poster_open", { has_name: !!profile.name, has_photo: !!profile.photo });
+    this.log("poster_open", { has_name: !!profile.name, has_photo: !!profile.photo });
     try {
-      const [fugitive, player, assets] = await Promise.all([loadImage(`${import.meta.env.BASE_URL}${portraitPath(report.file)}`), profile.photo ? loadImage(profile.photo).catch(() => null) : null, prepareNewspaperAssets()]);
+      const [fugitive, player, assets] = await Promise.all([loadImage(`${import.meta.env.BASE_URL}${portraitPath(report.file)}`), profile.photo ? loadImage(profile.photo).catch(() => null) : null, prepareNewspaperAssets(report.countryId)]);
       if (generation !== this.generation) return;
       this.fugitive = fugitive; this.head = player; this.assets = assets; this.get("photo-remove").hidden = !player;
       this.render(); this.canvas.hidden = false; this.message("");
       this.get<HTMLButtonElement>("poster-download").disabled = false; this.get<HTMLButtonElement>("poster-share").disabled = false;
       this.get<HTMLInputElement>("player-photo").disabled = false;
-      track("poster_ready", { duration_ms: Math.round(performance.now() - started), has_name: !!profile.name, has_photo: !!player }); measure("poster_prepare", started, report.countryId);
-    } catch { if (generation === this.generation) { this.message("The newspaper couldn't load. Close it and try again."); track("poster_error", { reason: "portrait_load" }); } }
+      this.log("poster_ready", { duration_ms: Math.round(performance.now() - started), has_name: !!profile.name, has_photo: !!player }); measure("poster_prepare", started, report.countryId);
+    } catch { if (generation === this.generation) { this.message(automatic ? "The newspaper couldn't load. Skip to your next case, or try again from the result card later." : "The newspaper couldn't load. Close it and try again."); this.log("poster_error", { reason: "portrait_load" }); } }
   }
 
-  close() {
+  close(reason = "state_change") {
     if (!this.dialog.open) return;
-    this.saveName(true); track("poster_close", { duration_ms: Math.round(performance.now() - this.openedAt) });
+    this.saveName(true); this.log("poster_close", { reason, duration_ms: Math.round(performance.now() - this.openedAt) });
     ++this.generation; this.discardOriginal(); this.head = null; this.fugitive = null; this.report = null;
     this.dialog.close();
   }
@@ -131,17 +148,17 @@ export class PosterStudio {
   private async choosePhoto(file?: File) {
     if (!file) return;
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > CONFIG.poster.maxPhotoMiB * 1024 * 1024) {
-      this.message(`Choose a JPG, PNG, or WebP photo under ${CONFIG.poster.maxPhotoMiB} MB.`); track("poster_error", { reason: "photo_format_or_size" }); return;
+      this.message(`Choose a JPG, PNG, or WebP photo under ${CONFIG.poster.maxPhotoMiB} MB.`); this.log("poster_error", { reason: "photo_format_or_size" }); return;
     }
-    track("poster_photo_select", { file_type: file.type, file_size_kb: Math.round(file.size / 1024) });
+    this.log("poster_photo_select", { file_type: file.type, file_size_kb: Math.round(file.size / 1024) });
     this.discardOriginal(); const generation = this.photoGeneration;
     const url = URL.createObjectURL(file); this.photoUrl = url;
     try {
       const photo = await loadImage(url); if (generation !== this.photoGeneration || !this.dialog.open) return;
       this.photo = photo; this.zoom = 1; this.pan = { x: 0, y: 0 }; this.get<HTMLInputElement>("photo-zoom").value = "1";
       this.get("crop-editor").hidden = false; this.get("photo-remove").hidden = false;
-      this.message(""); this.renderCrop(); this.saveCrop(); track("poster_photo_ready");
-    } catch { if (generation === this.photoGeneration) { this.message("That photo couldn't open. Try another image."); track("poster_error", { reason: "photo_decode" }); this.discardOriginal(); } }
+      this.message(""); this.renderCrop(); this.saveCrop(); this.log("poster_photo_ready");
+    } catch { if (generation === this.photoGeneration) { this.message("That photo couldn't open. Try another image."); this.log("poster_error", { reason: "photo_decode" }); this.discardOriginal(); } }
   }
 
   private renderCrop() {
@@ -161,7 +178,7 @@ export class PosterStudio {
     this.head = head; this.render();
   }
   private saveCrop() { if (this.head instanceof HTMLCanvasElement) this.store({ photo: this.head.toDataURL("image/png") }); }
-  private commitCrop(action: string) { this.saveCrop(); track("poster_crop_adjust", { action, photo_zoom: Math.round(this.zoom * 100) / 100 }); }
+  private commitCrop(action: string) { this.saveCrop(); this.log("poster_crop_adjust", { action, photo_zoom: Math.round(this.zoom * 100) / 100 }); }
   private render() {
     if (!this.report || !this.fugitive || !this.assets) return;
     drawNewspaper(this.canvas, this.report, this.name.value, this.fugitive, this.head, this.assets);
@@ -174,24 +191,24 @@ export class PosterStudio {
   private deliver(blob: Blob) {
     const url = URL.createObjectURL(blob), link = document.createElement("a"); link.href = url; link.download = `patrol-${this.report!.file.id}-front-page.png`;
     link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-    track("poster_download", { method: "download", has_name: !!this.name.value, has_photo: !!this.head });
+    this.log("poster_download", { method: "download", has_name: !!this.name.value, has_photo: !!this.head });
   }
   private async download() {
     try { this.deliver(await this.png()); this.message("Front page ready. Your download is on its way."); }
-    catch { this.message("Couldn't export the newspaper. Try again."); track("poster_error", { reason: "export" }); }
+    catch { this.message("Couldn't export the newspaper. Try again."); this.log("poster_error", { reason: "export" }); }
   }
   private async share() {
     try {
       const blob = await this.png(); if (!this.report) return;
       const file = new File([blob], `patrol-${this.report.file.id}.png`, { type: "image/png" });
       if (navigator.canShare?.({ files: [file] })) {
-        track("poster_share_attempt", { method: "native" });
-        try { await navigator.share({ title: "The Patrol Post", text: newspaperCopy(this.report, this.name.value).share, files: [file] }); track("poster_share_result", { method: "native", reason: "success" }); this.message("The scoop is out."); }
-        catch (error) { const cancelled = error instanceof DOMException && error.name === "AbortError"; track("poster_share_result", { method: "native", reason: cancelled ? "cancelled" : "failed" }); if (!cancelled) { this.get("share-caption").hidden = false; this.message("Sharing couldn't open. Download the newspaper and copy the invitation instead."); } }
+        this.log("poster_share_attempt", { method: "native" });
+        try { await navigator.share({ title: "The Patrol Post", text: newspaperCopy(this.report, this.name.value).share, files: [file] }); this.log("poster_share_result", { method: "native", reason: "success" }); this.message("The scoop is out."); }
+        catch (error) { const cancelled = error instanceof DOMException && error.name === "AbortError"; this.log("poster_share_result", { method: "native", reason: cancelled ? "cancelled" : "failed" }); if (!cancelled) { this.get("share-caption").hidden = false; this.message("Sharing couldn't open. Download the newspaper and copy the invitation instead."); } }
       } else {
-        track("poster_share_attempt", { method: "fallback" }); this.deliver(blob); this.get("share-caption").hidden = false;
-        this.message("Newspaper downloaded. Copy the invitation and share them together."); track("poster_share_result", { method: "fallback", reason: "downloaded" });
+        this.log("poster_share_attempt", { method: "fallback" }); this.deliver(blob); this.get("share-caption").hidden = false;
+        this.message("Newspaper downloaded. Copy the invitation and share them together."); this.log("poster_share_result", { method: "fallback", reason: "downloaded" });
       }
-    } catch { this.message("Couldn't prepare the newspaper. Try again."); track("poster_error", { reason: "export" }); }
+    } catch { this.message("Couldn't prepare the newspaper. Try again."); this.log("poster_error", { reason: "export" }); }
   }
 }

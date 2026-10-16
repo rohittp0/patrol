@@ -8,15 +8,16 @@ export function playerName(value: string) { return [...value.replace(/\s+/g, " "
 export function newspaperCopy(report: CaptureReport, inputName: string) {
   const name = playerName(inputName);
   return {
-    headline: `${report.file.shortName} captured`,
+    kicker: `${report.file.shortName}'s great escape?`,
+    headline: "NOT TODAY.",
     byline: `${name} closes the net ${locationPhrase(report.region)}`,
-    deck: `${name} leads a ${report.squads}-squad operation ${locationPhrase(report.region)}; the chase ends in ${report.moves} moves`,
-    lead: `${report.region.toUpperCase()}, ${report.country.toUpperCase()} — ${name} led a ${report.squads}-squad patrol that surrounded ${report.file.shortName} ${locationPhrase(report.region)}. The fugitive had nowhere left to run after ${report.moves} moves.`,
-    follow: `The operation earned ${report.score} points, with ${report.score} moves left to spare. Sources close to the squad credit careful planning, excellent map reading, and a suspiciously well-timed click.`,
-    cordon: `The final cordon cut off every route to the country's land border. With squads holding the surrounding posts, the fugitive could go no further.`,
-    closing: `The capture adds another closed file to the command desk. The next pursuit will demand a fresh look at the map—and another carefully placed squad.`,
+    deck: `${name} closes the net ${locationPhrase(report.region)}. ${report.moves} moves. No way out.`,
+    lead: `${report.region}, ${report.country} — ${report.file.shortName} had an escape plan. ${name} had a better one: a ${report.squads}-squad cordon, ${report.moves} moves, and absolutely nowhere left to run.`,
+    follow: `The squad earned ${report.score} points. The fugitive earned a long, awkward ride back. Our map desk is calling it a very good day's clicking.`,
+    quote: report.score > 0 ? "“They had a head start. I had a map.”" : "“Last move. Last exit. Perfect timing.”",
     archive: `${report.file.intro} ${report.file.ending}`,
-    caption: `${report.file.shortName} is taken into custody ${locationPhrase(report.region)} in this imagined Patrol pursuit.`,
-    share: `Front-page news: I caught ${report.file.shortName} in ${report.moves} moves with ${report.squads} squads on Patrol. 🗞️ Your turn—who can you catch? ${GAME_URL}`,
+    caption: `An imagined capture ${locationPhrase(report.region)}. Very real bragging rights.`,
+    invitation: "A map. A fugitive. Your move.",
+    share: `🗞️ ${report.file.shortName}'s great escape? Not today. I closed the net in ${report.moves} moves with ${report.squads} squads on Patrol. Your turn to make the front page: ${GAME_URL}`,
   };
 }

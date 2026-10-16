@@ -1,7 +1,8 @@
 /** Canonical Analytics contract. Add every event/parameter here BEFORE use.
  * `usedIn` names the emitting module; descriptions explain the research question.
- * User-entered names, photos, filenames, URLs and raw errors are never parameters.
- * The persistent random profile ID is sent only through Firebase's User-ID API.
+ * Names are person properties only; photos, filenames, URLs and raw errors are
+ * never gameplay parameters.
+ * The persistent random profile ID is sent only through PostHog's identify API.
  * All events receive COMMON_PARAMETERS when a hunt is active. */
 export const PARAMETERS = {
   country: "Configured country ID: usa, india, hungary.",
@@ -12,7 +13,7 @@ export const PARAMETERS = {
   moves_used: "Moves issued in the current attempt.",
   moves_left: "Remaining move budget.",
   squad_count: "Allocated squads in this hunt.",
-  entry: "UI entry point, e.g. first_visit, how_to_play, automatic, case_button.",
+  entry: "UI entry point, e.g. first_visit, how_to_play, first_country_win, result_button, case_button.",
   source: "Control/input origin: map, list, keyboard, card, header, result, campaign.",
   reason: "A bounded outcome/error/category code; never a raw exception.",
   duration_ms: "Wall-clock milliseconds for the measured action.",
@@ -21,6 +22,8 @@ export const PARAMETERS = {
   orientation: "portrait or landscape.",
   slide_id: "Stable tutorial slide asset ID.",
   slide_number: "One-based tutorial slide number.",
+  guide_step: "Guided hunt phase: post, squad, or moving.",
+  guide_move: "One-based move in the guided hunt's verified winning sequence.",
   from_country: "Previously selected country ID.",
   setup_count: "Number of verified challenges loaded.",
   border_count: "Number of selectable border posts loaded.",
@@ -35,7 +38,9 @@ export const PARAMETERS = {
   score: "Points awarded for capture.",
   capture_region: "Authored state/county where the in-game fugitive was surrounded.",
   hints_used: "Number of hint requests in this attempt.",
-  hint_kind: "winning, survival, none, error, cancelled.",
+  hint_kind: "winning, survival, none, error, cancelled, unavailable.",
+  hints_remaining: "Browser-wide recommendations left before the refill cooldown.",
+  cooldown_seconds: "Configured wait until the exhausted hint allowance refills, in seconds.",
   winning_moves: "Length of a verified winning hint continuation, if present.",
   shortest: "Whether the hint's shortest-win claim is proven.",
   zoom: "Map zoom rounded to one decimal, for deliberate user camera changes.",
@@ -47,15 +52,21 @@ export const PARAMETERS = {
   file_type: "Accepted photo MIME type; never a filename.",
   file_size_kb: "Rounded upload size in KiB.",
   photo_zoom: "Crop zoom on completed adjustment, not per pointer frame.",
+  newspaper_version: "Integer newspaper design version, for comparing share/export conversion.",
+  newspaper_artwork: "Country illustration preset: shared_v3 (USA/Hungary) or india_v1.",
   link_kind: "history_source or game_invitation; destination URL is not collected.",
   app_version: "Package version of the release.",
-  level_name: "GA recommended game parameter: country ID and historical case ID.",
-  success: "GA recommended level_end parameter: 1 for capture, 0 for loss.",
+  level_name: "Stable game parameter: country ID and historical case ID.",
+  success: "Level outcome: 1 for capture, 0 for loss.",
 } as const;
 export type Parameter = keyof typeof PARAMETERS;
 export const COMMON_PARAMETERS = ["country", "case_id", "challenge_id", "hunt_number", "attempt_id", "moves_used", "moves_left", "squad_count"] as const;
 const event = <P extends readonly Parameter[]>(description: string, usedIn: string, parameters: P) => ({ description, usedIn, parameters });
 export const EVENTS = {
+  guide_begin: event("In-game opening hunt guidance becomes visible.", "hunt-guide.ts", ["entry"]),
+  guide_step_view: event("A guided click or travel explanation is shown; no per-frame events.", "hunt-guide.ts", ["guide_step", "guide_move"]),
+  guide_skip: event("Player takes command freely without resetting their hunt.", "hunt-guide.ts", ["guide_step", "guide_move", "reason", "duration_ms"]),
+  guide_complete: event("Player completes the guided hunt's verified capture.", "hunt-guide.ts", ["duration_ms"]),
   challenge_previous: event("Replay the preceding hunt, including the previous country's final hunt.", "main.ts: previousChallenge", ["source"]),
   game_resume: event("A saved chase resumes after refresh; retains its attempt ID and simulated state.", "main.ts: startSetup", ["reason", "source"]),
   progress_restore_failed: event("A saved hunt is restarted because its rules/setup changed or its state is invalid.", "main.ts: startSetup", ["reason"]),
@@ -72,7 +83,7 @@ export const EVENTS = {
   country_load_start: event("Country data preparation begins.", "main.ts", []),
   country_load_success: event("Verified country is playable.", "main.ts", ["duration_ms", "setup_count", "border_count"]),
   country_load_error: event("Country preparation failed; categorical reason only.", "main.ts", ["duration_ms", "reason"]),
-  level_start: event("A new attempt begins; standard GA game funnel event.", "main.ts", ["entry", "level_name"]),
+  level_start: event("A new attempt begins; game funnel entry event.", "main.ts", ["entry", "level_name"]),
   level_end: event("Capture, escape, or budget loss, emitted once per attempt.", "main.ts", ["reason", "score", "elapsed_seconds", "hints_used", "capture_region", "level_name", "success"]),
   level_abandon: event("Restart/skip/country change before an outcome.", "main.ts", ["reason", "elapsed_seconds", "hints_used"]),
   level_restart: event("Replay/retry this same hunt.", "main.ts", ["source"]),
@@ -89,33 +100,37 @@ export const EVENTS = {
   move_rejected: event("An attempted destination cannot be used.", "main.ts", ["reason", "squad", "post"]),
   squad_arrived: event("Destination becomes guarded, possibly before fugitive stops.", "main.ts", ["squad", "post"]),
   move_resolved: event("Both travel phases end or an outcome interrupts the move.", "main.ts", ["duration_ms", "runner_distance_km", "reason"]),
-  hint_request: event("Free hint requested for the current state.", "main.ts", []),
-  hint_result: event("Hint search completed; track utility and delay.", "main.ts", ["hint_kind", "duration_ms", "winning_moves", "shortest"]),
+  hint_request: event("Hint requested without spending moves or points.", "main.ts", ["hints_remaining"]),
+  hint_result: event("Hint search completed; track utility, quota and delay.", "main.ts", ["hint_kind", "duration_ms", "winning_moves", "shortest", "hints_remaining", "reason"]),
   hint_hide: event("Dismiss/cancel a hint; distinguish manual/state changes.", "main.ts", ["reason"]),
   hint_followed: event("Player issues the suggested squad/post move.", "main.ts", ["squad", "post"]),
+  hint_quota_exhausted: event("Fourth recommendation starts the browser-wide refill clock.", "main.ts", ["hints_remaining", "cooldown_seconds"]),
+  hint_quota_refilled: event("Expired stored cooldown is first observed and four hints become available.", "main.ts", ["hints_remaining"]),
   map_action: event("Country view or Find fugitive used.", "main.ts", ["action"]),
   map_gesture: event("User finishes dragging or zooming; no per-frame logging.", "map-view.ts", ["action", "zoom"]),
   map_fallback: event("Basemap detail unavailable; board remains playable.", "main.ts", []),
   result_action: event("Win/loss result button selected.", "main.ts", ["action"]),
-  poster_open: event("Win-to-poster funnel, including saved profile presence.", "poster-studio.ts", ["has_name", "has_photo"]),
-  poster_close: event("Poster dismissed without leaving the game.", "poster-studio.ts", ["duration_ms"]),
-  poster_profile_edit: event("Name committed on blur; presence/length only.", "poster-studio.ts", ["has_name", "name_length"]),
-  poster_photo_select: event("Photo chosen; no identifying file data.", "poster-studio.ts", ["file_type", "file_size_kb"]),
-  poster_photo_ready: event("Photo decoded and stored locally.", "poster-studio.ts", []),
-  poster_photo_remove: event("Return to the default cartoon face.", "poster-studio.ts", []),
-  poster_crop_adjust: event("Completed drag/zoom/key adjustment; one event per gesture.", "poster-studio.ts", ["action", "photo_zoom"]),
-  poster_ready: event("First export-ready poster is rendered.", "poster-studio.ts", ["duration_ms", "has_name", "has_photo"]),
-  poster_download: event("PNG export delivered to browser download.", "poster-studio.ts", ["method", "has_name", "has_photo"]),
-  poster_share_attempt: event("User explicitly starts sharing.", "poster-studio.ts", ["method"]),
-  poster_share_result: event("Native share success/cancel/failure or download fallback.", "poster-studio.ts", ["method", "reason"]),
-  poster_caption_copy: event("Invitation text copied; text itself is excluded.", "poster-studio.ts", ["reason"]),
-  poster_error: event("Categorical upload/export/storage/share error.", "poster-studio.ts", ["reason"]),
+  poster_open: event("Automatic first-country capture or optional result-card newspaper opening.", "poster-studio.ts", ["entry", "newspaper_version", "newspaper_artwork", "has_name", "has_photo"]),
+  poster_close: event("Newspaper editor closed; distinguish advance, manual dismissal and state changes.", "poster-studio.ts", ["entry", "newspaper_version", "newspaper_artwork", "reason", "duration_ms"]),
+  poster_skip: event("Skip or Escape from the automatic front page advances directly to the next hunt.", "poster-studio.ts", ["entry", "newspaper_version", "newspaper_artwork", "reason", "duration_ms"]),
+  poster_profile_edit: event("Name committed on blur; presence/length only.", "poster-studio.ts", ["entry", "newspaper_version", "newspaper_artwork", "has_name", "name_length"]),
+  poster_photo_select: event("Photo chosen; no identifying file data.", "poster-studio.ts", ["entry", "newspaper_version", "newspaper_artwork", "file_type", "file_size_kb"]),
+  poster_photo_ready: event("Photo decoded and stored locally.", "poster-studio.ts", ["entry", "newspaper_version", "newspaper_artwork"]),
+  poster_photo_remove: event("Return to the default cartoon face.", "poster-studio.ts", ["entry", "newspaper_version", "newspaper_artwork"]),
+  poster_crop_adjust: event("Completed drag/zoom/key adjustment; one event per gesture.", "poster-studio.ts", ["entry", "newspaper_version", "newspaper_artwork", "action", "photo_zoom"]),
+  poster_ready: event("First export-ready poster is rendered.", "poster-studio.ts", ["entry", "newspaper_version", "newspaper_artwork", "duration_ms", "has_name", "has_photo"]),
+  poster_download: event("PNG export delivered to browser download.", "poster-studio.ts", ["entry", "newspaper_version", "newspaper_artwork", "method", "has_name", "has_photo"]),
+  poster_share_attempt: event("User explicitly starts sharing.", "poster-studio.ts", ["entry", "newspaper_version", "newspaper_artwork", "method"]),
+  poster_share_result: event("Native share success/cancel/failure or download fallback.", "poster-studio.ts", ["entry", "newspaper_version", "newspaper_artwork", "method", "reason"]),
+  poster_caption_copy: event("Invitation text copied; text itself is excluded.", "poster-studio.ts", ["entry", "newspaper_version", "newspaper_artwork", "reason"]),
+  poster_error: event("Categorical upload/export/storage/share error.", "poster-studio.ts", ["entry", "newspaper_version", "newspaper_artwork", "reason"]),
 } as const;
 export type EventName = keyof typeof EVENTS;
 export type AnalyticsParams = Partial<Record<Parameter, string | number | boolean>>;
 
 export const USER_PROPERTIES = {
-  profile_name_set: "yes/no name presence. Personal names are prohibited by Analytics policy.",
+  name: "Saved player name, attached with identify; null when cleared.",
+  profile_name_set: "yes/no name presence.",
   profile_photo_set: "yes/no saved portrait presence; no photo contents.",
 } as const;
 export const PERFORMANCE_TRACES = {

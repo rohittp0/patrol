@@ -303,6 +303,14 @@ export const PLAYTEST_CONFIG = {
   hints: {
     /** AGREED: hints consume no orders or points. Cost is fixed at zero for this prototype. */
     cost: 0,
+    quota: {
+      /** AGREED: successful hint recommendations available per browser. Positive integer. */
+      capacity: 4,
+      /** AGREED: refill all hints this many milliseconds after the final hint is used. */
+      refillAfterMs: 30 * 60 * 1000,
+      /** STARTER: countdown display refresh interval, in milliseconds, > 0. */
+      countdownTickMs: 1000,
+    },
     /** STARTER: worker search wall-time budget in milliseconds; must be positive.
      * A bounded search reports recommendations separately from proven shortest wins. */
     searchTimeMs: 6000,
@@ -315,10 +323,30 @@ export const PLAYTEST_CONFIG = {
   },
 
   tutorial: {
-    /** AGREED: show on first visit; How to play always reopens slide one. */
-    showOnFirstVisit: true,
-    /** STARTER: increment to show an updated briefing to returning players. */
+    /** AGREED: teach the opening hunt in-game; slides are an optional How to play reference. */
+    showOnFirstVisit: false,
+    /** STARTER: version of the optional slide reference. Positive integer. */
     version: 2,
+    guide: {
+      /** AGREED: require highlighted moves in the first campaign hunt, with Skip guidance. */
+      enabled: true,
+      /** STARTER: version of the browser-local completion/skip marker. Positive integer. */
+      version: 1,
+      /** STARTER: spotlight clearance around the actual control, in CSS pixels, >= 0. */
+      spotlightPaddingPx: 10,
+      /** STARTER: clearance around the moving actors and route, in CSS pixels, > 0. */
+      movementPaddingPx: 42,
+      /** STARTER: minimum card clearance from viewport edges, in CSS pixels, > 0. */
+      viewportMarginPx: 16,
+      /** STARTER: gap between spotlight and instruction card, in CSS pixels, > 0. */
+      cardGapPx: 24,
+      /** STARTER: instruction card width in CSS pixels, > 0; shrinks to fit the viewport. */
+      cardWidthPx: 310,
+      /** STARTER: pointer pulse period in milliseconds, > 0; disabled for reduced motion. */
+      pointerPulseMs: 1100,
+      /** STARTER: shade opacity outside the highlighted control, in [0,1]. */
+      shadeOpacity: 0.42,
+    },
     /** STARTER: locally generated GIF size, frames per second and duration.
      * Run npm run prepare:tutorial after changing these positive values. */
     animation: { widthPx: 640, heightPx: 360, framesPerSecond: 10, durationSeconds: 6 },
@@ -336,6 +364,8 @@ export const PLAYTEST_CONFIG = {
   },
 
   poster: {
+    /** STARTER: version of the clipping artwork/layout, attached to its funnel. */
+    designVersion: 3,
     /** STARTER: exported newspaper dimensions, in pixels, at a 4:5 aspect ratio. */
     widthPx: 1200, heightPx: 1500,
     /** STARTER: player-name length in Unicode characters; keeps headlines legible. */
@@ -346,12 +376,32 @@ export const PLAYTEST_CONFIG = {
     storedPhotoSizePx: 512,
     /** STARTER: crop preview size in pixels, zoom range, and arrow-key pan distance. */
     cropSizePx: 240, maxPhotoZoom: 3, keyboardPanPx: 10,
-    /** STARTER: head centres (fraction of source width/height) and circular
-     * radii (fraction of source width) calibrated to newspaper/arrest-scene.webp.
-     * Update these together with that illustration; values must be in [0,1]. */
-    sceneHeads: {
-      player: { x: 0.3236, y: 0.1807, radius: 0.081 },
-      fugitive: { x: 0.654, y: 0.1885, radius: 0.0795 },
+    /** STARTER: maximum per-channel difference (0–255) from corner ivory for
+     * edge-connected newspaper portrait masking. Does not alter map artwork. */
+    portraitMatteTolerance: 24,
+    /** AGREED: India has its own illustration and default officer; USA and
+     * Hungary share the existing art. Asset paths are relative to the base URL.
+     * STARTER: head centres are fractions of source width/height; radii are
+     * fractions of source width. All must be in [0,1]. Calibrate with the art. */
+    artwork: {
+      shared: {
+        id: "shared_v3",
+        scenePath: "newspaper/arrest-scene-v3.webp",
+        officerPath: "newspaper/officer-portrait.webp",
+        sceneHeads: {
+          player: { x: 0.3236, y: 0.1807, radius: 0.081 },
+          fugitive: { x: 0.654, y: 0.1885, radius: 0.0795 },
+        },
+      },
+      india: {
+        id: "india_v1",
+        scenePath: "newspaper/arrest-scene-india-v1.webp",
+        officerPath: "newspaper/officer-portrait-india-v1.webp",
+        sceneHeads: {
+          player: { x: 0.3236, y: 0.1807, radius: 0.081 },
+          fugitive: { x: 0.654, y: 0.1885, radius: 0.0795 },
+        },
+      },
     },
   },
 
@@ -360,7 +410,7 @@ export const PLAYTEST_CONFIG = {
     enabled: true,
     /** STARTER: do not send local playtests to production; ?telemetry_debug=1 opts in. */
     enableInDevelopment: false,
-    /** STARTER: fraction of browser sessions with custom Performance traces, in [0,1].
+    /** STARTER: fraction of browser sessions with custom PostHog timing events, in [0,1].
      * Automatic network instrumentation is disabled; there are no frame traces. */
     performanceSampleRate: 0.1,
     /** STARTER: defer SDK loading until idle, with this millisecond fallback. */

@@ -14,6 +14,9 @@ A country stage defined by its patrol zone and move budget. Each challenge owns 
 **Challenge**:
 A verified starting setup in the campaign. The first two challenges of each country introduce the chase with a two-move solution. Later challenges require at least three moves. Every challenge in a country starts in a different state or province. Difficulty restarts at the introductory tier when entering a new country.
 
+**Guided hunt**:
+The opening campaign challenge, taught by highlighting the border post and squad for each move through the capture. Players follow those moves or skip guidance to take command freely.
+
 **Campaign progress**:
 The current challenge and chase state, remembered on this browser so refreshing continues the same hunt. Previous hunt replays the preceding campaign challenge, including across country boundaries.
 
@@ -55,7 +58,7 @@ _Avoid_: Order budget in player-facing copy
 The move budget minus the number of orders used to win. Winning on the final allowed order gives a score of zero.
 
 **Hint**:
-An optional recommendation of a squad relocation from the current position. A hint can identify a verified winning continuation or a move that buys more escape distance. Hints currently cost no orders or points and never issue an order on the player's behalf.
+An optional recommendation of a squad relocation from the current position. Four hints are available per browser; using the last starts a thirty-minute wait before all four refill. Hints cost no orders or points and never issue a move on the player's behalf.
 
 **Border**:
 A designated, non-closed boundary segment inside the patrol zone or along its outer land boundary that a squad can guard. Borders may follow portions of real administrative boundaries.
@@ -88,7 +91,10 @@ A closed enclosure around the fugitive formed by guarded borders alone or by gua
 **Capture report**:
 The actual in-game capture location, moves, squads, score, and case file used to create the newspaper. Its game capture is fictional; its historical column is sourced.
 
+**Front-page clipping**:
+A shareable newspaper cutting celebrating the player's imagined capture, with a separate sourced historical ending. The first captured challenge in each country opens the editor once per browser. Skip advances to the next challenge; later captures offer Make headlines on the ordinary result card. India uses its own arrest illustration and default officer; USA and Hungary share the existing artwork.
+
 **Player profile**:
-A browser-local name, final circular head crop, and random anonymous ID. Original uploads and crop coordinates are discarded when the newspaper editor closes. Personal names and photos never enter Analytics.
+A saved name, final circular head crop, and random anonymous ID. Original uploads and crop coordinates are discarded when the newspaper editor closes. The name identifies the player's play sessions; photos stay in the browser unless the player shares or downloads their newspaper.
 
 Engine identifiers such as `runner`, `order`, and `secured` remain internal aliases; player-facing copy uses fugitive, move, and guarded.

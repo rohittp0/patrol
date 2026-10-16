@@ -21,6 +21,9 @@ import { PosterStudio } from "./poster-studio";
 import { playerProfile } from "./player-profile";
 import { borderName, locationPhrase } from "./game/presentation";
 import { gameContext, initTelemetry, measure, track } from "./telemetry";
+import { HuntGuide } from "./hunt-guide";
+import { HintQuota, HINT_QUOTA_KEY, hintCountdown } from "./game/hint-quota";
+import { NewspaperIntroductions } from "./game/newspaper-intro";
 
 initTelemetry();
 track("app_open", { width_px: innerWidth, height_px: innerHeight, has_name: !!playerProfile().name, has_photo: !!playerProfile().photo, app_version: "0.1.0" });
@@ -73,12 +76,16 @@ class PatrolApp {
   private frameHandle = 0;
   private toastTimer: ReturnType<typeof setTimeout> | undefined;
   private onboarding: Onboarding;
+  private guide: HuntGuide;
   private hints = new HintClient();
   private hint: HintResult | null = null;
   private hintBusy = false;
   private hintError: string | null = null;
+  private hintQuota = new HintQuota(undefined, Date.now, () => track("hint_quota_refilled", { hints_remaining: CONFIG.hints.quota.capacity }));
+  private hintCountdownTimer: ReturnType<typeof setTimeout> | undefined;
   private hintGeneration = 0;
   private poster = new PosterStudio();
+  private newspaperIntros = new NewspaperIntroductions();
   private attemptId = "";
   private attemptStarted = 0;
   private thinkingStarted = 0;
@@ -122,20 +129,24 @@ class PatrolApp {
     });
     document.addEventListener("keydown", (event) => {
       if (this.onboarding.blocked || this.poster.blocked) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
       if ((event.target as HTMLElement).matches("input, select, textarea")) return;
       if (/^[1-9]$/.test(event.key)) this.selectSquad(Number(event.key) - 1, "keyboard");
       if (event.key === "Escape" && !this.game?.activeOrder) { track("selection_clear"); this.clearHint("selection_clear"); this.selectedPost = null; this.focusedSquad = null; this.render(); }
     });
-    document.addEventListener("visibilitychange", () => { this.lastFrame = null; if (document.hidden) this.persistGame(); track("app_visibility", { action: document.hidden ? "hidden" : "visible" }); });
+    document.addEventListener("visibilitychange", () => { this.lastFrame = null; if (document.hidden) this.persistGame(); else this.renderHintButton(); track("app_visibility", { action: document.hidden ? "hidden" : "visible" }); });
+    window.addEventListener("storage", (event) => { if (event.key === HINT_QUOTA_KEY || event.key === null) this.renderHintButton(); });
     window.addEventListener("pagehide", () => this.persistGame());
     new ResizeObserver(() => {
       byId("app").style.setProperty("--dock-height", `${document.querySelector(".squad-dock")!.getBoundingClientRect().height}px`);
     }).observe(document.querySelector(".squad-dock")!);
+    this.guide = new HuntGuide(() => this.render());
     this.onboarding = new Onboarding(() => {
       this.lastFrame = null;
-      if (this.onboarding?.phoneBlocked) this.poster.close();
+      if (this.onboarding?.phoneBlocked) { this.poster.close(); if (this.game) this.renderResult(); }
       if (this.onboarding?.blocked) this.modalStarted ??= performance.now();
       else if (this.modalStarted !== null) { this.thinkingStarted += performance.now() - this.modalStarted; this.modalStarted = null; }
+      this.renderGuide();
     });
     let saved: SavedProgress | null = null;
     try { saved = readProgress(localStorage); } catch { /* Storage can be unavailable. */ }
@@ -186,9 +197,11 @@ class PatrolApp {
       this.validSetups = valid;
       if (this.map) this.map.setBoard(board);
       else this.map = new PatrolMap(board, (border) => this.choosePost(border), (fallback) => { const note = byId("map-note"); if (fallback && note.hidden) track("map_fallback"); note.hidden = !fallback; });
+      this.guide.bindMap(this.map.map);
       track("country_load_success", { country: id, duration_ms: Math.round(performance.now() - started), setup_count: valid.length, border_count: board.borders.length }); measure("country_prepare", started, id);
       this.startSetup(valid[Math.max(0, Math.min(valid.length - 1, targetIndex))], saved ? "resume" : "country", !saved, saved);
       byId("loading").hidden = true;
+      this.renderGuide();
     } catch (error) {
       if (generation !== this.loadGeneration) return;
       track("country_load_error", { country: id, duration_ms: Math.round(performance.now() - started), reason: "data_unavailable" });
@@ -250,6 +263,7 @@ class PatrolApp {
     this.selectedPost = null;
     this.focusedSquad = null;
     byId("toast").hidden = true;
+    if (briefing) this.showCase("automatic");
     this.render();
     this.map?.startView(this.game);
     if (restored && saved) {
@@ -257,7 +271,6 @@ class PatrolApp {
       this.focusedSquad = saved.focusedSquad !== null && this.game.squads[saved.focusedSquad] ? saved.focusedSquad : null;
       this.render();
     }
-    if (briefing) this.showCase("automatic");
     if (this.game.activeOrder && this.game.outcome.kind === "playing") {
       this.moveStarted = performance.now(); this.frameHandle = requestAnimationFrame(this.frame);
     }
@@ -265,6 +278,7 @@ class PatrolApp {
 
   selectSquad(index: number, source = "card") {
     if (this.onboarding.blocked || this.poster.blocked || !this.game || this.game.activeOrder || this.game.outcome.kind !== "playing" || !this.game.squads[index]) return;
+    if (!this.guide.allowsSquad(index)) return;
     track("squad_select", { source, squad: index, ...(this.selectedPost !== null ? { post: this.selectedPost } : {}) });
     if (this.hintBusy) this.clearHint();
     this.map?.revealSquad(this.game.squads[index].actor.position);
@@ -287,6 +301,7 @@ class PatrolApp {
 
   choosePost(border: number, source = "map") {
     if (this.onboarding.blocked || !this.game || this.game.activeOrder || this.game.outcome.kind !== "playing" || !this.board.borders[border]) return;
+    if (!this.guide.allowsPost(border)) return;
     if (this.hintBusy) this.clearHint();
     const hinted = this.hint?.kind === "winning" ? this.hint.orders[0] : this.hint?.kind === "survival" ? this.hint.order : null;
     if (hinted && hinted.border !== border) this.clearHint();
@@ -309,6 +324,7 @@ class PatrolApp {
     if (order && travelling && this.game.squads[order.squad].border !== null) { track("squad_arrived", { squad: order.squad, post: order.to }); this.render(); }
     else this.map?.renderActors(this.game);
     this.renderJourney();
+    this.guide.followMovement();
     if (performance.now() - this.lastSaveAt >= CONFIG.persistence.autosaveIntervalMs) this.persistGame();
     if (this.game.activeOrder && this.game.outcome.kind === "playing") this.frameHandle = requestAnimationFrame(this.frame);
     else { if (order) track("move_resolved", { duration_ms: Math.round(performance.now() - this.moveStarted), runner_distance_km: Math.round(order.runnerTravelledKm), reason: this.game.outcome.kind }); this.thinkingStarted = performance.now(); this.lastFrame = null; this.render(); }
@@ -337,18 +353,27 @@ class PatrolApp {
 
   private async showHint() {
     if (this.onboarding.blocked || !this.game || this.game.activeOrder || this.game.outcome.kind !== "playing") return;
+    if (this.guide.active) return;
     if (this.hintBusy || this.hint || this.hintError) { this.clearHint("manual"); this.render(); return; }
-    const started = performance.now(); this.hintsUsed++; track("hint_request");
+    if (this.hintQuota.status().remaining === 0) { this.renderHintButton(); return; }
+    const started = performance.now(); this.hintsUsed++; track("hint_request", { hints_remaining: this.hintQuota.status().remaining });
     const generation = ++this.hintGeneration;
     this.hintBusy = true;
     this.renderHint();
     try {
       const result = await this.hints.find(this.game);
       if (generation !== this.hintGeneration) return;
-      this.hint = result;
-      track("hint_result", { hint_kind: result.kind, duration_ms: Math.round(performance.now() - started), ...(result.kind === "winning" ? { winning_moves: result.orders.length, shortest: result.shortest } : {}) });
       const order = result.kind === "winning" ? result.orders[0] : result.kind === "survival" ? result.order : null;
-      if (order) {
+      if (order && !this.hintQuota.consume()) {
+        this.hintError = "Your hints are recharging. The countdown shows when four new hints will be ready.";
+        track("hint_result", { hint_kind: "unavailable", reason: "quota_exhausted", duration_ms: Math.round(performance.now() - started), hints_remaining: 0 });
+      } else {
+        this.hint = result;
+        const remaining = this.hintQuota.status().remaining;
+        track("hint_result", { hint_kind: result.kind, duration_ms: Math.round(performance.now() - started), hints_remaining: remaining, ...(result.kind === "winning" ? { winning_moves: result.orders.length, shortest: result.shortest } : {}) });
+        if (order && remaining === 0) track("hint_quota_exhausted", { hints_remaining: 0, cooldown_seconds: CONFIG.hints.quota.refillAfterMs / 1000 });
+      }
+      if (order && !this.hintError) {
         this.selectedPost = order.border;
         this.focusedSquad = order.squad;
         this.map?.revealPost(order.border);
@@ -364,11 +389,7 @@ class PatrolApp {
 
   private renderHint() {
     const visible = this.hintBusy || !!this.hint || !!this.hintError;
-    const button = byId<HTMLButtonElement>("show-hint");
-    button.disabled = !this.game || !!this.game.activeOrder || this.game.outcome.kind !== "playing";
-    button.innerHTML = `${icon("hint")}<span>${visible ? "Hide hint" : "Show hint"}</span><small>FREE</small>`;
-    button.setAttribute("aria-expanded", String(visible));
-    button.setAttribute("aria-controls", "hint-panel");
+    this.renderHintButton();
     byId("hint-panel").hidden = !visible;
     if (!visible) return;
     byId("hint-panel").setAttribute("aria-busy", String(this.hintBusy));
@@ -382,6 +403,21 @@ class PatrolApp {
     }
     const description = result?.kind === "winning" ? `${result.shortest ? "Best move" : "A promising lead"} · Catch them in ${result.orders.length} more moves.` : "This should buy you some breathing room. The capture will still take more work.";
     byId("hint-content").innerHTML = `<span class="hint-verdict">${description}</span><strong>Squad ${letter(order.squad)} → Post ${order.border + 1}</strong><p>${escapeHtml(borderName(this.board.borders[order.border]))}</p><small>The post is selected. Click the highlighted Squad ${letter(order.squad)} when you're ready to move.</small>`;
+  }
+
+  private renderHintButton() {
+    const visible = this.hintBusy || !!this.hint || !!this.hintError;
+    const quota = this.hintQuota.status(), exhausted = quota.remaining === 0;
+    const button = byId<HTMLButtonElement>("show-hint");
+    button.disabled = !this.game || !!this.game.activeOrder || this.game.outcome.kind !== "playing" || exhausted && !visible;
+    button.innerHTML = `${icon("hint")}<span>${visible ? "Hide hint" : "Show hint"}</span><small>${exhausted ? hintCountdown(quota.remainingMs) : quota.remaining}</small>`;
+    button.classList.toggle("is-recharging", exhausted);
+    button.setAttribute("aria-label", `${visible ? "Hide hint" : "Show hint"}, ${exhausted ? `refills in ${hintCountdown(quota.remainingMs)}` : `${quota.remaining} of ${CONFIG.hints.quota.capacity} left`}`);
+    button.title = exhausted ? `Four hints refill in ${hintCountdown(quota.remainingMs)}` : `${quota.remaining} hints left. No moves or points spent.`;
+    button.setAttribute("aria-expanded", String(visible));
+    button.setAttribute("aria-controls", "hint-panel");
+    clearTimeout(this.hintCountdownTimer);
+    if (quota.remainingMs > 0) this.hintCountdownTimer = setTimeout(() => this.renderHintButton(), Math.min(CONFIG.hints.quota.countdownTickMs, quota.remainingMs));
   }
 
   private bestScoreKey(): string {
@@ -441,21 +477,32 @@ class PatrolApp {
     byId("app").style.setProperty("--dock-height", `${document.querySelector(".squad-dock")!.getBoundingClientRect().height}px`);
     this.map?.renderState(game, this.selectedPost, this.focusedSquad);
     this.renderHint();
+    this.renderGuide();
     this.renderResult();
     this.persistGame();
   }
 
+  private renderGuide() {
+    if (!this.game || !this.guide) return;
+    this.guide.update(this.game, this.board.id === CONFIG.levels[0].id && this.challengeIndex === 0, this.selectedPost,
+      !!this.onboarding?.blocked || this.poster.blocked || !byId("loading").hidden, (border) => this.map?.revealPost(border), () => this.map?.showGuidedMovement(this.game));
+  }
+
   private renderResult() {
     const outcome = this.game.outcome;
+    const firstView = !this.ended;
     byId("result").hidden = outcome.kind === "playing";
     if (outcome.kind === "playing") return;
     const won = outcome.kind === "won";
     if (!this.ended) {
       this.syncContext();
       track("level_end", { reason: won ? "capture" : outcome.reason, score: won ? outcome.score : 0, elapsed_seconds: Math.round((performance.now() - this.attemptStarted) / 1000), hints_used: this.hintsUsed, level_name: `${this.board.id}:${this.caseFile.id}`, success: won ? 1 : 0, ...(won ? { capture_region: captureRegion(this.game) } : {}) });
-      if (won) track("history_view");
       this.ended = true;
+      if (this.newspaperIntros.claim(this.board.id, this.challengeIndex, won)) {
+        void this.poster.open(captureReport(this.game, this.challengeIndex, this.huntNumber), { entry: "first_country_win", onSkip: () => this.nextChallenge("newspaper_skip") });
+      } else if (won) track("history_view");
     }
+    if (this.poster.automatic) { byId("result").hidden = true; return; }
     const levelIndex = CONFIG.levels.findIndex((level) => level.id === this.board.id);
     const next = CONFIG.levels[levelIndex + 1];
     const hasNextSetup = this.validSetups.findIndex((setup) => setup.id === this.game.setup.id) + 1 < this.validSetups.length;
@@ -464,6 +511,7 @@ class PatrolApp {
     byId("result").innerHTML = `<img class="result-portrait" src="${import.meta.env.BASE_URL}${portraitPath(file)}" alt="Illustrated portrait of ${escapeHtml(file.name)}"><span class="eyebrow">${won ? "CASE CLOSED" : "THE CHASE ENDS HERE"}</span><h2>${won ? `${escapeHtml(file.shortName)} caught.` : outcome.reason === "escape" ? `${escapeHtml(file.shortName)} got away.` : "Out of moves."}</h2><p>${won ? `Your squads closed the net ${escapeHtml(locationPhrase(captureRegion(this.game)))}. There's nowhere left to run.` : outcome.reason === "escape" ? "They slipped across the border and out of your reach." : "Your fugitive is still free. Give the chase another go."}</p>${won ? `<div class="result-score">+${outcome.score}<span>POINTS · ${this.game.ordersUsed} OF ${this.game.rules.maxOrders} MOVES</span></div><div class="historical-ending"><span class="eyebrow">HOW THE REAL MANHUNT ENDED · ${escapeHtml(file.endingDate)}</span><p>${escapeHtml(file.ending)}</p><a id="history-source" href="${file.source.url}" target="_blank" rel="noopener noreferrer">Read the story · ${escapeHtml(file.source.label)} ↗</a></div><button class="newspaper-button" id="make-headlines">🗞 Make headlines<span>Your capture. Your own front page.</span></button>` : ""}<div class="result-actions"><button class="primary-button" id="result-primary">${won ? hasNextSetup ? "Next hunt" : next ? `Next: ${next.name}` : "Play again" : "Try again"}${icon("arrow")}</button><button class="text-button" id="result-secondary">${won ? "Replay this hunt" : "Skip hunt"}</button></div>`;
     byId("result-primary").addEventListener("click", () => { track("result_action", { action: won ? "next" : "retry" }); won ? this.nextChallenge("result") : this.restart("result"); });
     byId("result-secondary").addEventListener("click", () => { track("result_action", { action: won ? "replay" : "skip" }); won ? this.restart("result") : this.nextChallenge("result"); });
+    if (firstView) byId("result-primary").focus();
     if (won) {
       byId("history-source").addEventListener("click", () => track("history_source_open", { link_kind: "history_source" }));
       byId("make-headlines").addEventListener("click", () => { track("result_action", { action: "poster" }); void this.poster.open(captureReport(this.game, this.challengeIndex, this.huntNumber)); });

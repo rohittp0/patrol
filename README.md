@@ -23,15 +23,25 @@ Escape clears the selected post. Games start moderately zoomed around the
 fugitive. Country view fits the entire zone, and Find fugitive centres and zooms to the fugitive. The selected squad’s
 post receives a bright ring; the counters sit on the right side of the map.
 
-First-time visitors see a five-slide mission briefing with original animated GIFs.
-**How to play** always restarts that tutorial from slide one. Completing or
-skipping it is remembered locally; reduced-motion visitors see static posters.
-Opening the tutorial pauses an in-progress order. Phones show a non-dismissible
+The first hunt teaches play on the real board. A spotlight and pointer highlight
+the post to click, then the squad to send, for both moves of the verified capture.
+Other actions are blocked until the prompted action or **Skip guidance**; skipping
+immediately releases the current chase without resetting it. Refresh resumes the
+correct prompt or in-progress move. Completion and skipping are remembered locally,
+and later hunts run without guidance. Existing off-sequence saves are left alone.
+After guidance is skipped or completed, **How to play** opens the optional
+five-slide animated reference. It pauses an in-progress move until closed.
+Reduced-motion visitors see static reference posters and a stationary pointer.
+Phones show a non-dismissible
 message asking the player to open Patrol on a laptop or desktop, including in
 landscape. Narrow desktop windows show the same message until enlarged.
 
-**Show hint** is free and highlights a destination post and squad without spending
-moves, points, or game time. Click the suggested squad to issue the order.
+**Show hint** provides four recommendations per browser without spending moves,
+points, or game time. The button shows the remaining count. Using the final hint
+starts a 30-minute countdown on the button; all four refill when it ends. The count
+and deadline persist across refresh, hunt changes, and browser tabs. Closing a
+hint, cancelling a search, errors, and searches with no recommendation do not
+spend another hint. Click the suggested squad to issue the order.
 Advice is recalculated from the exact current state, including after a different
 opening. Every claimed winning continuation is checked in the game simulation.
 “Best move” means a shortest win has been proved. A bounded search can instead
@@ -94,11 +104,25 @@ portrait. These are imagined chases, not reenactments. Real endings distinguish
 arrest, surrender, and death. [Portrait art notes](docs/portrait-art.md) document
 the built-in image generation prompt set and saved assets.
 
-After a capture, **Make headlines** opens a newspaper editor. Add a name and photo,
-drag/zoom the circular head crop, and download the 1200 × 1500 PNG. The front page uses a traditional blackletter masthead, justified story columns,
-a sourced historical sidebar, and a detailed monochrome street illustration. It
-combines actual capture region, squad count, moves, and score with sourced case
-facts. The same fugitive portrait appears on the map, case card, and newspaper.
+Winning the first challenge of each country opens **You made the front page**
+once per browser, remembered in `patrol:newspaper-intros:v1`. **Skip** (or Escape)
+takes the player straight to the next hunt. Replays and later captures show the
+ordinary result card with an optional **Make headlines** button; closing that
+optional editor returns to the same result.
+
+Add a name and photo, drag/zoom the circular head crop, and share or keep the
+1200 × 1500 PNG clipping. Textured aged paper, uneven cut edges, fold marks,
+blackletter type, a capture stamp and playful copy frame the actual capture
+region, squads, moves and score. The sourced historical ending stays separate.
+A newspaper-style **Squad leader wanted** notice prominently invites readers to
+play at rohittp.com/patrol. The same fugitive illustration is used on the map and
+newspaper; only the newspaper masks its edge-connected ivory background, leaving
+the original assets intact. India uses its own khaki police uniform, cotton
+kurta, Indian street scene and default officer; USA and Hungary share the
+existing illustration. Artwork follows the capture report's country, with a
+separate cache per preset. Artwork and masks are prepared only when opened,
+then reused during editing. The full clipping and primary Share action fit in
+the desktop editor's initial view.
 Native file sharing includes an invitation to https://rohittp.com/patrol; browsers
 without file sharing download the PNG and offer invitation text to copy.
 
@@ -109,13 +133,15 @@ the photo clears the saved crop. Storage failure leaves export available.
 
 ## Analytics and performance
 
-Firebase Analytics covers the entry, tutorial, device gate, case introductions,
+PostHog covers the entry, tutorial, device gate, case introductions,
 country loading, selections, moves, hints, outcomes, historical sources, and
 newspaper creation/export/share journey. The central research contract is
 [src/telemetry/events.ts](src/telemetry/events.ts): every event, allowed parameter,
-user property, and custom trace has a description and emitting module.
-[Telemetry notes](docs/telemetry.md) explain DebugView, reporting, sampling, and
+user property, and custom timing event has a description and emitting module.
+[Telemetry notes](docs/telemetry.md) explain live events, reporting, sampling, and
 what stays local. There is no consent screen for this internal release.
+The saved player name is attached through PostHog identity, and session replay is
+enabled in the SDK; the project's Record user sessions setting must also be on.
 
 ## Tuning and validation
 

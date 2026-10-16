@@ -1,14 +1,29 @@
 import type { CaptureReport } from "./game/capture-report";
 import { PLAYTEST_CONFIG as CONFIG } from "./game/playtest.config";
-import { GAME_URL, newspaperCopy } from "./poster-content";
+import { GAME_URL, newspaperCopy, playerName } from "./poster-content";
+import { removePortraitBackground } from "./game/portrait-matte";
+import { newspaperPaper } from "./poster-paper";
 
-export interface NewspaperAssets { scene: HTMLImageElement; officer: HTMLImageElement; mastheadFamily: string }
-let assetsPromise: Promise<NewspaperAssets> | null = null;
+export const newspaperArtwork = (country: string) => CONFIG.poster.artwork[country === "india" ? "india" : "shared"];
+export interface NewspaperAssets { scene: HTMLImageElement; officer: HTMLImageElement; mastheadFamily: string; artwork: ReturnType<typeof newspaperArtwork> }
+const assetsByArtwork = new Map<string, Promise<NewspaperAssets>>();
+let mastheadPromise: Promise<string> | null = null;
+const portraitCache = new WeakMap<HTMLImageElement, HTMLCanvasElement>();
+
+function printPortrait(image: HTMLImageElement): HTMLCanvasElement {
+  const cached = portraitCache.get(image); if (cached) return cached;
+  const canvas = document.createElement("canvas"); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+  const ctx = canvas.getContext("2d")!; ctx.drawImage(image, 0, 0);
+  const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  removePortraitBackground(pixels.data, canvas.width, canvas.height, CONFIG.poster.portraitMatteTolerance);
+  ctx.putImageData(pixels, 0, 0); portraitCache.set(image, canvas); return canvas;
+}
 
 /** The illustration and locally hosted font load only when the editor opens.
  * Cache decoded assets across opens; never request an external font at export. */
-export function prepareNewspaperAssets(): Promise<NewspaperAssets> {
-  if (assetsPromise) return assetsPromise;
+export function prepareNewspaperAssets(country: string): Promise<NewspaperAssets> {
+  const artwork = newspaperArtwork(country), cached = assetsByArtwork.get(artwork.id);
+  if (cached) return cached;
   const image = (path: string) => new Promise<HTMLImageElement>((resolve, reject) => {
     const value = new Image(); value.onload = () => resolve(value); value.onerror = reject;
     value.src = `${import.meta.env.BASE_URL}${path}`;
@@ -19,10 +34,12 @@ export function prepareNewspaperAssets(): Promise<NewspaperAssets> {
       document.fonts.add(await font.load()); return "PatrolMasthead";
     } catch { return "Georgia, serif"; }
   };
-  assetsPromise = Promise.all([image("newspaper/arrest-scene.webp"), image("newspaper/officer-portrait.webp"), masthead()])
-    .then(([scene, officer, mastheadFamily]) => ({ scene, officer, mastheadFamily }))
-    .catch((error) => { assetsPromise = null; throw error; });
-  return assetsPromise;
+  mastheadPromise ??= masthead();
+  const promise = Promise.all([image(artwork.scenePath), image(artwork.officerPath), mastheadPromise])
+    .then(([scene, officer, mastheadFamily]) => ({ scene, officer, mastheadFamily, artwork }))
+    .catch((error) => { assetsByArtwork.delete(artwork.id); throw error; });
+  assetsByArtwork.set(artwork.id, promise);
+  return promise;
 }
 
 interface Column { x: number; y: number; width: number; height: number }
@@ -34,13 +51,8 @@ export function drawNewspaper(canvas: HTMLCanvasElement, report: CaptureReport, 
   canvas.width = CONFIG.poster.widthPx; canvas.height = CONFIG.poster.heightPx;
   const ctx = canvas.getContext("2d")!;
   ctx.scale(canvas.width / 1200, canvas.height / 1500);
-  const ink = "#24231f", paper = "#f5f1e7", serif = "Georgia, serif", sans = "Arial, sans-serif";
-  ctx.fillStyle = paper; ctx.fillRect(0, 0, 1200, 1500);
-  // Very faint fibre and fold marks, with crisp ink kept above the paper.
-  ctx.fillStyle = "#594d3409";
-  for (let i = 0; i < 4500; i++) ctx.fillRect((i * 137.7) % 1200, (i * 71.3) % 1500, .8, 1.2);
-  const fold = ctx.createLinearGradient(580, 0, 620, 0); fold.addColorStop(0, "#40362000"); fold.addColorStop(.5, "#40362005"); fold.addColorStop(1, "#40362000");
-  ctx.fillStyle = fold; ctx.fillRect(580, 0, 40, 1500);
+  const ink = "#29271f", accent = "#87372c", serif = "Georgia, serif", sans = "Arial, sans-serif";
+  const clipping = newspaperPaper(ctx); ctx.save(); ctx.clip(clipping);
   const rule = (y: number, width = 1, x = 48, end = 1152) => { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(end, y); ctx.strokeStyle = ink; ctx.lineWidth = width; ctx.stroke(); };
   const vertical = (x: number, y: number, end: number) => { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, end); ctx.strokeStyle = "#99958b"; ctx.lineWidth = .7; ctx.stroke(); };
   const font = (size: number, family = serif, weight = "normal") => { ctx.font = `${weight} ${size}px ${family}`; };
@@ -111,19 +123,18 @@ export function drawNewspaper(canvas: HTMLCanvasElement, report: CaptureReport, 
     return size;
   };
   const copy = newspaperCopy(report, name);
-  text("INDEPENDENT REPORTS • EXTRAORDINARY PURSUITS", 600, 36, 12, sans, "center");
-  text("THE WORLD", 48, 88, 13, sans, "left", "bold"); text("ON THE RUN", 48, 109, 13, sans);
-  fitLine("The Patrol Post", 600, 151, 820, 118, assets.mastheadFamily, "center", "bold");
-  text("THE MANHUNT", 1152, 88, 13, sans, "right", "bold"); text("DESK", 1152, 109, 13, sans, "right");
+  text("EXTRA!", 48, 75, 27, serif, "left", "bold"); text("EXTRA!", 48, 100, 27, serif, "left", "bold");
+  fitLine("The Patrol Post", 600, 143, 810, 116, assets.mastheadFamily, "center", "bold");
+  text("BAD NEWS FOR", 1152, 77, 12, sans, "right", "bold"); text("FUGITIVES.", 1152, 98, 18, serif, "right", "bold");
+  text("GOOD MAPS. GREAT ESCAPES. BETTER CAPTURES.", 600, 168, 12, sans, "center");
   rule(177, 3); rule(183, .8);
   text(`VOL. I  ·  NO. ${String(report.hunt).padStart(2, "0")}`, 48, 207, 14, sans);
   const date = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }).toUpperCase();
   text(date, 600, 207, 14, sans, "center");
   text(`${report.country.toUpperCase()}  ·  GAME EDITION`, 1152, 207, 14, sans, "right"); rule(220);
-  text("CRIME & PURSUIT", 48, 253, 14, sans, "left", "bold");
-  text("SPECIAL DISPATCH", 1152, 253, 14, sans, "right");
-  fitLine(copy.headline, 48, 345, 1104, 91, serif, "left", "bold");
-  block(copy.deck, { x: 48, y: 366, width: 1104, height: 65 }, 28, serif, "italic", 1.15, true);
+  fitLine(copy.kicker.toUpperCase(), 600, 270, 1104, 37, serif, "center", "bold");
+  fitLine(copy.headline, 600, 375, 1104, 128, serif, "center", "bold");
+  block(copy.deck, { x: 48, y: 393, width: 1104, height: 39 }, 27, serif, "italic", 1.1, true);
   rule(440, 1.2);
 
   // The framed editorial illustration replaces the old flat vector cartoon.
@@ -138,48 +149,49 @@ export function drawNewspaper(canvas: HTMLCanvasElement, report: CaptureReport, 
     const x = left + placement.x * assets.scene.naturalWidth * scale, y = top + placement.y * assets.scene.naturalHeight * scale;
     const r = placement.radius * assets.scene.naturalWidth * scale;
     ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.clip();
-    // An opaque paper backing also covers the source placeholder's fine edge.
-    ctx.globalCompositeOperation = "source-over"; ctx.fillStyle = paper; ctx.fillRect(x - r, y - r, r * 2, r * 2);
-    ctx.globalCompositeOperation = "multiply"; ctx.drawImage(source, x - r, y - r, r * 2, r * 2); ctx.restore();
+    ctx.globalCompositeOperation = "source-over";
+    ctx.drawImage(source, x - r, y - r, r * 2, r * 2); ctx.restore();
   };
-  head(player ?? assets.officer, CONFIG.poster.sceneHeads.player);
-  head(fugitive, CONFIG.poster.sceneHeads.fugitive);
+  head(player ?? printPortrait(assets.officer), assets.artwork.sceneHeads.player);
+  head(printPortrait(fugitive), assets.artwork.sceneHeads.fugitive);
   // A light, regular screen unifies uploaded photos and the drawn scene in print.
   const screen = document.createElement("canvas"); screen.width = screen.height = 4;
   const screenCtx = screen.getContext("2d")!; screenCtx.fillStyle = "#17151118"; screenCtx.beginPath(); screenCtx.arc(1, 1, .4, 0, Math.PI * 2); screenCtx.fill();
   ctx.filter = "none"; ctx.globalCompositeOperation = "source-over"; ctx.fillStyle = ctx.createPattern(screen, "repeat")!; ctx.fillRect(photo.x, photo.y, photo.width, photo.height);
   ctx.restore();
-  text("PATROL POST / ARTIST'S IMPRESSION", 763, 904, 11, sans, "right");
+  text("PATROL POST / ARTIST'S IMPRESSION", 763, 902, 10, sans, "right");
   block(copy.caption, { x: 48, y: 913, width: 715, height: 40 }, 17, serif, "italic", 1.15);
-  text("By the Patrol Correspondent", 48, 978, 14, sans, "left", "bold");
-  columns([copy.lead, copy.cordon, copy.follow, copy.closing], [
-    { x: 48, y: 992, width: 342, height: 280 }, { x: 421, y: 992, width: 342, height: 280 },
-  ], 22);
-  vertical(405, 1000, 1272); vertical(784, 456, 1272);
-
-  // Separate the sourced account from the fictional, personalized lead story.
-  text("FROM THE ARCHIVES", 808, 475, 13, sans, "left", "bold");
-  block(report.file.title, { x: 808, y: 490, width: 344, height: 77 }, 31, serif, "bold", 1.1);
-  text("THE REAL MANHUNT", 808, 592, 12, sans, "left", "bold");
-  text(report.file.endingDate, 808, 615, 16, serif, "left", "italic"); rule(630, .7, 808);
-  columns([report.file.intro, report.file.ending], [{ x: 808, y: 643, width: 344, height: 429 }], 23);
-  block(`Source: ${report.file.source.label}`, { x: 808, y: 1084, width: 344, height: 48 }, 14, sans);
-  rule(1148, 1, 808); text("THE CAPTURE LEDGER", 808, 1171, 12, sans, "left", "bold");
-  for (const [index, [label, value]] of [["Squads deployed", report.squads], ["Moves used", report.moves], ["Points earned", report.score]].entries()) {
-    const y = 1200 + index * 29; text(String(label), 808, y, 19); text(String(value), 1152, y, 22, serif, "right", "bold");
+  // The margin is the player's bragging column, with one old-fashioned stamp.
+  ctx.save(); ctx.translate(980, 512); ctx.rotate(-.065); ctx.strokeStyle = accent; ctx.lineWidth = 3;
+  ctx.strokeRect(-163, -38, 326, 76); ctx.lineWidth = 1; ctx.strokeRect(-157, -32, 314, 64);
+  font(38, sans, "bold"); ctx.fillStyle = accent; ctx.textAlign = "center"; ctx.fillText("CASE CLOSED", 0, 13); ctx.restore();
+  text("THE CAPTAIN'S REPORT", 980, 590, 13, sans, "center", "bold"); rule(607, .8, 808);
+  for (const [index, [label, value]] of [["MOVES", report.moves], ["SQUADS", report.squads], ["POINTS", report.score]].entries()) {
+    const x = 857 + index * 119; text(String(value).padStart(2, "0"), x, 665, 48, serif, "center", "bold"); text(String(label), x, 689, 12, sans, "center");
   }
-  rule(1290, 2); vertical(405, 1310, 1412); vertical(784, 1310, 1412);
-  const briefs = [
-    { x: 48, title: "Another case, another chase", copy: "The next case file is already on the desk. A new fugitive means a fresh look at the map and another chance to close the net." },
-    { x: 421, title: "Every move makes the news", copy: `Careful planning pays. This operation finished with ${report.score} points on the board—and a front-page clipping for the squad's scrapbook.` },
-    { x: 808, title: "Your name in tomorrow's paper?", copy: "Take command of your own patrol. Pick up a case file and see who you can catch." },
-  ];
-  for (const brief of briefs) {
-    fitLine(brief.title, brief.x, 1325, 344, 24, serif, "left", "bold");
-    block(brief.copy, { x: brief.x, y: 1337, width: 342, height: 77 }, 18, serif, "normal", 1.2);
-  }
-  text(GAME_URL.replace(/^https?:\/\//, ""), 808, 1424, 19, serif, "left", "bold");
-  rule(1440, .8);
-  text("THIS FRONT PAGE REPORTS AN IMAGINED GAME CAPTURE. HISTORICAL FACTS APPEAR IN THE ARCHIVE COLUMN.", 600, 1461, 11, sans, "center");
-  text("THE PATROL POST", 48, 1483, 10, sans); text("ILLUSTRATED GAME EDITION  ·  1", 1152, 1483, 10, sans, "right");
+  rule(710, .8, 808);
+  block(copy.quote, { x: 815, y: 731, width: 330, height: 111 }, 36, serif, "italic", 1.12);
+  fitLine(`— ${playerName(name)}`, 1145, 874, 330, 18, serif, "right", "italic");
+  vertical(784, 456, 886); rule(963, 1.2);
+  text("FILED BY OUR MAP DESK", 48, 991, 12, sans, "left", "bold");
+  columns([copy.lead, copy.follow], [{ x: 48, y: 1008, width: 342, height: 251 }], 22);
+  vertical(405, 985, 1260);
+  // Preserve the actual ending as a clearly separate, shorter historical box.
+  text("THE REAL MANHUNT / FROM THE ARCHIVES", 428, 991, 12, sans, "left", "bold");
+  fitLine(report.file.title, 428, 1030, 724, 30, serif, "left", "bold");
+  text(report.file.endingDate, 428, 1057, 16, serif, "left", "italic");
+  columns([report.file.ending], [{ x: 428, y: 1072, width: 724, height: 153 }], 22);
+  fitLine(`Source: ${report.file.source.label}`, 428, 1253, 724, 13, sans);
+  // A classified invitation belongs in the paper; it is intentionally much
+  // more readable than the old tiny footer URL, without a web-ad button.
+  rule(1280, 2);
+  ctx.save(); ctx.setLineDash([7, 5]); ctx.strokeStyle = accent; ctx.lineWidth = 1.5; ctx.strokeRect(49, 1297, 1102, 133); ctx.restore();
+  text("SQUAD LEADER WANTED", 72, 1331, 17, sans, "left", "bold");
+  text("Your turn to make headlines.", 72, 1372, 31, serif, "left", "bold");
+  text(copy.invitation, 72, 1404, 20, serif, "left", "italic");
+  text("PICK UP YOUR NEXT CASE AT", 1128, 1340, 12, sans, "right");
+  text(GAME_URL.replace(/^https?:\/\//, ""), 1128, 1386, 40, serif, "right", "bold");
+  text("PLAY PATROL · FREE TO TAKE COMMAND", 1128, 1411, 11, sans, "right");
+  text("AN IMAGINED GAME CAPTURE. THE ARCHIVE COLUMN TELLS THE REAL STORY.", 600, 1458, 11, sans, "center");
+  ctx.restore();
 }

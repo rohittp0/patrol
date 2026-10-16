@@ -48,7 +48,7 @@ export function needsLaptop(viewportWidth: number, screenShortSide: number, coar
  * precedence and cannot be closed by Escape, clicks, or tutorial controls. */
 export class Onboarding {
   private index = 0;
-  private tutorialOpen = CONFIG.tutorial.showOnFirstVisit && !this.completed();
+  private tutorialOpen: boolean = CONFIG.tutorial.showOnFirstVisit && !this.completed();
   private phone = false;
   private previousFocus: HTMLElement | null = null;
   private tutorial: HTMLElement;

@@ -3,14 +3,28 @@ import assert from "node:assert/strict";
 import { COMMON_PARAMETERS, EVENTS, PARAMETERS } from "../telemetry/events";
 import { sanitizeEvent } from "../telemetry";
 import { playerProfile, savePlayerProfile } from "../player-profile";
+import { POSTHOG_CONFIG } from "../telemetry/posthog.config";
 
-test("analytics catalog respects GA event limits and documents every allowed parameter", () => {
+test("analytics catalog keeps bounded names and documents every allowed parameter", () => {
   for (const [name, event] of Object.entries(EVENTS)) {
     assert(/^[a-z][a-z0-9_]{0,39}$/.test(name), name);
     assert(event.description && event.usedIn);
     assert(new Set([...COMMON_PARAMETERS, ...event.parameters]).size <= 25, name);
     for (const parameter of event.parameters) { assert(PARAMETERS[parameter]); assert(parameter.length <= 40); }
   }
+});
+
+test("PostHog's automatic URL and attribution properties are removed from events and person updates", () => {
+  const privateUrl = "https://example.com/patrol/?name=Ada#private";
+  const initial = { $initial_current_url: privateUrl, $initial_referrer: privateUrl, utm_source: privateUrl, gclid: privateUrl, name: "Ada", profile_name_set: "yes" };
+  const sent = POSTHOG_CONFIG.before_send({
+    uuid: crypto.randomUUID(), event: "$identify",
+    properties: { distinct_id: "random-profile-id", $current_url: privateUrl, $session_entry_url: privateUrl, $session_entry_utm_source: privateUrl, utm_source: privateUrl, $referrer: privateUrl, $set: { ...initial }, $set_once: { ...initial } },
+    $set: { ...initial }, $set_once: { ...initial },
+  });
+  assert(!JSON.stringify(sent).includes(privateUrl));
+  assert.equal(sent.properties.distinct_id, "random-profile-id");
+  for (const properties of [sent.$set, sent.$set_once, sent.properties.$set, sent.properties.$set_once]) assert.deepEqual(properties, { name: "Ada", profile_name_set: "yes" });
 });
 
 test("event allow-list drops names, images, filenames, errors, and unrelated fields", () => {

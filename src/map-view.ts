@@ -1,6 +1,7 @@
 import { Map, Marker, NavigationControl, setWorkerUrl } from "maplibre-gl";
 import { track } from "./telemetry";
 import { borderName } from "./game/presentation";
+import { distanceKm } from "./game/navigation";
 import mapWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import type * as GeoJSON from "geojson";
 import type { GeoJSONSource, StyleSpecification } from "maplibre-gl";
@@ -94,6 +95,7 @@ export class PatrolMap {
     this.board.borders.forEach((border, index) => {
       const element = document.createElement("button");
       element.className = "border-post";
+      element.dataset.border = String(index);
       element.style.setProperty("--border-colour", CONFIG.appearance.borderPalette[index].open);
       element.style.setProperty("--post-diameter", `${CONFIG.appearance.borderPost.radiusPx * 2}px`);
       element.style.setProperty("--post-fill", CONFIG.appearance.borderPost.fillColor);
@@ -178,6 +180,28 @@ export class PatrolMap {
 
   revealPost(border: number) {
     this.revealSquad(this.board.borders[border].post);
+  }
+
+  showGuidedMovement(game: PatrolGame) {
+    if (!game.activeOrder) return;
+    const points: Position[] = [...game.activeOrder.path, game.runner.position];
+    let remaining = game.activeOrder.durationHours * game.rules.runnerSpeedKmh;
+    let previous = game.runner.position;
+    for (const waypoint of game.runner.route) {
+      const distance = distanceKm(previous, waypoint.position);
+      if (distance > remaining) {
+        const fraction = remaining / distance;
+        points.push([previous[0] + (waypoint.position[0] - previous[0]) * fraction, previous[1] + (waypoint.position[1] - previous[1]) * fraction]);
+        break;
+      }
+      points.push(waypoint.position); remaining -= distance; previous = waypoint.position;
+    }
+    const padding = this.cameraPadding();
+    this.map.fitBounds([[Math.min(...points.map(p => p[0])), Math.min(...points.map(p => p[1]))], [Math.max(...points.map(p => p[0])), Math.max(...points.map(p => p[1]))]], {
+      padding: { ...padding, left: Math.max(padding.left, CONFIG.tutorial.guide.cardWidthPx + CONFIG.tutorial.guide.viewportMarginPx * 2) },
+      absolutePadding: true, maxZoom: CONFIG.map.runnerFocusZoom,
+      duration: matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : CONFIG.map.focusDurationMs,
+    });
   }
 
   revealSquad(position: Position) {
