@@ -33,6 +33,28 @@ test("event allow-list drops names, images, filenames, errors, and unrelated fie
   assert.deepEqual(sanitizeEvent("move_issued", dirty), { country: "usa", distance_km: 12 });
 });
 
+test("SDK survey lifecycle payloads and exact interaction flags survive the privacy filter", () => {
+  const surveyId = "01a1468e-96f5-0000-eba8-078f7982be33";
+  for (const event of ["survey shown", "survey sent", "survey dismissed", "survey abandoned"]) {
+    for (const iteration of [undefined, 1]) {
+      const responded = `$survey_responded/${surveyId}${iteration ? `/${iteration}` : ""}`;
+      const dismissed = `$survey_dismissed/${surveyId}${iteration ? `/${iteration}` : ""}`;
+      const markers = { [responded]: true, [dismissed]: true, "$survey_responded/unrelated": true, $initial_current_url: "https://example.com/private" };
+      const payload = { $survey_id: surveyId, $survey_iteration: iteration, $survey_submission_id: "submission", $survey_completed: false, $survey_response_question: 4 };
+      const sent = POSTHOG_CONFIG.before_send({
+        uuid: crypto.randomUUID(), event,
+        properties: { ...payload, $current_url: "https://example.com/private", $set: { ...markers } },
+        $set: { ...markers },
+      });
+      for (const [key, value] of Object.entries(payload)) assert.equal(sent.properties[key], value);
+      const expected = event === "survey sent" ? { [responded]: true } : event === "survey dismissed" ? { [dismissed]: true } : {};
+      assert.deepEqual(sent.properties.$set, expected);
+      assert.deepEqual(sent.$set, expected);
+      assert(!JSON.stringify(sent).includes("https://example.com/private"));
+    }
+  }
+});
+
 test("local profile migrates to name plus finished crop and discards original/crop settings", () => {
   let value = JSON.stringify({ name: "Ada", photo: "data:image/png;base64,Y3JvcA==", original: "private original", crop: { zoom: 2 } });
   const previous = Object.getOwnPropertyDescriptor(globalThis, "localStorage");

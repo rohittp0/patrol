@@ -42,6 +42,25 @@ Configure it to show once per player, with no repeat on another matching event.
 The survey must be launched in PostHog and this SDK configuration deployed before
 players can see it. Question copy and display settings remain in PostHog.
 
+PostHog's built-in popover emits survey telemetry directly through the SDK;
+Patrol does not duplicate these events through its gameplay allow-list:
+
+| Event | Meaning |
+| --- | --- |
+| `survey shown` | The survey becomes visible. |
+| `survey dismissed` | The player explicitly closes the survey, including a partially answered survey. |
+| `survey sent` | A partial or completed response is recorded; `$survey_completed = true` identifies final completion. |
+| `survey abandoned` | The player leaves the page with an unfinished response in progress. |
+
+Keep partial response collection enabled in PostHog to measure question drop-off.
+Filter these events by `$survey_id`, and deduplicate responses with
+`$survey_submission_id` instead of counting every `survey sent` as a new response.
+The privacy filter preserves survey payloads and only the matching boolean
+`$survey_responded/<survey-id>[/<iteration>]` or
+`$survey_dismissed/<survey-id>[/<iteration>]` person flag, while still removing
+automatic URLs and attribution. These flags support PostHog's survey eligibility
+rules; local survey-seen storage also prevents repeat prompts in the browser.
+
 Suggested funnels:
 
 - `app_open → case_intro_start → guide_begin → guide_step_view → guide_complete/skip → level_end`
