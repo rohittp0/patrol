@@ -25,14 +25,22 @@ attempt elapsed time includes thinking and briefings. Hidden tabs pause simulati
 Native sharing success means the share API resolved, not confirmed delivery to
 another person. Downloads mean a file was handed to the browser, not saved to disk.
 
+`campaign_entry` records the opening country as `campaign_start_country`, the
+current country, and a bounded source: `device_timezone`, `default`,
+`saved_campaign`, or `legacy_progress`. The raw timezone is not collected.
+`campaign_start_country` follows subsequent hunt events as common context.
+`hunt_number` is relative to that player's remembered country order, so compare
+the same case using `country`, `case_id` and `challenge_id`, and segment first-hunt
+conversion by opening country. An India-first campaign begins at hunt 1, not 7.
+
 Suggested funnels:
 
 - `app_open → case_intro_start → guide_begin → guide_step_view → guide_complete/skip → level_end`
 - Optional reference: `tutorial_begin → tutorial_complete/skip`
 - `level_start → hint_request → hint_result → hint_followed → level_end`
 - `hint_quota_exhausted → hint_quota_refilled → hint_request`
-- First-country win: `level_end(capture) → poster_open(entry=first_country_win) → poster_ready → poster_download/share_result` or `poster_skip → challenge_next(source=newspaper_skip)`
-- Later wins/replays: `level_end(capture) → history_view → result_action(poster) → poster_open(entry=result_button) → poster_ready → poster_download/share_result`
+- Second-hunt win: `level_end(capture) → poster_open(entry=second_country_win) → poster_ready → poster_download/share_result` or `poster_skip → challenge_next(source=newspaper_skip)`
+- Opening/tutorial wins, later wins and replays: `level_end(capture) → history_view → result_action(poster) → poster_open(entry=result_button) → poster_ready → poster_download/share_result`
 - Compare capture rate, abandonment, moves, hints, and elapsed time by country,
   case, hunt, tier, and release. Placement and move-floor metrics do not guarantee
   every player's perceived difficulty.
@@ -54,13 +62,16 @@ is browser-wide and does not reset between hunts or countries.
 
 Every `poster_*` event carries `entry`, `newspaper_version` (currently 3), and
 `newspaper_artwork`: `india_v1` for India or `shared_v3` for USA and Hungary.
-Compare automatic first-country impressions with optional result-card opens,
+Compare automatic second-hunt impressions with optional result-card opens,
 and compare share/export conversion by design version and artwork. `poster_skip` means the
 automatic introduction advances to the next hunt; its reason is `button` or
 `escape`. `poster_close` includes that same reason, or `state_change` for cleanup,
 and also covers manual dismissal of an optional newspaper. Do not count both
 close and skip as separate abandonment actions. Automatic introduction views
 are remembered per country, so repeated captures do not inflate that funnel.
+Markers from the older first-hunt introduction remain seen; those browsers do
+not get a second automatic introduction after this change. Historical events
+used `entry=first_country_win`; new automatic introductions use `second_country_win`.
 
 Use event properties such as country, case_id, challenge_id, hint_kind, reason,
 method, capture_region, and source to filter and break down PostHog insights.

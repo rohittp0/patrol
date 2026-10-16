@@ -136,6 +136,11 @@ when the editor opens, and cached by artwork ID. USA and Hungary share one cache
 entry; India's scene and officer have a separate entry. A failed preset load can
 be retried without clearing the other preset. The masthead font is shared.
 
+`PLAYTEST_CONFIG.poster.headScale` enlarges both the officer/player and fugitive
+heads to 115% of the calibrated slots, anchored at the lower neck connection.
+The photo crop aligns the scene at the top to preserve headroom. These are
+newspaper-only placement controls; the source portraits stay unchanged.
+
 Exact India scene edit prompt:
 
 ```text

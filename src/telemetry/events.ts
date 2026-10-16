@@ -8,12 +8,13 @@ export const PARAMETERS = {
   country: "Configured country ID: usa, india, hungary.",
   case_id: "Historical case ID; never the player's name.",
   challenge_id: "Verified starting setup ID, e.g. US-001.",
-  hunt_number: "One-based position in the full campaign.",
+  hunt_number: "One-based position in this player's remembered campaign order.",
+  campaign_start_country: "Opening country in the player's remembered sequence.",
   attempt_id: "Random UUID for one attempt, refreshed on restart.",
   moves_used: "Moves issued in the current attempt.",
   moves_left: "Remaining move budget.",
   squad_count: "Allocated squads in this hunt.",
-  entry: "UI entry point, e.g. first_visit, how_to_play, first_country_win, result_button, case_button.",
+  entry: "UI entry point, e.g. first_visit, how_to_play, second_country_win, result_button, case_button.",
   source: "Control/input origin: map, list, keyboard, card, header, result, campaign.",
   reason: "A bounded outcome/error/category code; never a raw exception.",
   duration_ms: "Wall-clock milliseconds for the measured action.",
@@ -60,9 +61,10 @@ export const PARAMETERS = {
   success: "Level outcome: 1 for capture, 0 for loss.",
 } as const;
 export type Parameter = keyof typeof PARAMETERS;
-export const COMMON_PARAMETERS = ["country", "case_id", "challenge_id", "hunt_number", "attempt_id", "moves_used", "moves_left", "squad_count"] as const;
+export const COMMON_PARAMETERS = ["country", "case_id", "challenge_id", "hunt_number", "attempt_id", "moves_used", "moves_left", "squad_count", "campaign_start_country"] as const;
 const event = <P extends readonly Parameter[]>(description: string, usedIn: string, parameters: P) => ({ description, usedIn, parameters });
 export const EVENTS = {
+  campaign_entry: event("New timezone/default start or remembered/legacy campaign restored; no raw timezone collected.", "main.ts", ["source"]),
   guide_begin: event("In-game opening hunt guidance becomes visible.", "hunt-guide.ts", ["entry"]),
   guide_step_view: event("A guided click or travel explanation is shown; no per-frame events.", "hunt-guide.ts", ["guide_step", "guide_move"]),
   guide_skip: event("Player takes command freely without resetting their hunt.", "hunt-guide.ts", ["guide_step", "guide_move", "reason", "duration_ms"]),
@@ -110,7 +112,7 @@ export const EVENTS = {
   map_gesture: event("User finishes dragging or zooming; no per-frame logging.", "map-view.ts", ["action", "zoom"]),
   map_fallback: event("Basemap detail unavailable; board remains playable.", "main.ts", []),
   result_action: event("Win/loss result button selected.", "main.ts", ["action"]),
-  poster_open: event("Automatic first-country capture or optional result-card newspaper opening.", "poster-studio.ts", ["entry", "newspaper_version", "newspaper_artwork", "has_name", "has_photo"]),
+  poster_open: event("Automatic second-hunt capture or optional result-card newspaper opening.", "poster-studio.ts", ["entry", "newspaper_version", "newspaper_artwork", "has_name", "has_photo"]),
   poster_close: event("Newspaper editor closed; distinguish advance, manual dismissal and state changes.", "poster-studio.ts", ["entry", "newspaper_version", "newspaper_artwork", "reason", "duration_ms"]),
   poster_skip: event("Skip or Escape from the automatic front page advances directly to the next hunt.", "poster-studio.ts", ["entry", "newspaper_version", "newspaper_artwork", "reason", "duration_ms"]),
   poster_profile_edit: event("Name committed on blur; presence/length only.", "poster-studio.ts", ["entry", "newspaper_version", "newspaper_artwork", "has_name", "name_length"]),

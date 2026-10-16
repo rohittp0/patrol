@@ -55,9 +55,9 @@ export function restoreProgress(saved: SavedProgress, board: CountryBoard, setup
   try { return PatrolGame.fromSnapshot(board, setup, rules, saved.state, navigation); } catch { return null; }
 }
 
-export function previousHunt(country: string, huntIndex: number): { country: string; huntIndex: number } | null {
-  const countryIndex = CONFIG.levels.findIndex((level) => level.id === country);
+export function previousHunt(country: string, huntIndex: number, countries: readonly string[] = CONFIG.levels.map((level) => level.id)): { country: string; huntIndex: number } | null {
+  const countryIndex = countries.indexOf(country);
   if (countryIndex < 0 || !integer(huntIndex) || huntIndex >= CONFIG.setups.poolSize) return null;
   if (huntIndex > 0) return { country, huntIndex: huntIndex - 1 };
-  return countryIndex > 0 ? { country: CONFIG.levels[countryIndex - 1].id, huntIndex: CONFIG.setups.poolSize - 1 } : null;
+  return countryIndex > 0 ? { country: countries[countryIndex - 1], huntIndex: CONFIG.setups.poolSize - 1 } : null;
 }

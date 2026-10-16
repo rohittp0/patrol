@@ -364,6 +364,9 @@ export const PLAYTEST_CONFIG = {
   },
 
   poster: {
+    /** AGREED: automatically introduce the newspaper after the second hunt's
+     * capture in each country. Zero-based index, in [0, setups.poolSize). */
+    introductionHuntIndex: 1,
     /** STARTER: version of the clipping artwork/layout, attached to its funnel. */
     designVersion: 3,
     /** STARTER: exported newspaper dimensions, in pixels, at a 4:5 aspect ratio. */
@@ -379,6 +382,12 @@ export const PLAYTEST_CONFIG = {
     /** STARTER: maximum per-channel difference (0–255) from corner ivory for
      * edge-connected newspaper portrait masking. Does not alter map artwork. */
     portraitMatteTolerance: 24,
+    /** STARTER: newspaper-only head enlargement relative to the calibrated
+     * scene slots, unitless and > 0. Scale upward from the neck connection. */
+    headScale: 1.15,
+    /** STARTER: vertical scene alignment in the photo crop, in [0,1].
+     * 0 = top, 1 = bottom; top alignment leaves room for enlarged heads. */
+    sceneVerticalAlign: 0,
     /** AGREED: India has its own illustration and default officer; USA and
      * Hungary share the existing art. Asset paths are relative to the base URL.
      * STARTER: head centres are fractions of source width/height; radii are
@@ -419,8 +428,21 @@ export const PLAYTEST_CONFIG = {
     maxQueuedEvents: 200,
   },
 
+  campaign: {
+    /** AGREED: unsupported or unavailable device timezones start in USA. */
+    fallbackCountry: "usa",
+    /** AGREED: prefer the supported home country using the device timezone,
+     * without IP lookup or a location prompt. Include the older India alias. */
+    timezoneCountries: {
+      "Asia/Kolkata": "india",
+      "Asia/Calcutta": "india",
+      "Europe/Budapest": "hungary",
+    },
+  },
+
   /**
-   * Ordered level sequence. Array order is progression order; do not sort it
+   * Authored default level sequence. Keep remaining countries in this relative
+   * order after moving the player's opening country first; do not sort it
    * automatically by country name, size, or coastline.
    *
    * USA precedes India, then Hungary. Prepared challenges prove their required solution
@@ -435,7 +457,7 @@ export const PLAYTEST_CONFIG = {
    */
   levels: [
     {
-      /** AGREED: USA opens the campaign; detached Alaska and islands are excluded. */
+      /** AGREED: USA is the fallback opening country; detached Alaska and islands are excluded. */
       id: "usa",
       name: "USA",
       countryCodes: ["US"],

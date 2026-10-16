@@ -5,6 +5,7 @@ import { PatrolGame, rulesForLevel } from "./engine";
 import { Navigation } from "./navigation";
 import type { CountryBoard } from "./types";
 import { guidedHuntStep } from "./guided-hunt";
+import { PLAYTEST_CONFIG as CONFIG } from "./playtest.config";
 
 const board: CountryBoard = JSON.parse(readFileSync(new URL("../../public/data/usa.json", import.meta.url), "utf8"));
 const setup = [...board.setups].sort((a, b) => a.difficulty!.score - b.difficulty!.score || a.id.localeCompare(b.id))[0];
@@ -12,8 +13,10 @@ const navigation = new Navigation(board);
 const rules = rulesForLevel(board.id, setup.squadBorders.length);
 const hunt = () => new PatrolGame(board, setup, rules, navigation);
 
-test("the real opening hunt teaches post, squad and travel for each move through capture", () => {
-  const game = hunt();
+for (const level of CONFIG.levels) test(`${level.id}: the real opening hunt teaches each move through capture`, () => {
+  const board: CountryBoard = JSON.parse(readFileSync(new URL(`../../public/data/${level.id}.json`, import.meta.url), "utf8"));
+  const setup = [...board.setups].sort((a, b) => a.difficulty!.score - b.difficulty!.score || a.id.localeCompare(b.id))[0];
+  const game = new PatrolGame(board, setup, rulesForLevel(board.id, setup.squadBorders.length));
   for (const [move, order] of setup.witness.entries()) {
     assert.deepEqual(guidedHuntStep(game, null), { kind: "post", move, order });
     assert.deepEqual(guidedHuntStep(game, order.border), { kind: "squad", move, order });

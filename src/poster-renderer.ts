@@ -141,13 +141,15 @@ export function drawNewspaper(canvas: HTMLCanvasElement, report: CaptureReport, 
   const photo = { x: 48, y: 456, width: 715, height: 430 };
   const scale = Math.max(photo.width / assets.scene.naturalWidth, photo.height / assets.scene.naturalHeight);
   const left = photo.x + (photo.width - assets.scene.naturalWidth * scale) / 2;
-  const top = photo.y + (photo.height - assets.scene.naturalHeight * scale) / 2;
+  const top = photo.y + (photo.height - assets.scene.naturalHeight * scale) * CONFIG.poster.sceneVerticalAlign;
   ctx.save(); ctx.beginPath(); ctx.rect(photo.x, photo.y, photo.width, photo.height); ctx.clip();
   ctx.filter = "grayscale(1)"; ctx.globalCompositeOperation = "multiply";
   ctx.drawImage(assets.scene, left, top, assets.scene.naturalWidth * scale, assets.scene.naturalHeight * scale);
   const head = (source: CanvasImageSource, placement: { x: number; y: number; radius: number }) => {
-    const x = left + placement.x * assets.scene.naturalWidth * scale, y = top + placement.y * assets.scene.naturalHeight * scale;
-    const r = placement.radius * assets.scene.naturalWidth * scale;
+    const x = left + placement.x * assets.scene.naturalWidth * scale;
+    const baseRadius = placement.radius * assets.scene.naturalWidth * scale, r = baseRadius * CONFIG.poster.headScale;
+    // Preserve the lower neck connection while enlarging the head upwards.
+    const y = top + placement.y * assets.scene.naturalHeight * scale - (r - baseRadius);
     ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.clip();
     ctx.globalCompositeOperation = "source-over";
     ctx.drawImage(source, x - r, y - r, r * 2, r * 2); ctx.restore();

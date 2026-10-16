@@ -24,6 +24,7 @@ import { gameContext, initTelemetry, measure, track } from "./telemetry";
 import { HuntGuide } from "./hunt-guide";
 import { HintQuota, HINT_QUOTA_KEY, hintCountdown } from "./game/hint-quota";
 import { NewspaperIntroductions } from "./game/newspaper-intro";
+import { initializeCampaign, type Campaign } from "./game/campaign";
 
 initTelemetry();
 track("app_open", { width_px: innerWidth, height_px: innerHeight, has_name: !!playerProfile().name, has_photo: !!playerProfile().photo, app_version: "0.1.0" });
@@ -94,13 +95,15 @@ class PatrolApp {
   private moveStarted = 0;
   private modalStarted: number | null = null;
   private lastSaveAt = 0;
+  private campaign!: Campaign;
 
   private get challengeIndex() { return this.validSetups.findIndex((setup) => setup.id === this.game.setup.id); }
-  private get huntNumber() { return CONFIG.levels.findIndex((level) => level.id === this.board.id) * CONFIG.setups.poolSize + this.challengeIndex + 1; }
+  private get countryIndex() { return this.campaign.countries.findIndex((country) => country === this.board.id); }
+  private get huntNumber() { return this.countryIndex * CONFIG.setups.poolSize + this.challengeIndex + 1; }
   private get caseFile() { return caseForChallenge(this.board.id, this.challengeIndex); }
   private syncContext() {
     if (!this.game) return;
-    gameContext({ country: this.board.id, case_id: this.caseFile.id, challenge_id: this.game.setup.id, hunt_number: this.huntNumber, attempt_id: this.attemptId, moves_used: this.game.ordersUsed, moves_left: Math.max(0, this.game.rules.maxOrders - this.game.ordersUsed), squad_count: this.game.squads.length });
+    gameContext({ country: this.board.id, case_id: this.caseFile.id, challenge_id: this.game.setup.id, hunt_number: this.huntNumber, attempt_id: this.attemptId, moves_used: this.game.ordersUsed, moves_left: Math.max(0, this.game.rules.maxOrders - this.game.ordersUsed), squad_count: this.game.squads.length, campaign_start_country: this.campaign.countries[0] });
   }
   private abandon(reason: string) {
     if (this.game?.outcome.kind === "playing" && !this.ended) { this.syncContext(); track("level_abandon", { reason, elapsed_seconds: Math.round((performance.now() - this.attemptStarted) / 1000), hints_used: this.hintsUsed }); this.ended = true; }
@@ -149,15 +152,19 @@ class PatrolApp {
       this.renderGuide();
     });
     let saved: SavedProgress | null = null;
-    try { saved = readProgress(localStorage); } catch { /* Storage can be unavailable. */ }
-    void this.loadLevel(saved?.country ?? CONFIG.levels[0].id, saved ? "resume" : "campaign", saved?.huntIndex ?? 0, saved ?? undefined);
+    let storage: Storage | null = null;
+    try { storage = localStorage; saved = readProgress(storage); } catch { /* Storage can be unavailable. */ }
+    this.campaign = initializeCampaign(storage, saved !== null);
+    byId("country").innerHTML = this.campaign.countries.map((id, index) => `<option value="${id}">${String(index + 1).padStart(2, "0")} / ${CONFIG.levels.find((level) => level.id === id)!.name}</option>`).join("");
+    track("campaign_entry", { country: saved?.country ?? this.campaign.countries[0], campaign_start_country: this.campaign.countries[0], source: this.campaign.source });
+    void this.loadLevel(saved?.country ?? this.campaign.countries[0], saved ? "resume" : "campaign", saved?.huntIndex ?? 0, saved ?? undefined);
   }
 
   async loadLevel(id: string, source = "campaign", targetIndex = 0, saved?: SavedProgress) {
     this.persistGame();
     this.abandon("country_change");
     track("country_selected", { country: id, from_country: this.board?.id ?? "none", source });
-    gameContext({ country: id }); track("country_load_start");
+    gameContext({ country: id, campaign_start_country: this.campaign.countries[0] }); track("country_load_start");
     const started = performance.now();
     this.clearHint();
     byId<HTMLButtonElement>("show-hint").disabled = true;
@@ -227,7 +234,7 @@ class PatrolApp {
 
   private previousChallenge() {
     if (!this.game || this.onboarding.blocked || this.poster.blocked || this.game.activeOrder && this.game.outcome.kind === "playing") return;
-    const previous = previousHunt(this.board.id, this.challengeIndex);
+    const previous = previousHunt(this.board.id, this.challengeIndex, this.campaign.countries);
     if (!previous) return;
     track("challenge_previous", { source: "header" });
     if (previous.country === this.board.id) this.startSetup(this.validSetups[previous.huntIndex], "previous_challenge", true);
@@ -239,8 +246,7 @@ class PatrolApp {
     track("challenge_next", { source, reason: this.game.outcome.kind === "won" ? "completed" : "skip" });
     const index = this.validSetups.findIndex((setup) => setup.id === this.game.setup.id);
     if (index + 1 < this.validSetups.length) { this.startSetup(this.validSetups[index + 1], "next_challenge", true); return; }
-    const country = CONFIG.levels.findIndex((level) => level.id === this.board.id);
-    void this.loadLevel(CONFIG.levels[country + 1]?.id ?? CONFIG.levels[0].id);
+    void this.loadLevel(this.campaign.countries[this.countryIndex + 1] ?? this.campaign.countries[0]);
   }
 
   private startSetup(setup: StartingSetup, entry = "restart", briefing = false, saved?: SavedProgress) {
@@ -444,11 +450,8 @@ class PatrolApp {
     byId("game-status").textContent = !playing ? game.outcome.kind === "won" ? "Fugitive caught" : "Operation ended" : moving ? "The chase is on" : "Your move";
     byId("game-status").parentElement!.classList.toggle("is-moving", moving);
     byId("map-country").textContent = this.board.name;
-    const countryIndex = CONFIG.levels.findIndex((level) => level.id === this.board.id);
-    const challengeIndex = this.validSetups.findIndex((setup) => setup.id === game.setup.id);
-    const challengeNumber = countryIndex * CONFIG.setups.poolSize + challengeIndex + 1;
-    byId("map-caption-detail").textContent = `HUNT ${challengeNumber} OF ${CONFIG.levels.length * CONFIG.setups.poolSize} · ${this.caseFile.shortName}`;
-    byId<HTMLButtonElement>("previous-hunt").disabled = moving || previousHunt(this.board.id, challengeIndex) === null;
+    byId("map-caption-detail").textContent = `HUNT ${this.huntNumber} OF ${CONFIG.levels.length * CONFIG.setups.poolSize} · ${this.caseFile.shortName}`;
+    byId<HTMLButtonElement>("previous-hunt").disabled = moving || previousHunt(this.board.id, this.challengeIndex, this.campaign.countries) === null;
     byId<HTMLSelectElement>("country").value = this.board.id;
     byId<HTMLSelectElement>("country").disabled = moving;
     byId("orders-left").innerHTML = `${String(Math.max(0, game.rules.maxOrders - game.ordersUsed)).padStart(2, "0")}<span>/ ${String(game.rules.maxOrders).padStart(2, "0")}</span>`;
@@ -484,7 +487,7 @@ class PatrolApp {
 
   private renderGuide() {
     if (!this.game || !this.guide) return;
-    this.guide.update(this.game, this.board.id === CONFIG.levels[0].id && this.challengeIndex === 0, this.selectedPost,
+    this.guide.update(this.game, this.board.id === this.campaign.countries[0] && this.challengeIndex === 0, this.selectedPost,
       !!this.onboarding?.blocked || this.poster.blocked || !byId("loading").hidden, (border) => this.map?.revealPost(border), () => this.map?.showGuidedMovement(this.game));
   }
 
@@ -499,12 +502,11 @@ class PatrolApp {
       track("level_end", { reason: won ? "capture" : outcome.reason, score: won ? outcome.score : 0, elapsed_seconds: Math.round((performance.now() - this.attemptStarted) / 1000), hints_used: this.hintsUsed, level_name: `${this.board.id}:${this.caseFile.id}`, success: won ? 1 : 0, ...(won ? { capture_region: captureRegion(this.game) } : {}) });
       this.ended = true;
       if (this.newspaperIntros.claim(this.board.id, this.challengeIndex, won)) {
-        void this.poster.open(captureReport(this.game, this.challengeIndex, this.huntNumber), { entry: "first_country_win", onSkip: () => this.nextChallenge("newspaper_skip") });
+        void this.poster.open(captureReport(this.game, this.challengeIndex, this.huntNumber), { entry: "second_country_win", onSkip: () => this.nextChallenge("newspaper_skip") });
       } else if (won) track("history_view");
     }
     if (this.poster.automatic) { byId("result").hidden = true; return; }
-    const levelIndex = CONFIG.levels.findIndex((level) => level.id === this.board.id);
-    const next = CONFIG.levels[levelIndex + 1];
+    const next = CONFIG.levels.find((level) => level.id === this.campaign.countries[this.countryIndex + 1]);
     const hasNextSetup = this.validSetups.findIndex((setup) => setup.id === this.game.setup.id) + 1 < this.validSetups.length;
     byId("result").className = `result-card ${won ? "won" : "lost"}`;
     const file = this.caseFile;

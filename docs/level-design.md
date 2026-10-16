@@ -172,7 +172,20 @@ to find a sequence does not prove a candidate is impossible.
 
 ## Country progression and presentation
 
-Use the authored country order: USA, India, then Hungary. The six-hunt
+The authored default order is USA, India, then Hungary. A new player's supported
+home country moves to the front based on device timezone; unmatched timezones
+use USA. The other countries retain their relative order. Examples are
+India → USA → Hungary and Hungary → USA → India. The remembered sequence drives
+the country selector, hunt numbers, Previous/Next hunt, newspaper issue number
+and opening guided hunt. Returning players resume their chase; legacy saves
+without an order marker retain the original authored sequence. Timezone matching
+is configured separately from simulation tuning and does not invalidate proofs.
+
+There is no strict worldwide difficulty ladder. All countries allow eight moves
+and use the same two introductory/two-move and four later/at-least-three-move tiers.
+Country-specific geography, squad allocations and escape-pressure bands can
+still affect perceived difficulty. These similarities support a local opening
+country; they are not proof of equal player success rates. The six-hunt
 progression restarts in each country: two introductions, then four harder hunts.
 Tests enforce six distinct spawn regions, the per-hunt move floor, successful
 witnesses, physical placement constraints, and increasing scores within each

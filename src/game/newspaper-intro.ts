@@ -1,15 +1,18 @@
+import { PLAYTEST_CONFIG as CONFIG } from "./playtest.config";
+
 export const NEWSPAPER_INTRO_KEY = "patrol:newspaper-intros:v1";
 type StoragePort = Pick<Storage, "getItem" | "setItem">;
 const browserStorage = () => { try { return localStorage; } catch { return null; } };
 
-/** One automatic front page per country's opening capture, remembered on view.
- * Replays, later hunts and restored wins use the ordinary result card. */
+/** One automatic front page per country's second hunt, remembered on view.
+ * The opening/tutorial hunt, replays and later hunts use the ordinary result.
+ * Existing introduction markers remain seen when moving the intro later. */
 export class NewspaperIntroductions {
   private seen = new Set<string>();
   constructor(private storage: StoragePort | null = browserStorage()) {}
 
   claim(country: string, challengeIndex: number, won: boolean): boolean {
-    if (!won || challengeIndex !== 0) return false;
+    if (!won || challengeIndex !== CONFIG.poster.introductionHuntIndex) return false;
     try {
       const saved = JSON.parse(this.storage?.getItem(NEWSPAPER_INTRO_KEY) ?? "null");
       if (Array.isArray(saved)) for (const id of saved) if (typeof id === "string") this.seen.add(id);

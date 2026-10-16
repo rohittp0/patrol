@@ -7,7 +7,7 @@ import { drawNewspaper, newspaperArtwork, prepareNewspaperAssets, type Newspaper
 import { measure, profileChanged, track } from "./telemetry";
 import type { AnalyticsParams, EventName } from "./telemetry/events";
 
-interface PosterOptions { entry: "first_country_win" | "result_button"; onSkip?: () => void }
+interface PosterOptions { entry: "second_country_win" | "result_button"; onSkip?: () => void }
 
 const loadImage = (src: string) => new Promise<HTMLImageElement>((resolve, reject) => {
   const image = new Image(); image.onload = () => resolve(image); image.onerror = reject; image.src = src;
@@ -84,7 +84,7 @@ export class PosterStudio {
   }
 
   get blocked() { return this.dialog.open; }
-  get automatic() { return this.dialog.open && this.options.entry === "first_country_win"; }
+  get automatic() { return this.dialog.open && this.options.entry === "second_country_win"; }
   private log(name: EventName, parameters: AnalyticsParams = {}) { track(name, { entry: this.options.entry, newspaper_version: CONFIG.poster.designVersion, newspaper_artwork: newspaperArtwork(this.report?.countryId ?? "").id, ...parameters }); }
   private dismiss(reason: "button" | "escape") {
     const advance = this.options.onSkip;
@@ -108,7 +108,7 @@ export class PosterStudio {
   async open(report: CaptureReport, options: PosterOptions = { entry: "result_button" }) {
     if (this.dialog.open) this.close();
     this.options = options;
-    const close = this.get<HTMLButtonElement>("poster-close"), automatic = options.entry === "first_country_win";
+    const close = this.get<HTMLButtonElement>("poster-close"), automatic = options.entry === "second_country_win";
     close.className = automatic ? "secondary-button poster-skip" : "icon-button";
     close.textContent = automatic ? "Skip →" : "✕";
     close.setAttribute("aria-label", automatic ? "Skip newspaper and start next hunt" : "Close newspaper");

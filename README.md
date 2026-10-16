@@ -23,7 +23,17 @@ Escape clears the selected post. Games start moderately zoomed around the
 fugitive. Country view fits the entire zone, and Find fugitive centres and zooms to the fugitive. The selected squad’s
 post receives a bright ring; the counters sit on the right side of the map.
 
-The first hunt teaches play on the real board. A spotlight and pointer highlight
+New campaigns use the device timezone to choose a supported opening country:
+India for `Asia/Kolkata` or `Asia/Calcutta`, Hungary for `Europe/Budapest`, and USA
+everywhere else or when the timezone is unavailable. This is a device setting
+heuristic, not a verified location or nationality; it needs no network lookup or
+location prompt. The opening country comes first, followed by the other countries
+in their authored relative order. The sequence is remembered in
+`patrol:campaign:v1`, so travel does not rearrange a campaign. Existing saves from
+before this feature retain USA → India → Hungary and resume their exact chase.
+The country selector still lets players change patrol zone.
+
+The first hunt in the chosen opening country teaches play on the real board. A spotlight and pointer highlight
 the post to click, then the squad to send, for both moves of the verified capture.
 Other actions are blocked until the prompted action or **Skip guidance**; skipping
 immediately releases the current chase without resetting it. Refresh resumes the
@@ -104,10 +114,11 @@ portrait. These are imagined chases, not reenactments. Real endings distinguish
 arrest, surrender, and death. [Portrait art notes](docs/portrait-art.md) document
 the built-in image generation prompt set and saved assets.
 
-Winning the first challenge of each country opens **You made the front page**
+Winning the second challenge of each country opens **You made the front page**
 once per browser, remembered in `patrol:newspaper-intros:v1`. **Skip** (or Escape)
 takes the player straight to the next hunt. Replays and later captures show the
-ordinary result card with an optional **Make headlines** button; closing that
+ordinary result card with an optional **Make headlines** button. The opening
+tutorial hunt also uses this ordinary card. Closing that
 optional editor returns to the same result.
 
 Add a name and photo, drag/zoom the circular head crop, and share or keep the

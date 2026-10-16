@@ -9,7 +9,13 @@ The geographic area under the player's patrol authority, currently one non-islan
 _Avoid_: Authoritative zone
 
 **Level**:
-A country stage defined by its patrol zone and move budget. Each challenge owns its squad allocation, so hunts in the same country can have different numbers of squads. Levels follow an authored country sequence from easier to harder and contain ordered challenges.
+A country stage defined by its patrol zone and move budget, containing ordered challenges whose squad allocations can vary. Difficulty rises within each country and returns to introductory hunts when another country begins.
+
+**Opening country**:
+The country that starts a new player's campaign, chosen from a supported home-country match with USA as the fallback.
+
+**Campaign order**:
+The player's remembered country sequence: opening country first, then the remaining countries in their authored relative order. Hunt numbers, Next hunt, and Previous hunt follow this sequence.
 
 **Challenge**:
 A verified starting setup in the campaign. The first two challenges of each country introduce the chase with a two-move solution. Later challenges require at least three moves. Every challenge in a country starts in a different state or province. Difficulty restarts at the introductory tier when entering a new country.
@@ -92,7 +98,7 @@ A closed enclosure around the fugitive formed by guarded borders alone or by gua
 The actual in-game capture location, moves, squads, score, and case file used to create the newspaper. Its game capture is fictional; its historical column is sourced.
 
 **Front-page clipping**:
-A shareable newspaper cutting celebrating the player's imagined capture, with a separate sourced historical ending. The first captured challenge in each country opens the editor once per browser. Skip advances to the next challenge; later captures offer Make headlines on the ordinary result card. India uses its own arrest illustration and default officer; USA and Hungary share the existing artwork.
+A shareable newspaper cutting celebrating the player's imagined capture, with a separate sourced historical ending. The second challenge's capture in each country opens the editor once per browser; the opening/tutorial hunt and later captures offer Make headlines on the ordinary result card. Skip advances to the next challenge. India uses its own arrest illustration and default officer; USA and Hungary share the existing artwork.
 
 **Player profile**:
 A saved name, final circular head crop, and random anonymous ID. Original uploads and crop coordinates are discarded when the newspaper editor closes. The name identifies the player's play sessions; photos stay in the browser unless the player shares or downloads their newspaper.
