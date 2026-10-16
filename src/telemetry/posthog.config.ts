@@ -21,7 +21,8 @@ export const POSTHOG_CONFIG = {
   capture_heatmaps: false,
   capture_dead_clicks: false,
   rageclick: false,
-  disable_surveys: true,
+  // PostHog controls the playtest survey's successful fourth-hunt trigger.
+  disable_surveys: false,
   disable_conversations: true,
   save_referrer: false,
   save_campaign_params: false,

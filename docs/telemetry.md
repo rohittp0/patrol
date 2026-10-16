@@ -33,6 +33,15 @@ current country, and a bounded source: `device_timezone`, `default`,
 the same case using `country`, `case_id` and `challenge_id`, and segment first-hunt
 conversion by opening country. An India-first campaign begins at hunt 1, not 7.
 
+The SDK permits PostHog surveys. The initial playtest feedback survey
+(`01a1468e-96f5-0000-eba8-078f7982be33`) uses a PostHog-managed `level_end`
+trigger with both event-property filters: `hunt_number = 4` and `success = 1`.
+It appears after successfully capturing the fugitive in the fourth campaign hunt,
+regardless of opening country; losses, skips, and other hunts do not qualify.
+Configure it to show once per player, with no repeat on another matching event.
+The survey must be launched in PostHog and this SDK configuration deployed before
+players can see it. Question copy and display settings remain in PostHog.
+
 Suggested funnels:
 
 - `app_open → case_intro_start → guide_begin → guide_step_view → guide_complete/skip → level_end`
