@@ -1,0 +1,200 @@
+/* Gameplay overlays share safe-area spacing; map framing measures these elements. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+html, body, #app { width: 100%; height: 100%; overscroll-behavior: none; }
+button, summary, select { touch-action: manipulation; }
+.topbar { top: calc(16px + var(--safe-top)); left: calc(20px + var(--safe-left)); right: calc(20px + var(--safe-right)); }
+.topbar-actions { position: relative; }
+.hunt-label { font: 10px var(--mono); white-space: nowrap; padding: 0 6px; color: var(--accent); }
+.command-menu { position: relative; }
+.command-menu summary { display: flex; align-items: center; gap: 7px; list-style: none; min-height: 44px; padding: 0 12px; font: 10px var(--mono); cursor: pointer; border-radius: 4px; background: #b2d0a711; }
+.command-menu summary::-webkit-details-marker { display: none; }
+.command-actions { position: absolute; top: calc(100% + 12px); right: -8px; width: 212px; max-height: calc(100dvh - 100px - var(--safe-top) - var(--safe-bottom)); overflow-y: auto; overscroll-behavior: contain; padding: 8px; background: #102125fa; border: 1px solid #a7c39355; border-radius: 6px; box-shadow: 0 15px 40px #04151880; }
+.command-actions button { display: flex; align-items: center; gap: 12px; min-height: 44px; width: 100%; padding: 10px 12px; border: 0; border-radius: 3px; background: transparent; text-align: left; font-size: 12px; }
+.command-actions button:hover:not(:disabled) { background: #d8f87918; }
+.command-actions button:disabled { opacity: .4; }
+.command-actions button .icon { width: 18px; height: 18px; }
+.icon-button, .map-toolbar button, .hint-close, .clear-selection, .result-card button, .loading-screen button { min-height: 44px; }
+.hint-close, .clear-selection { min-width: 44px; }
+.border-post { width: 44px; height: 44px; }
+.clear-selection { display: grid; place-items: center; border: 1px solid #a7c39355; background: #102125f7; border-radius: 4px; padding: 0; margin: -8px 0 -8px 6px; flex-shrink: 0; }
+.clear-selection .icon { width: 18px; height: 18px; }
+.squad-dock > .section-heading { min-height: 28px; justify-content: flex-start; gap: 8px; }
+.squad-dock > .section-heading > span { margin-left: auto; white-space: nowrap; }
+.selection-detail { margin: 0 0 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 4px; background: #102125f7; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.squad-copy > span { max-width: 100%; }
+.squad-card { min-height: 64px; }
+.hint-panel { max-height: calc(100dvh - 380px); overflow-y: auto; overscroll-behavior: contain; }
+.hint-panel .section-heading { gap: 8px; }
+.result-card { position: fixed; inset: 0; transform: none; margin: auto; height: fit-content; max-height: calc(100dvh - 32px - var(--safe-top) - var(--safe-bottom)); width: min(510px,calc(100% - 32px - var(--safe-left) - var(--safe-right))); color: var(--ink); overflow-y: auto; overscroll-behavior: contain; }
+.result-card::backdrop { background: #061518bd; backdrop-filter: blur(5px); }
+.result-card .result-actions { position: sticky; bottom: -24px; padding: 12px 0; margin-bottom: -12px; background: #102226; box-shadow: 0 -8px 18px #102226; }
+.result-card .historical-ending a { display: inline-flex; align-items: center; min-height: 44px; }
+.loading-screen { padding: calc(24px + var(--safe-top)) calc(24px + var(--safe-right)) calc(24px + var(--safe-bottom)) calc(24px + var(--safe-left)); }
+.loading-screen h2 { font-size: clamp(20px,5vw,28px); }
+
+@media (max-width: 900px) {
+  .topbar { display: flex; flex-wrap: nowrap; align-items: stretch; gap: 6px; left: calc(8px + var(--safe-left)); right: calc(8px + var(--safe-right)); top: calc(8px + var(--safe-top)); }
+  .hud-identity { min-width: 0; padding: 4px 8px; gap: 7px; flex: 1 1 auto; }
+  .brand { font-size: 15px; gap: 0; letter-spacing: 1px; }
+  .brand > span:last-child { display: none; }
+  .brand-mark .icon { width: 24px; height: 24px; }
+  .country-row { min-width: 0; padding-left: 7px; flex: 1; }
+  .country-row select { display: block; width: 100%; min-height: 44px; max-width: none; padding: 0 16px 0 0; font-size: 10px; letter-spacing: 0; }
+  .country-arrow { top: 10px; }
+  .topbar-actions { flex: 0 0 auto; margin: 0; padding: 4px; gap: 2px; }
+  .hunt-label { position: absolute; top: calc(100% + 8px); right: 0; padding: 5px 7px; border-radius: 3px; background: var(--glass); font-size: 9px; }
+  .command-menu summary { padding: 0 7px; font-size: 9px; gap: 4px; }
+  .command-actions { right: -4px; }
+  .metrics { position: static; padding: 5px 7px; display: flex; order: 0; flex-shrink: 0; gap: 0; }
+  .metric-label { font-size: 7px; letter-spacing: .4px; margin-bottom: 3px; }
+  .metrics strong { display: block; font-size: 22px; letter-spacing: -.7px; text-align: center; }
+  .metrics strong > span { display: none; }
+  .best-metric { display: none; }
+  .objective { left: calc(10px + var(--safe-left)); top: calc(70px + var(--safe-top)); transform: none; width: auto; max-width: calc(100% - 100px); text-align: left; }
+  .objective h1 { display: none; }
+  .topbar-center { justify-content: flex-start; padding: 5px 6px; border-radius: 3px; background: #102125d9; font-size: 9px; letter-spacing: .2px; }
+  .map-caption { display: none; }
+  .map-toolbar { top: calc(108px + var(--safe-top)); bottom: auto; left: calc(10px + var(--safe-left)); display: flex; gap: 6px; }
+  .map-toolbar button { padding: 8px 10px; font-size: 9px; gap: 6px; letter-spacing: 0; }
+  .map-toolbar .icon { width: 17px; height: 17px; }
+  .squad-dock { left: calc(8px + var(--safe-left)); right: calc(8px + var(--safe-right)); bottom: calc(26px + var(--safe-bottom)); transform: none; width: auto; min-width: 0; }
+  .squad-dock .section-heading { padding: 0 2px; margin-bottom: 6px; }
+  .squad-dock .section-heading h2, .squad-dock .section-heading > span { font-size: 8px; letter-spacing: .4px; }
+  .squads { grid-template-columns: repeat(var(--compact-squad-columns,3), minmax(0,1fr)); gap: 5px; }
+  .squad-card { flex-wrap: nowrap; min-height: 67px; padding: 8px 6px; gap: 5px; }
+  .squad-card.is-selected { transform: none; }
+  .squad-card:hover:not(:disabled) { transform: none; }
+  .squad-copy { gap: 5px; }
+  .squad-copy > strong { font-size: 10px; letter-spacing: 0; }
+  .squad-copy > span { font-size: 10px; max-width: 100%; line-height: 1.3; }
+  .squad-badge, .squad-badge > .icon { width: 22px; height: 29px; }
+  .squad-badge b { left: 8px; top: 8px; font-size: 9px; }
+  .selection-detail { margin-bottom: 6px; padding: 5px 8px; font-size: 11px; }
+  .journey { margin-top: 5px; padding: 7px 9px; }
+  .journey > div:first-child { font-size: 9px; gap: 8px; }
+  .journey strong { letter-spacing: 0; }
+  .journey > div > span { flex-shrink: 0; }
+  .journey-track { margin-top: 6px; }
+  .hint-panel { left: calc(8px + var(--safe-left)); right: calc(8px + var(--safe-right)); top: auto; bottom: calc(var(--dock-height,110px) + 34px + var(--safe-bottom)); width: auto; max-height: max(90px,calc(100dvh - var(--dock-height,110px) - 205px - var(--safe-top) - var(--safe-bottom))); padding: 8px 12px; }
+  .hint-panel .section-heading { margin-bottom: 3px; }
+  .hint-panel #hint-content strong { font-size: 14px; }
+  .hint-panel p { margin: 5px 0; }
+  .toast { top: calc(160px + var(--safe-top)); max-width: calc(100% - 28px - var(--safe-left) - var(--safe-right)); width: max-content; padding: 10px 12px; font-size: 11px; }
+  .map-note { bottom: calc(var(--dock-height,110px) + 34px + var(--safe-bottom)); left: calc(8px + var(--safe-left)); right: calc(8px + var(--safe-right)); max-width: none; width: auto; font-size: 10px; padding: 8px 10px; pointer-events: none; }
+  .map-note:not([hidden]) ~ .toast { margin-top: 0; }
+  .maplibregl-ctrl-bottom-right { right: calc(4px + var(--safe-right)); bottom: calc(var(--dock-height,110px) + 34px + var(--safe-bottom)); }
+  .maplibregl-ctrl-bottom-left { bottom: var(--safe-bottom); left: var(--safe-left); }
+  .result-card { padding: 20px; }
+  .result-card h2 { font-size: 26px; }
+  .result-card .result-actions { bottom: -20px; }
+  .result-portrait { width: 64px; height: 64px; }
+}
+
+@media (max-width: 360px) and (orientation: portrait) {
+  .topbar { gap: 4px; }
+  .hud-identity { padding-left: 5px; padding-right: 5px; gap: 4px; }
+  .brand { display: none; }
+  .country-row { padding-left: 0; border: 0; }
+  .country-row select { font-size: 10px; }
+  .metrics { padding: 5px; }
+  .squad-badge { display: none; }
+  .squad-copy > strong { font-size: 11px; }
+  .squad-card { padding: 9px 7px; }
+  .squad-dock .section-heading > span { font-size: 7px; }
+}
+
+@media (max-height: 540px) and (orientation: landscape) {
+  .topbar { right: calc(236px + var(--safe-right)); left: calc(8px + var(--safe-left)); top: calc(8px + var(--safe-top)); gap: 6px; }
+  .hud-identity { padding: 3px 7px; gap: 6px; }
+  .brand > span:last-child { display: none; }
+  .brand-mark .icon { width: 24px; height: 24px; }
+  .country-row { padding-left: 7px; }
+  .country-row select { max-width: none; min-height: 44px; font-size: 10px; }
+  .topbar-actions { padding: 3px; gap: 2px; }
+  .metrics { position: static; padding: 5px 8px; }
+  .best-metric { display: none; }
+  .metrics strong { font-size: 22px; }
+  .metrics strong > span { display: none; }
+  .hunt-label { position: absolute; top: calc(100% + 8px); right: 0; }
+  .objective { left: calc(10px + var(--safe-left)); top: calc(68px + var(--safe-top)); transform: none; width: auto; }
+  .objective h1, .map-caption { display: none; }
+  .topbar-center { font-size: 9px; }
+  .map-toolbar { left: calc(10px + var(--safe-left)); top: calc(104px + var(--safe-top)); bottom: auto; display: flex; }
+  .squad-dock { top: calc(8px + var(--safe-top)); bottom: calc(24px + var(--safe-bottom)); left: auto; right: calc(8px + var(--safe-right)); width: 220px; min-width: 0; transform: none; display: flex; flex-direction: column; }
+  .squads { grid-template-columns: 1fr; gap: 4px; min-height: 0; }
+  .squad-card { min-height: 48px; padding: 5px 8px; }
+  .squad-copy { gap: 3px; }
+  .squad-copy > strong { font-size: 10px; }
+  .squad-copy > span { font-size: 10px; }
+  .squad-dock .section-heading { min-height: 28px; margin-bottom: 5px; flex-shrink: 0; }
+  .squad-dock .section-heading h2 { font-size: 8px; letter-spacing: 0; }
+  .squad-dock .section-heading > span { display: none; }
+  .clear-selection { margin-left: auto; }
+  .selection-detail { padding: 4px 7px; font-size: 10px; margin-bottom: 5px; }
+  .journey { flex-shrink: 0; }
+  .journey > div:first-child { flex-wrap: wrap; font-size: 8px; gap: 3px; }
+  .hint-panel { top: auto; left: calc(8px + var(--safe-left)); right: auto; bottom: calc(28px + var(--safe-bottom)); width: min(330px,calc(100% - 254px - var(--safe-left) - var(--safe-right))); max-height: calc(100dvh - 184px - var(--safe-top) - var(--safe-bottom)); }
+  .maplibregl-ctrl-bottom-right { right: calc(236px + var(--safe-right)); bottom: calc(28px + var(--safe-bottom)); }
+  .map-note { left: calc(8px + var(--safe-left)); right: calc(236px + var(--safe-right)); bottom: calc(28px + var(--safe-bottom)); width: auto; }
+  .toast { left: calc((100% - 228px) / 2); top: calc(158px + var(--safe-top)); max-width: calc(100% - 254px - var(--safe-left) - var(--safe-right)); }
+  .result-card { max-height: calc(100dvh - 16px - var(--safe-top) - var(--safe-bottom)); padding: 16px 24px; }
+  .result-card .result-actions { bottom: -16px; }
+  .result-portrait { width: 48px; height: 48px; }
+  .result-score { font-size: 40px; margin: 12px 0; }
+}
+/* A failed country remains recoverable through either Retry or country selection. */
+.load-error .topbar { z-index: 16; }
+.load-error .loading-screen { padding-top: calc(110px + var(--safe-top)); }
+/* MapLibre marker z-indices stay inside the map, beneath every game panel. */
+#map { isolation: isolate; z-index: 0; }
+
+.command-best { display: flex; justify-content: space-between; gap: 12px; padding: 12px; color: var(--muted); font-size: 12px; border-bottom: 1px solid var(--line); }
+.command-best strong { color: var(--accent); font-family: var(--mono); }
+.maplibregl-ctrl-group button { width: 44px; height: 44px; }
+.maplibregl-ctrl-attrib-button { min-width: 44px; min-height: 44px; }
+/* Phone play keeps the command header minimal; map zoom remains available by pinch. */
+@media (max-width: 600px), (max-width: 960px) and (max-height: 540px) {
+  .hud-identity { display: none; }
+  .maplibregl-ctrl-group { display: none; }
+}
+/* The phone command row gives the move budget the visual priority. */
+@media (max-width: 600px), (max-width: 960px) and (max-height: 540px) {
+  .topbar { height: 72px; justify-content: flex-end; }
+  .topbar .metrics { position: absolute; top: 0; left: 50%; right: auto; transform: translateX(-50%); width: 100px; min-height: 72px; justify-content: center; padding: 5px 8px; }
+  .topbar .metric-label { font-size: 9px; letter-spacing: .5px; text-align: center; }
+  .topbar .metrics strong { font-size: 46px; letter-spacing: -1.5px; }
+  .topbar-actions { align-self: flex-start; }
+  .map-toolbar { top: calc(8px + var(--safe-top)); left: calc(8px + var(--safe-left)); }
+  .map-toolbar button { min-height: 56px; padding: 8px 10px; }
+  .objective { top: calc(90px + var(--safe-top)); }
+}
+
+/* Phone command controls follow the visible viewport, including browser chrome. */
+.workspace, .map-panel { height: var(--visual-viewport-height, 100dvh); }
+@media (max-width: 900px), (max-height: 540px) and (orientation: landscape) {
+  .map-panel[data-command-state="idle"] .squad-dock { display: none; }
+  .map-panel[data-command-state="moving"] .squads,
+  .map-panel[data-command-state="moving"] .squad-dock > .section-heading,
+  .map-panel[data-command-state="moving"] .selection-detail { display: none; }
+  .squad-dock { top: auto; left: calc(8px + var(--safe-left)); right: calc(8px + var(--safe-right)); bottom: calc(26px + var(--safe-bottom)); width: auto; max-height: calc(var(--visual-viewport-height,100dvh) - 122px - var(--safe-top) - var(--safe-bottom)); }
+  .squads { flex: 0 0 auto; }
+  .map-toolbar { top: auto; left: calc(8px + var(--safe-left)); bottom: calc(var(--dock-height,0px) + 34px + var(--safe-bottom)); transition: bottom .18s ease; }
+  .map-panel[data-command-state="idle"] .map-toolbar { bottom: calc(26px + var(--safe-bottom)); }
+  .map-toolbar button { min-height: 48px; padding: 8px 12px; font-size: 10px; }
+  #show-hint > .icon { display: block; }
+  #show-hint small { min-width: 19px; padding-inline: 4px; font-size: 9px; }
+  .hint-panel { top: auto; left: calc(8px + var(--safe-left)); right: calc(8px + var(--safe-right)); width: auto; bottom: calc(var(--dock-height,0px) + 90px + var(--safe-bottom)); max-height: max(90px,calc(var(--visual-viewport-height,100dvh) - var(--dock-height,0px) - 192px - var(--safe-top) - var(--safe-bottom))); }
+  .maplibregl-ctrl-bottom-right { right: calc(4px + var(--safe-right)); bottom: calc(var(--dock-height,0px) + 90px + var(--safe-bottom)); }
+}
+@media (max-height: 540px) and (orientation: landscape) {
+  .topbar { right: calc(8px + var(--safe-right)); }
+  .squads { grid-template-columns: repeat(var(--squad-columns,3),minmax(0,1fr)); }
+  .squad-card { min-height: 48px; }
+  .hint-panel { left: auto; width: min(330px,calc(100% - 160px)); }
+  .journey > div:first-child { flex-wrap: nowrap; }
+}

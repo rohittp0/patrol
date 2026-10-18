@@ -1,0 +1,21 @@
+/* A survey takes its turn above the result, preserving the result underneath. */
+.survey-presentation {
+  position: fixed;
+  inset: auto;
+  top: calc(var(--visual-viewport-offset-top, 0px) + env(safe-area-inset-top, 0px) + 16px);
+  left: calc(var(--visual-viewport-offset-left, 0px) + var(--visual-viewport-width, 100vw) / 2);
+  transform: translateX(-50%);
+  width: min(420px, calc(var(--visual-viewport-width, 100vw) - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+  max-width: none;
+  max-height: calc(var(--visual-viewport-height, 100dvh) - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-shadow: 0 20px 80px #0008;
+}
+.survey-presentation::backdrop { background: #061518e8; }

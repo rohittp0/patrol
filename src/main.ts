@@ -1,5 +1,7 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
+import "./gameplay-responsive.css";
+import { installSurveyPresentation, surveyIsVisible } from "./survey-presentation";
 import { PLAYTEST_CONFIG as CONFIG } from "./game/playtest.config";
 import { PatrolGame, rulesForLevel } from "./game/engine";
 import { Navigation } from "./game/navigation";
@@ -35,32 +37,29 @@ const letter = (index: number) => String.fromCharCode(65 + index);
 
 document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
   <main class="workspace">
-    <section class="map-panel" aria-label="Patrol map">
+    <section class="map-panel" data-command-state="idle" aria-label="Patrol map">
       <div id="map"></div>
   <header class="topbar">
     <div class="hud-identity">
     <a class="brand" href="${import.meta.env.BASE_URL}" aria-label="Patrol home"><span class="brand-mark">${icon("compass")}</span><span>PATROL<span class="brand-sub">CLOSE THE NET</span></span></a>
     <div class="country-row"><select id="country" aria-label="Choose patrol country">${CONFIG.levels.map((level, index) => `<option value="${level.id}">${String(index + 1).padStart(2, "0")} / ${level.name}</option>`).join("")}</select><span class="country-arrow">⌄</span></div></div>
     <div class="metrics"><div><span class="metric-label">MOVES LEFT</span><strong id="orders-left">08<span>/ 08</span></strong></div><div class="best-metric"><span class="metric-label">BEST</span><strong id="best-score">—</strong></div></div>
-    <div class="topbar-actions"><button class="posts-toggle" id="toggle-posts" aria-expanded="false" aria-controls="post-drawer">Posts</button><button class="icon-button" id="restart" title="Restart this hunt" aria-label="Restart this hunt">${icon("reset")}</button><button class="new-setup previous-hunt" id="previous-hunt" title="Replay the previous hunt" disabled>${icon("arrow")}<span>Previous hunt</span></button></div>
+    <div class="topbar-actions"><span id="hunt-label" class="hunt-label">Hunt 1</span><details class="command-menu" id="command-menu"><summary aria-label="More game actions">More <span aria-hidden="true">⌄</span></summary><div class="command-actions"><div class="command-best">Best score <strong id="menu-best-score">—</strong></div><button id="case-file">${icon("info")}<span>Case file</span></button><button id="how-to">${icon("info")}<span>How to play</span></button><button id="restart">${icon("reset")}<span>Restart hunt</span></button><button class="previous-hunt" id="previous-hunt" disabled>${icon("arrow")}<span>Previous hunt</span></button></div></details></div>
   </header>
-      <div class="objective"><h1>CLOSE THE NET</h1><div class="topbar-center"><span class="live-dot"></span><span id="game-status">Opening the case file</span></div></div>
-      <div class="map-toolbar"><button id="fit-country">${icon("fit")}<span>Country view</span></button><button id="focus-runner">${icon("focus")}<span>Find fugitive</span></button><button id="case-file">${icon("info")}<span>Case file</span></button><button id="show-hint" disabled>${icon("hint")}<span>Show hint</span><small>FREE</small></button></div>
+      <div class="map-toolbar"><button id="show-hint" disabled>${icon("hint")}<span>Show hint</span><small>FREE</small></button></div>
       <aside id="hint-panel" class="hint-panel" hidden aria-label="Move hint"><div class="section-heading"><h2>FIELD INTELLIGENCE <span>FREE</span></h2><button id="close-hint" class="hint-close" aria-label="Hide hint">${icon("close")}</button></div><div id="hint-content" role="status" aria-live="polite"></div></aside>
       <div class="map-caption"><span class="eyebrow">PATROL ZONE</span><strong id="map-country">India</strong><span id="map-caption-detail">Every land exit is an escape route.</span></div>
       <div class="map-note" id="map-note" hidden>The map couldn't load all its detail. Your chase can still continue.</div>
       <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-      <section class="result-card" id="result" aria-live="polite" hidden></section>
+      <dialog class="result-card" id="result" aria-labelledby="result-title" hidden></dialog>
       <div class="loading-screen" id="loading"><span class="loading-compass">${icon("compass")}</span><p>Preparing the patrol zone…</p></div>
     <section class="squad-dock" aria-label="Your squads">
-      <div class="section-heading"><h2 id="squad-heading">YOUR SQUADS</h2><span id="squad-count">03 AVAILABLE</span></div>
+      <div class="section-heading"><h2 id="squad-heading">YOUR SQUADS</h2><span id="squad-count">03 AVAILABLE</span><button id="clear-selection" class="clear-selection" hidden aria-label="Clear selected post and squad">${icon("close")}</button></div>
+      <p id="selection-detail" class="selection-detail" hidden></p>
       <div id="squads" class="squads"></div>
       <section class="journey" id="journey" hidden><div><strong id="journey-title"></strong><span id="journey-value"></span></div><div class="journey-track"><span id="journey-bar"></span></div></section>
     </section>
-    <aside class="post-drawer" id="post-drawer" aria-label="Border posts" hidden><div class="section-heading border-heading"><h2>Border posts</h2><span id="border-count"></span></div>
-      <div class="border-list" id="borders"></div>
-    </aside>
-    <button class="how-to" id="how-to">${icon("info")}<span>How to play</span></button>
+
     </section>
   </main>`;
 
@@ -118,24 +117,25 @@ class PatrolApp {
     byId<HTMLSelectElement>("country").addEventListener("change", (event) => this.loadLevel((event.target as HTMLSelectElement).value, "header"));
     byId("restart").addEventListener("click", () => { if (this.game) this.restart("header"); });
     byId("previous-hunt").addEventListener("click", () => this.previousChallenge());
-    byId("fit-country").addEventListener("click", () => { track("map_action", { action: "country_view" }); this.map?.fitCountry(); });
-    byId("focus-runner").addEventListener("click", () => { if (this.game) { track("map_action", { action: "find_fugitive" }); this.map?.focusRunner(this.game); } });
     byId("case-file").addEventListener("click", () => this.showCase());
     byId("show-hint").addEventListener("click", () => void this.showHint());
     byId("close-hint").addEventListener("click", () => { this.clearHint("manual"); this.render(); });
     byId("how-to").addEventListener("click", () => this.onboarding.open());
-    byId("toggle-posts").addEventListener("click", () => {
-      const drawer = byId("post-drawer");
-      drawer.hidden = !drawer.hidden;
-      byId("toggle-posts").setAttribute("aria-expanded", String(!drawer.hidden));
-      track("post_list_toggle", { action: drawer.hidden ? "close" : "open" });
-    });
+    byId("clear-selection").addEventListener("click", () => this.clearSelection());
+    byId("result").addEventListener("cancel", (event) => event.preventDefault());
+    const menu = byId<HTMLDetailsElement>("command-menu");
+    menu.addEventListener("click", (event) => { if ((event.target as Element).closest("button")) menu.open = false; });
+    document.addEventListener("click", (event) => { if (!menu.contains(event.target as Node)) menu.open = false; });
     document.addEventListener("keydown", (event) => {
-      if (this.onboarding.blocked || this.poster.blocked) return;
+      if (this.onboarding.blocked || this.poster.blocked || surveyIsVisible()) return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
       if ((event.target as HTMLElement).matches("input, select, textarea")) return;
+      if (event.key === "Escape") {
+        const menu = byId<HTMLDetailsElement>("command-menu");
+        if (menu.open) { menu.open = false; menu.querySelector("summary")?.focus(); return; }
+      }
       if (/^[1-9]$/.test(event.key)) this.selectSquad(Number(event.key) - 1, "keyboard");
-      if (event.key === "Escape" && !this.game?.activeOrder) { track("selection_clear"); this.clearHint("selection_clear"); this.selectedPost = null; this.focusedSquad = null; this.render(); }
+      if (event.key === "Escape") this.clearSelection();
     });
     document.addEventListener("visibilitychange", () => { this.lastFrame = null; if (document.hidden) this.persistGame(); else this.renderHintButton(); track("app_visibility", { action: document.hidden ? "hidden" : "visible" }); });
     window.addEventListener("storage", (event) => { if (event.key === HINT_QUOTA_KEY || event.key === null) this.renderHintButton(); });
@@ -146,10 +146,10 @@ class PatrolApp {
     this.guide = new HuntGuide(() => this.render());
     this.onboarding = new Onboarding(() => {
       this.lastFrame = null;
-      if (this.onboarding?.phoneBlocked) { this.poster.close(); if (this.game) this.renderResult(); }
       if (this.onboarding?.blocked) this.modalStarted ??= performance.now();
       else if (this.modalStarted !== null) { this.thinkingStarted += performance.now() - this.modalStarted; this.modalStarted = null; }
       this.renderGuide();
+      if (this.game) this.renderResult();
     });
     let saved: SavedProgress | null = null;
     let storage: Storage | null = null;
@@ -160,7 +160,18 @@ class PatrolApp {
     void this.loadLevel(saved?.country ?? this.campaign.countries[0], saved ? "resume" : "campaign", saved?.huntIndex ?? 0, saved ?? undefined);
   }
 
+  private clearSelection() {
+    if (!this.game || this.game.activeOrder || this.game.outcome.kind !== "playing") return;
+    track("selection_clear");
+    this.clearHint("selection_clear"); this.selectedPost = null; this.focusedSquad = null;
+    this.render();
+    document.querySelector<HTMLElement>("#command-menu summary")?.focus({ preventScroll: true });
+  }
+
+
   async loadLevel(id: string, source = "campaign", targetIndex = 0, saved?: SavedProgress) {
+    byId<HTMLDialogElement>("result").close();
+    byId("result").hidden = true;
     this.persistGame();
     this.abandon("country_change");
     track("country_selected", { country: id, from_country: this.board?.id ?? "none", source });
@@ -171,6 +182,7 @@ class PatrolApp {
     const generation = ++this.loadGeneration;
     cancelAnimationFrame(this.frameHandle);
     byId("loading").hidden = false;
+    document.querySelector(".workspace")!.classList.remove("load-error");
     try {
       const response = await fetch(`${import.meta.env.BASE_URL}data/${id}.json`);
       if (!response.ok) throw new Error(`Country data could not be loaded (${response.status}).`);
@@ -211,6 +223,8 @@ class PatrolApp {
       this.renderGuide();
     } catch (error) {
       if (generation !== this.loadGeneration) return;
+      document.querySelector(".workspace")!.classList.add("load-error");
+      byId<HTMLSelectElement>("country").disabled = false;
       track("country_load_error", { country: id, duration_ms: Math.round(performance.now() - started), reason: "data_unavailable" });
       byId("loading").innerHTML = `${icon("info")}<h2>We couldn't open this case.</h2><p>Try again in a moment, or choose another country.</p><button id="retry-load">Try again</button>`;
       byId("retry-load").addEventListener("click", () => this.loadLevel(id));
@@ -250,6 +264,7 @@ class PatrolApp {
   }
 
   private startSetup(setup: StartingSetup, entry = "restart", briefing = false, saved?: SavedProgress) {
+    byId<HTMLDialogElement>("result").close();
     this.abandon(entry); this.poster.close();
     this.clearHint();
     cancelAnimationFrame(this.frameHandle);
@@ -289,7 +304,7 @@ class PatrolApp {
     if (this.hintBusy) this.clearHint();
     this.map?.revealSquad(this.game.squads[index].actor.position);
     this.focusedSquad = index;
-    if (this.selectedPost === null || this.game.securedBorders.has(this.selectedPost)) { this.render(); return; }
+    if (this.selectedPost === null || this.game.securedBorders.has(this.selectedPost)) { this.render(); byId("squads").querySelector<HTMLElement>(`[data-squad="${index}"]`)?.focus({ preventScroll: true }); return; }
     const hinted = this.hint?.kind === "winning" ? this.hint.orders[0] : this.hint?.kind === "survival" ? this.hint.order : null;
     if (!this.game.issueOrder(index, this.selectedPost)) { track("move_rejected", { reason: "unreachable", squad: index, post: this.selectedPost }); this.toast("That post cannot be reached by land."); return; }
     this.syncContext(); this.moveStarted = performance.now();
@@ -297,16 +312,15 @@ class PatrolApp {
     track("move_issued", { source, squad: index, from_post: order.from, post: order.to, distance_km: Math.round(order.distanceKm), think_seconds: Math.max(0, Math.round((this.moveStarted - this.thinkingStarted) / 1000)) });
     if (hinted?.squad === index && hinted.border === this.selectedPost) track("hint_followed", { squad: index, post: this.selectedPost });
     this.clearHint();
-    byId("post-drawer").hidden = true;
-    byId("toggle-posts").setAttribute("aria-expanded", "false");
     this.selectedPost = null;
     this.render();
+    if (!this.guide.active) document.querySelector<HTMLElement>("#command-menu summary")?.focus({ preventScroll: true });
     this.lastFrame = null;
     this.frameHandle = requestAnimationFrame(this.frame);
   }
 
   choosePost(border: number, source = "map") {
-    if (this.onboarding.blocked || !this.game || this.game.activeOrder || this.game.outcome.kind !== "playing" || !this.board.borders[border]) return;
+    if (this.onboarding.blocked || this.poster.blocked || !this.game || this.game.activeOrder || this.game.outcome.kind !== "playing" || !this.board.borders[border]) return;
     if (!this.guide.allowsPost(border)) return;
     if (this.hintBusy) this.clearHint();
     const hinted = this.hint?.kind === "winning" ? this.hint.orders[0] : this.hint?.kind === "survival" ? this.hint.order : null;
@@ -315,12 +329,11 @@ class PatrolApp {
     track("post_select", { source, post: border, guarded: this.game.securedBorders.has(border) });
     this.focusedSquad = null;
     this.render();
-    byId("post-drawer").hidden = true;
-    byId("toggle-posts").setAttribute("aria-expanded", "false");
+    this.map?.revealPost(border);
   }
 
   private frame = (timestamp: number) => {
-    if (this.onboarding.blocked) { this.lastFrame = null; this.frameHandle = requestAnimationFrame(this.frame); return; }
+    if (this.onboarding.blocked || surveyIsVisible()) { this.lastFrame = null; this.frameHandle = requestAnimationFrame(this.frame); return; }
     const seconds = this.lastFrame === null ? 0 : Math.min(CONFIG.movement.maxFrameSeconds, (timestamp - this.lastFrame) / 1000);
     this.lastFrame = timestamp;
     const playbackRate = Math.max(CONFIG.movement.simulatedSecondsPerRealSecond, (this.game.activeOrder?.durationHours ?? 0) * 3600 / CONFIG.movement.maxOrderPlaybackSeconds);
@@ -391,6 +404,7 @@ class PatrolApp {
     }
     this.hintBusy = false;
     this.render();
+    if (this.selectedPost !== null) this.map?.revealPost(this.selectedPost);
   }
 
   private renderHint() {
@@ -408,7 +422,7 @@ class PatrolApp {
       return;
     }
     const description = result?.kind === "winning" ? `${result.shortest ? "Best move" : "A promising lead"} · Catch them in ${result.orders.length} more moves.` : "This should buy you some breathing room. The capture will still take more work.";
-    byId("hint-content").innerHTML = `<span class="hint-verdict">${description}</span><strong>Squad ${letter(order.squad)} → Post ${order.border + 1}</strong><p>${escapeHtml(borderName(this.board.borders[order.border]))}</p><small>The post is selected. Click the highlighted Squad ${letter(order.squad)} when you're ready to move.</small>`;
+    byId("hint-content").innerHTML = `<span class="hint-verdict">${description}</span><strong>Squad ${letter(order.squad)} → Post ${order.border + 1}</strong><p>${escapeHtml(borderName(this.board.borders[order.border]))}</p><small>The post is selected. Select the highlighted Squad ${letter(order.squad)} when you're ready to move.</small>`;
   }
 
   private renderHintButton() {
@@ -447,9 +461,8 @@ class PatrolApp {
     const game = this.game;
     const moving = !!game.activeOrder && game.outcome.kind === "playing";
     const playing = game.outcome.kind === "playing";
-    byId("game-status").textContent = !playing ? game.outcome.kind === "won" ? "Fugitive caught" : "Operation ended" : moving ? "The chase is on" : "Your move";
-    byId("game-status").parentElement!.classList.toggle("is-moving", moving);
     byId("map-country").textContent = this.board.name;
+    byId("hunt-label").textContent = `Hunt ${this.huntNumber}`;
     byId("map-caption-detail").textContent = `HUNT ${this.huntNumber} OF ${CONFIG.levels.length * CONFIG.setups.poolSize} · ${this.caseFile.shortName}`;
     byId<HTMLButtonElement>("previous-hunt").disabled = moving || previousHunt(this.board.id, this.challengeIndex, this.campaign.countries) === null;
     byId<HTMLSelectElement>("country").value = this.board.id;
@@ -459,23 +472,23 @@ class PatrolApp {
       try { localStorage.setItem(this.bestScoreKey(), String(Math.max(Number(this.bestScore()) || 0, game.outcome.score))); } catch { /* Storage is optional. */ }
     }
     byId("best-score").textContent = this.bestScore();
+    byId("menu-best-score").textContent = this.bestScore();
     byId("squad-count").textContent = `${String(game.squads.length).padStart(2, "0")} SQUADS`;
     byId("squads").style.setProperty("--squad-columns", String(game.squads.length));
     byId("squads").style.setProperty("--compact-squad-columns", String(game.squads.length > 3 ? 2 : game.squads.length));
     const destination = this.selectedPost;
+    document.querySelector<HTMLElement>(".map-panel")!.dataset.commandState = moving ? "moving" : destination !== null ? "selecting" : "idle";
     const canAssign = destination !== null && !game.securedBorders.has(destination);
+    byId("clear-selection").hidden = destination === null && this.focusedSquad === null;
+    byId<HTMLButtonElement>("clear-selection").disabled = moving;
+    byId("selection-detail").hidden = destination === null;
+    byId("selection-detail").textContent = destination === null ? "" : borderName(this.board.borders[destination]);
     byId("squads").innerHTML = game.squads.map((squad, index) => {
       const preview = canAssign ? game.previewOrder(index, destination) : null;
-      return `<button class="squad-card ${this.focusedSquad === index ? "is-selected" : ""} ${canAssign ? "can-assign" : ""}" data-squad="${index}" ${moving || !playing ? "disabled" : ""} aria-label="${canAssign ? `Send Squad ${letter(index)} to post ${destination + 1}` : `View Squad ${letter(index)}`}"><span class="squad-badge">${icon("squad")}<b>${letter(index)}</b></span><span class="squad-copy"><strong>${canAssign ? "Send" : "Squad"} ${letter(index)}</strong><span>${preview ? `${Math.round(preview.distanceKm)} km to Post ${destination! + 1}` : squad.border === null ? "Relocating to a new post" : escapeHtml(borderName(this.board.borders[squad.border]))}</span></span><span class="squad-state">${squad.border === null ? "EN ROUTE" : "HOLDING"}</span></button>`;
+      return `<button class="squad-card ${this.focusedSquad === index ? "is-selected" : ""} ${canAssign ? "can-assign" : ""}" data-squad="${index}" ${moving || !playing ? "disabled" : ""} aria-pressed="${this.focusedSquad === index}" aria-label="${canAssign ? `Send Squad ${letter(index)} to post ${destination + 1}` : `View Squad ${letter(index)}`}"><span class="squad-badge">${icon("squad")}<b>${letter(index)}</b></span><span class="squad-copy"><strong>${canAssign ? "Send" : "Squad"} ${letter(index)}</strong><span>${preview ? `${Math.round(preview.distanceKm)} km to Post ${destination! + 1}` : squad.border === null ? "Relocating to a new post" : escapeHtml(borderName(this.board.borders[squad.border]))}</span></span><span class="squad-state">${squad.border === null ? "EN ROUTE" : "HOLDING"}</span></button>`;
     }).join("");
     byId("squads").querySelectorAll<HTMLButtonElement>("[data-squad]").forEach((button) => button.addEventListener("click", () => this.selectSquad(Number(button.dataset.squad))));
     byId("squad-heading").textContent = destination === null ? "YOUR SQUADS" : canAssign ? `CHOOSE A SQUAD · POST ${destination + 1}` : `POST ${destination + 1} IS GUARDED`;
-    byId("border-count").textContent = `${this.board.borders.length} POSTS`;
-    byId("borders").innerHTML = this.board.borders.map((border, index) => {
-      const squad = game.squads.findIndex((candidate) => candidate.border === index);
-      return `<button class="border-row ${squad >= 0 ? "is-secured" : ""} ${destination === index ? "is-selected" : ""}" data-border="${index}" ${moving || !playing ? "disabled" : ""} aria-label="Inspect post ${index + 1}: ${escapeHtml(borderName(border))}"><span class="border-number" style="--border-colour:${CONFIG.appearance.borderPalette[index].secured}">${String(index + 1).padStart(2, "0")}</span><span class="border-copy"><strong>${escapeHtml(borderName(border))}</strong><small>${border.kind === "exit" ? "ESCAPE ROUTE" : squad >= 0 ? "GUARDED BORDER" : "UNGUARDED BORDER"} · ${Math.round(border.lengthKm)} KM</small></span><span class="border-state">${squad >= 0 ? `<b>${letter(squad)}</b>` : icon("arrow")}</span></button>`;
-    }).join("");
-    byId("borders").querySelectorAll<HTMLButtonElement>("[data-border]").forEach((button) => button.addEventListener("click", () => this.choosePost(Number(button.dataset.border), "list")));
     this.renderJourney();
     byId("app").style.setProperty("--dock-height", `${document.querySelector(".squad-dock")!.getBoundingClientRect().height}px`);
     this.map?.renderState(game, this.selectedPost, this.focusedSquad);
@@ -494,8 +507,10 @@ class PatrolApp {
   private renderResult() {
     const outcome = this.game.outcome;
     const firstView = !this.ended;
-    byId("result").hidden = outcome.kind === "playing";
-    if (outcome.kind === "playing") return;
+    const dialog = byId<HTMLDialogElement>("result");
+    dialog.hidden = outcome.kind === "playing";
+    if (outcome.kind === "playing") { dialog.close(); return; }
+    if (this.onboarding.blocked) { dialog.close(); dialog.hidden = true; return; }
     const won = outcome.kind === "won";
     if (!this.ended) {
       this.syncContext();
@@ -505,15 +520,18 @@ class PatrolApp {
         void this.poster.open(captureReport(this.game, this.challengeIndex, this.huntNumber), { entry: "second_country_win", onSkip: () => this.nextChallenge("newspaper_skip") });
       } else if (won) track("history_view");
     }
-    if (this.poster.automatic) { byId("result").hidden = true; return; }
+    if (this.poster.automatic) { dialog.close(); dialog.hidden = true; return; }
+    dialog.hidden = false;
+    if (dialog.open) return;
     const next = CONFIG.levels.find((level) => level.id === this.campaign.countries[this.countryIndex + 1]);
     const hasNextSetup = this.validSetups.findIndex((setup) => setup.id === this.game.setup.id) + 1 < this.validSetups.length;
     byId("result").className = `result-card ${won ? "won" : "lost"}`;
     const file = this.caseFile;
-    byId("result").innerHTML = `<img class="result-portrait" src="${import.meta.env.BASE_URL}${portraitPath(file)}" alt="Illustrated portrait of ${escapeHtml(file.name)}"><span class="eyebrow">${won ? "CASE CLOSED" : "THE CHASE ENDS HERE"}</span><h2>${won ? `${escapeHtml(file.shortName)} caught.` : outcome.reason === "escape" ? `${escapeHtml(file.shortName)} got away.` : "Out of moves."}</h2><p>${won ? `Your squads closed the net ${escapeHtml(locationPhrase(captureRegion(this.game)))}. There's nowhere left to run.` : outcome.reason === "escape" ? "They slipped across the border and out of your reach." : "Your fugitive is still free. Give the chase another go."}</p>${won ? `<div class="result-score">+${outcome.score}<span>POINTS · ${this.game.ordersUsed} OF ${this.game.rules.maxOrders} MOVES</span></div><div class="historical-ending"><span class="eyebrow">HOW THE REAL MANHUNT ENDED · ${escapeHtml(file.endingDate)}</span><p>${escapeHtml(file.ending)}</p><a id="history-source" href="${file.source.url}" target="_blank" rel="noopener noreferrer">Read the story · ${escapeHtml(file.source.label)} ↗</a></div><button class="newspaper-button" id="make-headlines">🗞 Make headlines<span>Your capture. Your own front page.</span></button>` : ""}<div class="result-actions"><button class="primary-button" id="result-primary">${won ? hasNextSetup ? "Next hunt" : next ? `Next: ${next.name}` : "Play again" : "Try again"}${icon("arrow")}</button><button class="text-button" id="result-secondary">${won ? "Replay this hunt" : "Skip hunt"}</button></div>`;
+    byId("result").innerHTML = `<img class="result-portrait" src="${import.meta.env.BASE_URL}${portraitPath(file)}" alt="Illustrated portrait of ${escapeHtml(file.name)}"><span class="eyebrow">${won ? "CASE CLOSED" : "THE CHASE ENDS HERE"}</span><h2 id="result-title">${won ? `${escapeHtml(file.shortName)} caught.` : outcome.reason === "escape" ? `${escapeHtml(file.shortName)} got away.` : "Out of moves."}</h2><p>${won ? `Your squads closed the net ${escapeHtml(locationPhrase(captureRegion(this.game)))}. There's nowhere left to run.` : outcome.reason === "escape" ? "They slipped across the border and out of your reach." : "Your fugitive is still free. Give the chase another go."}</p>${won ? `<div class="result-score">+${outcome.score}<span>POINTS · ${this.game.ordersUsed} OF ${this.game.rules.maxOrders} MOVES</span></div><div class="historical-ending"><span class="eyebrow">HOW THE REAL MANHUNT ENDED · ${escapeHtml(file.endingDate)}</span><p>${escapeHtml(file.ending)}</p><a id="history-source" href="${file.source.url}" target="_blank" rel="noopener noreferrer">Read the story · ${escapeHtml(file.source.label)} ↗</a></div><button class="newspaper-button" id="make-headlines">🗞 Make headlines<span>Your capture. Your own front page.</span></button>` : ""}<div class="result-actions"><button class="primary-button" id="result-primary">${won ? hasNextSetup ? "Next hunt" : next ? `Next: ${next.name}` : "Play again" : "Try again"}${icon("arrow")}</button><button class="text-button" id="result-secondary">${won ? "Replay this hunt" : "Skip hunt"}</button></div>`;
     byId("result-primary").addEventListener("click", () => { track("result_action", { action: won ? "next" : "retry" }); won ? this.nextChallenge("result") : this.restart("result"); });
     byId("result-secondary").addEventListener("click", () => { track("result_action", { action: won ? "replay" : "skip" }); won ? this.restart("result") : this.nextChallenge("result"); });
-    if (firstView) byId("result-primary").focus();
+    dialog.showModal();
+    if (firstView) byId("result-primary").focus({ preventScroll: true });
     if (won) {
       byId("history-source").addEventListener("click", () => track("history_source_open", { link_kind: "history_source" }));
       byId("make-headlines").addEventListener("click", () => { track("result_action", { action: "poster" }); void this.poster.open(captureReport(this.game, this.challengeIndex, this.huntNumber)); });
@@ -522,4 +540,5 @@ class PatrolApp {
 }
 
 const app = new PatrolApp();
+installSurveyPresentation();
 if (import.meta.env.DEV) Object.defineProperty(window, "__PATROL__", { get: () => app });

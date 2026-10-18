@@ -104,9 +104,9 @@ export class HuntGuide {
       const last = step.move === game.setup.witness.length - 1;
       const squad = String.fromCharCode(65 + step.order.squad), post = step.order.border + 1;
       const copy = step.kind === "post"
-        ? { title: last ? "Close the last gap." : "Cut off the first way out.", body: `Click post ${post}, the highlighted circle. ${last ? "This is the last unguarded border in our trap." : "Your fugitive can cross unguarded borders. Let's close this one."}`, note: "Take your time. The chase pauses between moves." }
+        ? { title: last ? "Close the last gap." : "Cut off the first way out.", body: `Select post ${post}, the highlighted circle. ${last ? "This is the last unguarded border in our trap." : "Your fugitive can cross unguarded borders. Let's close this one."}`, note: "Take your time. The chase pauses between moves." }
         : step.kind === "squad"
-        ? { title: `Send Squad ${squad}.`, body: `Click the highlighted squad card to guard post ${post}. ${last ? "This move will seal the enclosure." : "A move starts the chase for both your squad and the fugitive."}`, note: "One squad relocation uses one move." }
+        ? { title: `Send Squad ${squad}.`, body: `Select the highlighted squad card to guard post ${post}. ${last ? "This move will seal the enclosure." : "A move starts the chase for both your squad and the fugitive."}`, note: "One squad relocation uses one move." }
         : { title: last ? "The net is closing." : "Now watch the chase.", body: "Your squad and the fugitive move together. The old border opens as the squad leaves; the new border is guarded only when it arrives.", note: "Wait for the move to finish. Then time pauses again." };
       this.root.querySelector(".guide-progress")!.textContent = `MOVE ${step.move + 1} OF ${game.setup.witness.length} · ${step.kind === "post" ? "PICK A POST" : step.kind === "squad" ? "SEND A SQUAD" : "THE CHASE"}`;
       this.root.querySelector("#hunt-guide-title")!.textContent = copy.title;
@@ -114,12 +114,18 @@ export class HuntGuide {
       this.root.querySelector(".guide-footnote")!.textContent = copy.note;
       track("guide_step_view", { guide_step: step.kind, guide_move: step.move + 1 });
       if (step.kind === "post") revealPost(step.order.border);
-      if (step.kind === "moving") revealMovement();
+      if (step.kind === "moving") {
+        // Camera framing reads the actual responsive guide rectangle.
+        this.position();
+        revealMovement();
+      }
     }
     if (!this.observing) {
       this.observing = true;
       this.camera?.on("move", this.schedulePosition);
       window.addEventListener("resize", this.schedulePosition);
+      window.visualViewport?.addEventListener("resize", this.schedulePosition);
+      window.visualViewport?.addEventListener("scroll", this.schedulePosition);
     }
     this.observer.observe(target); this.observer.observe(this.card);
     this.schedulePosition();
@@ -132,7 +138,7 @@ export class HuntGuide {
     const step = this.step!;
     if (step.kind !== "complete") track("guide_skip", { guide_step: step.kind, guide_move: step.move + 1, reason, duration_ms: Math.round(performance.now() - (this.startedAt ?? performance.now())) });
     this.dismissed = true; this.remember("skipped"); this.hide(); this.onDismiss();
-    document.getElementById("how-to")?.focus();
+    document.querySelector<HTMLElement>("#command-menu summary")?.focus();
   }
 
   private hide() {
@@ -140,7 +146,13 @@ export class HuntGuide {
     this.camera?.getContainer().classList.remove("guide-show-movement");
     this.pathBounds = null;
     this.observer.disconnect(); cancelAnimationFrame(this.positionFrame); this.positionFrame = 0;
-    if (this.observing) { this.camera?.off("move", this.schedulePosition); window.removeEventListener("resize", this.schedulePosition); this.observing = false; }
+    if (this.observing) {
+      this.camera?.off("move", this.schedulePosition);
+      window.removeEventListener("resize", this.schedulePosition);
+      window.visualViewport?.removeEventListener("resize", this.schedulePosition);
+      window.visualViewport?.removeEventListener("scroll", this.schedulePosition);
+      this.observing = false;
+    }
   }
 
   private filterClick = (event: MouseEvent) => {
@@ -177,11 +189,23 @@ export class HuntGuide {
     place(this.spotlight, left, top, right - left, bottom - top);
     place(this.shades[0], 0, 0, width, top); place(this.shades[1], 0, bottom, width, height - bottom);
     place(this.shades[2], 0, top, left, bottom - top); place(this.shades[3], right, top, width - right, bottom - top);
+    const visual = window.visualViewport;
+    const safe = getComputedStyle(this.root);
+    const viewport = {
+      left: (visual?.offsetLeft ?? 0) + margin + parseFloat(safe.paddingLeft || "0"),
+      top: (visual?.offsetTop ?? 0) + margin + parseFloat(safe.paddingTop || "0"),
+      right: (visual?.offsetLeft ?? 0) + (visual?.width ?? width) - margin - parseFloat(safe.paddingRight || "0"),
+      bottom: (visual?.offsetTop ?? 0) + (visual?.height ?? height) - margin - parseFloat(safe.paddingBottom || "0"),
+    };
+    this.card.style.maxHeight = `${Math.max(44, viewport.bottom - viewport.top)}px`;
     const cardWidth = this.card.offsetWidth, cardHeight = this.card.offsetHeight;
-    let x = (left + right - cardWidth) / 2, y = top - gap - cardHeight;
+    const clampX = (value: number) => Math.max(viewport.left, Math.min(viewport.right - cardWidth, value));
+    const clampY = (value: number) => Math.max(viewport.top, Math.min(viewport.bottom - cardHeight, value));
+    const headerBottom = document.querySelector(".topbar")?.getBoundingClientRect().bottom ?? viewport.top;
+    let x = viewport.left, y = Math.max(viewport.top, headerBottom + margin);
     if (this.step?.kind === "moving" && this.camera && this.game?.activeOrder) {
-      // Reserve the left side for the explanation; the camera frames the chase to its right.
-      x = margin; y = document.querySelector(".topbar")!.getBoundingClientRect().bottom + margin;
+      // Portrait reserves a top strip; short landscape reserves a left column.
+      // The camera uses this measured card rather than a desktop-width constant.
       this.movingShade.setAttribute("width", String(width)); this.movingShade.setAttribute("height", String(height));
       for (const element of this.movingShade.querySelectorAll("mask, .guide-mask-background, .guide-mask-shade")) { element.setAttribute("width", String(width)); element.setAttribute("height", String(height)); }
       this.svgRect(this.journeyHole, left, top, right - left, bottom - top);
@@ -192,13 +216,32 @@ export class HuntGuide {
         right: Math.max(...points.map(p => p.x)) + offset.left, bottom: Math.max(...points.map(p => p.y)) + offset.top };
       this.followMovement();
     }
-    else if (right + gap + cardWidth <= width - margin && this.step?.kind === "post") { x = right + gap; y = (top + bottom - cardHeight) / 2; }
-    else if (left - gap - cardWidth >= margin && this.step?.kind === "post") { x = left - gap - cardWidth; y = (top + bottom - cardHeight) / 2; }
-    else if (y < margin) y = bottom + gap;
-    this.card.style.left = `${Math.max(margin, Math.min(width - cardWidth - margin, x))}px`;
-    this.card.style.top = `${Math.max(margin, Math.min(height - cardHeight - margin, y))}px`;
-    this.pointer.style.left = `${Math.min(width - 40, Math.max(margin, (left + right) / 2 + 12))}px`;
-    this.pointer.style.top = `${Math.min(height - 50, bottom - pad / 2)}px`;
+    else {
+      const centerX = (left + right - cardWidth) / 2;
+      const centerY = (top + bottom - cardHeight) / 2;
+      const candidates = [
+        { x: centerX, y: top - gap - cardHeight },
+        { x: centerX, y: bottom + gap },
+        { x: right + gap, y: centerY },
+        { x: left - gap - cardWidth, y: centerY },
+        { x: viewport.left, y: headerBottom + margin },
+      ].map(point => ({ x: clampX(point.x), y: clampY(point.y) }));
+      const dock = document.querySelector(".squad-dock")?.getBoundingClientRect();
+      const overlap = (point: { x: number; y: number }, obstacle: { left: number; top: number; right: number; bottom: number }) =>
+        Math.max(0, Math.min(point.x + cardWidth, obstacle.right) - Math.max(point.x, obstacle.left)) *
+        Math.max(0, Math.min(point.y + cardHeight, obstacle.bottom) - Math.max(point.y, obstacle.top));
+      const score = (point: { x: number; y: number }) =>
+        overlap(point, { left, top, right, bottom }) * 100 +
+        (dock ? overlap(point, dock) : 0) + Math.max(0, headerBottom - point.y) * cardWidth;
+      const best = candidates.reduce((best, point) => score(point) < score(best) ? point : best);
+      x = best.x; y = best.y;
+    }
+    this.card.style.left = `${clampX(x)}px`;
+    this.card.style.top = `${clampY(y)}px`;
+    // The finger stays outside the highlighted control and never captures input.
+    this.pointer.style.left = `${Math.min(viewport.right - 36, Math.max(viewport.left, right + pad / 2))}px`;
+    this.pointer.style.top = `${Math.min(viewport.bottom - 45, Math.max(viewport.top, bottom + pad / 2))}px`;
+
   }
 
   /** Only active travel updates this cutout. Marker halos follow MapLibre's own

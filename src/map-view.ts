@@ -9,6 +9,7 @@ import { PLAYTEST_CONFIG as CONFIG } from "./game/playtest.config";
 import type { PatrolGame } from "./game/engine";
 import type { CountryBoard, Position } from "./game/types";
 import { icon } from "./icons";
+import { usableMapPadding } from "./viewport";
 
 // Bundle MapLibre's worker explicitly so both Vite and /patrol/ static builds
 // serve the correct URL instead of a missing dependency-prebundle sibling.
@@ -32,6 +33,8 @@ export class PatrolMap {
 
   constructor(private board: CountryBoard, onPost: (border: number) => void, onMapStatus: (fallback: boolean) => void) {
     this.map = new Map({ container: "map", style: CONFIG.map.styleUrl, attributionControl: { compact: true }, dragRotate: false, pitchWithRotate: false, maxPitch: 0 });
+    this.map.touchZoomRotate.disableRotation();
+    this.map.touchPitch.disable();
     this.map.addControl(new NavigationControl({ showCompass: false }), "bottom-right");
     this.map.on("dragend", (event) => { if (event.originalEvent) track("map_gesture", { action: "pan", zoom: Math.round(this.map.getZoom() * 10) / 10 }); });
     this.map.on("zoomend", (event) => { if (event.originalEvent) track("map_gesture", { action: "zoom", zoom: Math.round(this.map.getZoom() * 10) / 10 }); });
@@ -70,7 +73,20 @@ export class PatrolMap {
     this.onPost = onPost;
     this.createPosts();
     this.fitCountry(false);
-    new ResizeObserver(() => this.map.resize()).observe(document.getElementById("map")!);
+    let resizeFrame = 0;
+    const resize = () => {
+      if (resizeFrame) return;
+      resizeFrame = requestAnimationFrame(() => {
+        resizeFrame = 0;
+        this.map.resize();
+        if (!this.game) return;
+        // Preserve player zoom/pan; only reveal a selected destination on a new viewport.
+        if (this.selected !== null) this.revealPost(this.selected);
+        else if (document.querySelector('.hunt-guide:not([hidden])[data-phase="moving"]')) this.showGuidedMovement(this.game);
+      });
+    };
+    new ResizeObserver(resize).observe(document.getElementById("map")!);
+    window.addEventListener("patrol:viewport-change", resize);
   }
 
   private onPost: (border: number) => void;
@@ -100,7 +116,18 @@ export class PatrolMap {
       element.style.setProperty("--post-diameter", `${CONFIG.appearance.borderPost.radiusPx * 2}px`);
       element.style.setProperty("--post-fill", CONFIG.appearance.borderPost.fillColor);
       element.style.setProperty("--post-outline", `${CONFIG.appearance.borderPost.outlineWidthPx}px`);
-      element.addEventListener("click", (event) => { event.stopPropagation(); this.onPost(index); });
+      let pointer: { x: number; y: number; id: number } | null = null;
+      let dragged = false;
+      element.addEventListener("pointerdown", (event) => { pointer = { x: event.clientX, y: event.clientY, id: event.pointerId }; dragged = false; });
+      element.addEventListener("pointermove", (event) => {
+        if (pointer?.id === event.pointerId && Math.hypot(event.clientX - pointer.x, event.clientY - pointer.y) > CONFIG.interface.postTapSlopPx) dragged = true;
+      });
+      element.addEventListener("pointercancel", () => { pointer = null; dragged = true; });
+      element.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (event.detail === 0 || !dragged) this.onPost(index);
+        pointer = null;
+      });
       element.innerHTML = `<span>${String(index + 1).padStart(2, "0")}</span>`;
       const marker = new Marker({ element, anchor: "center" }).setLngLat(border.post).addTo(this.map);
       this.posts.push({ marker, element });
@@ -175,7 +202,7 @@ export class PatrolMap {
   }
 
   fitCountry(animate = true) {
-    this.map.fitBounds(this.board.bounds, { padding: this.cameraPadding(), absolutePadding: true, duration: animate ? 650 : 0 });
+    this.map.fitBounds(this.board.bounds, { padding: this.cameraPadding(), absolutePadding: true, duration: animate && !matchMedia("(prefers-reduced-motion: reduce)").matches ? CONFIG.map.focusDurationMs : 0 });
   }
 
   revealPost(border: number) {
@@ -196,9 +223,9 @@ export class PatrolMap {
       }
       points.push(waypoint.position); remaining -= distance; previous = waypoint.position;
     }
-    const padding = this.cameraPadding();
+    const padding = this.cameraPadding(true);
     this.map.fitBounds([[Math.min(...points.map(p => p[0])), Math.min(...points.map(p => p[1]))], [Math.max(...points.map(p => p[0])), Math.max(...points.map(p => p[1]))]], {
-      padding: { ...padding, left: Math.max(padding.left, CONFIG.tutorial.guide.cardWidthPx + CONFIG.tutorial.guide.viewportMarginPx * 2) },
+      padding,
       absolutePadding: true, maxZoom: CONFIG.map.runnerFocusZoom,
       duration: matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : CONFIG.map.focusDurationMs,
     });
@@ -209,20 +236,13 @@ export class PatrolMap {
     const padding = this.cameraPadding();
     const { clientWidth: width, clientHeight: height } = this.map.getContainer();
     if (point.x >= padding.left && point.x <= width - padding.right && point.y >= padding.top && point.y <= height - padding.bottom) return;
-    this.map.easeTo({ center: position, padding, duration: CONFIG.map.focusDurationMs });
+    this.map.easeTo({ center: position, padding, duration: matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : CONFIG.map.focusDurationMs });
   }
 
-  private cameraPadding() {
-    const margin = CONFIG.map.fitPaddingPx;
-    const height = this.map.getContainer().clientHeight;
-    const top = Math.max(...[".topbar", ".objective", ".map-caption"].map((selector) => document.querySelector(selector)!.getBoundingClientRect().bottom));
-    const bottom = document.querySelector(".squad-dock")!.getBoundingClientRect().top;
-    return { top: Math.max(margin, top + margin / 2), bottom: Math.max(margin, height - bottom + margin / 2), left: margin, right: margin };
+  private cameraPadding(includeGuide = false) {
+    return usableMapPadding(this.map.getContainer().getBoundingClientRect(), { includeGuide });
   }
 
-  focusRunner(game: PatrolGame) {
-    this.map.easeTo({ center: game.runner.position, zoom: Math.max(this.map.getZoom(), CONFIG.map.runnerFocusZoom), padding: this.cameraPadding(), duration: CONFIG.map.focusDurationMs });
-  }
 
   startView(game: PatrolGame) {
     const radius = CONFIG.levels.find((level) => level.id === this.board.id)!.initialViewRadiusKm;

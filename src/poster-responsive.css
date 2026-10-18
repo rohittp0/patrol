@@ -1,0 +1,101 @@
+/* Keep newspaper export resolution independent from its on-screen preview. */
+dialog.poster-dialog {
+  position: fixed;
+  inset: var(--visual-viewport-offset-top, 0px) 0 auto;
+  box-sizing: border-box;
+  width: min(1120px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(var(--visual-viewport-height, 100dvh) - 32px);
+  margin: 16px auto;
+  overflow: hidden;
+}
+
+dialog.poster-dialog[open] { display: flex; flex-direction: column; }
+.poster-dialog [hidden] { display: none !important; }
+.poster-dialog .poster-toolbar { flex: 0 0 auto; gap: 16px; padding: 16px 24px; }
+.poster-dialog .poster-toolbar > div { min-width: 0; }
+.poster-dialog .poster-toolbar button { flex: 0 0 auto; min-width: 44px; min-height: 44px; }
+.poster-dialog .poster-layout {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scroll-padding-block: 16px;
+  grid-template-columns: minmax(0, 1fr) 310px;
+}
+.poster-dialog .poster-preview { min-width: 0; }
+.poster-dialog .poster-preview canvas {
+  width: 100%;
+  height: auto;
+  max-width: 560px;
+  max-height: none;
+  object-fit: contain;
+}
+.poster-dialog .poster-controls input:not([type]),
+.poster-dialog .poster-controls input[type="text"],
+.poster-dialog .poster-controls textarea {
+  min-height: 44px;
+  font-family: inherit;
+  font-size: 16px;
+}
+.poster-dialog .photo-upload input { min-height: 44px; font-size: 16px; }
+.poster-dialog .photo-upload input::file-selector-button { min-height: 44px; margin-right: 8px; }
+.poster-dialog .poster-controls button { min-height: 44px; }
+.poster-dialog #photo-zoom { min-height: 44px; }
+.poster-dialog .poster-export {
+  display: block;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 10px 24px 16px;
+  border-top: 1px solid var(--line);
+  background: #14252a;
+}
+.poster-dialog #poster-message { margin: 0 0 8px; min-height: 0; }
+.poster-dialog #poster-message:empty { display: none; }
+.poster-dialog .poster-export-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+.poster-dialog .poster-export-buttons button { min-height: 44px; margin: 0; }
+.poster-dialog button:focus-visible,
+.poster-dialog input:focus-visible,
+.poster-dialog textarea:focus-visible,
+.poster-dialog canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+@media (max-width: 700px) {
+  dialog.poster-dialog {
+    width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 16px);
+    max-height: calc(var(--visual-viewport-height, 100dvh) - max(8px, env(safe-area-inset-top, 0px)) - max(8px, env(safe-area-inset-bottom, 0px)));
+    margin-block: max(8px, env(safe-area-inset-top, 0px)) 0;
+    border-radius: 10px;
+  }
+  .poster-dialog .poster-toolbar { gap: 10px; padding: 12px; align-items: flex-start; }
+  .poster-dialog .poster-toolbar h2 { font-size: 21px; margin-top: 5px; }
+  .poster-dialog .poster-toolbar p { display: none; }
+  .poster-dialog .poster-layout { grid-template-columns: minmax(0, 1fr); gap: 20px; padding: 14px; }
+  .poster-dialog .poster-preview { padding: 10px; }
+  .poster-dialog .poster-preview canvas { max-width: 360px; transform: none; }
+  .poster-dialog .poster-share-note { font-size: 18px; margin-bottom: 16px; }
+  .poster-dialog .poster-controls label { font-size: 14px; }
+  .poster-dialog .poster-local-note,
+  .poster-dialog #crop-editor p,
+  .poster-dialog #poster-message { font-size: 13px; }
+  .poster-dialog .poster-export { padding: 10px 12px 12px; }
+  .poster-dialog .poster-export-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .poster-dialog .poster-export-buttons button { min-width: 0; padding: 11px 8px; font-size: 11px; line-height: 1.5; }
+}
+
+/* A short landscape screen needs compact chrome and independent body scroll. */
+@media (max-height: 520px) and (min-width: 560px) {
+  dialog.poster-dialog { width: calc(100vw - max(8px, env(safe-area-inset-left, 0px)) - max(8px, env(safe-area-inset-right, 0px))); max-height: calc(var(--visual-viewport-height, 100dvh) - 16px); margin-block: 8px; }
+  .poster-dialog .poster-toolbar { padding: 6px 14px; align-items: center; }
+  .poster-dialog .poster-toolbar .eyebrow,
+  .poster-dialog .poster-toolbar p { display: none; }
+  .poster-dialog .poster-toolbar h2 { font-size: 20px; margin: 0; }
+  .poster-dialog .poster-layout { grid-template-columns: minmax(0, 1fr) minmax(240px, 1fr); gap: 16px; padding: 12px 16px; }
+  .poster-dialog .poster-preview { position: sticky; top: 0; padding: 8px; }
+  .poster-dialog .poster-preview canvas { width: auto; max-width: 100%; max-height: calc(var(--visual-viewport-height, 100dvh) - 160px); }
+  .poster-dialog .poster-export { padding: 6px 14px; }
+  .poster-dialog #poster-message { font-size: 11px; margin-bottom: 4px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .poster-dialog::backdrop { backdrop-filter: none; }
+}

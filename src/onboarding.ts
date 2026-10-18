@@ -1,3 +1,4 @@
+import "./onboarding-responsive.css";
 import { PLAYTEST_CONFIG as CONFIG } from "./game/playtest.config";
 import { icon } from "./icons";
 import { portraitPath, type CaseFile } from "./game/case-files";
@@ -40,20 +41,12 @@ const slides = [
   },
 ] as const;
 
-export function needsLaptop(viewportWidth: number, screenShortSide: number, coarsePointer: boolean): boolean {
-  return CONFIG.deviceGate.enabled && (viewportWidth <= CONFIG.deviceGate.maxViewportWidthPx || (coarsePointer && screenShortSide <= CONFIG.deviceGate.maxTouchScreenShortSidePx));
-}
-
-/** Modal overlays live outside the inert game. The phone gate always takes
- * precedence and cannot be closed by Escape, clicks, or tutorial controls. */
+/** Modal overlays live outside the inert game. Tutorial and case files pause play. */
 export class Onboarding {
   private index = 0;
   private tutorialOpen: boolean = CONFIG.tutorial.showOnFirstVisit && !this.completed();
-  private phone = false;
   private previousFocus: HTMLElement | null = null;
   private tutorial: HTMLElement;
-  private gate: HTMLElement;
-  private coarsePointer = matchMedia("(pointer: coarse)");
   private briefing: MissionBriefing | null = null;
   private caseModal: HTMLElement;
   private caseVisible = false;
@@ -63,38 +56,28 @@ export class Onboarding {
 
   constructor(private onBlockingChange: () => void) {
     document.body.insertAdjacentHTML("beforeend", `
-      <section id="tutorial" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
+      <section id="tutorial" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="tutorial-title" tabindex="-1">
         <div class="tutorial-card"></div>
       </section>
-      <section id="case-briefing" class="modal-backdrop case-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="case-title"><div class="case-card"></div></section>
-      <section id="phone-gate" class="phone-gate" hidden role="dialog" aria-modal="true" aria-labelledby="phone-title" aria-describedby="phone-description">
-        <div class="phone-card"><span class="brand-mark">${icon("compass")}</span><span class="eyebrow">PATROL / COMMAND DESK</span>
-        <div class="laptop-art" aria-hidden="true"><span></span></div>
-        <h1 id="phone-title" tabindex="-1">Your command desk<br>needs a bigger screen.</h1>
-        <p id="phone-description">Please open Patrol on a laptop or desktop to play.</p><span class="phone-url">${CONFIG.hosting.productionOrigin.replace(/^https?:\/\//, "")}${CONFIG.hosting.basePath.replace(/\/$/, "")}</span></div>
-      </section>`);
+      <section id="case-briefing" class="modal-backdrop case-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="case-title" tabindex="-1"><div class="case-card"></div></section>
+`);
     this.tutorial = document.getElementById("tutorial")!;
-    this.gate = document.getElementById("phone-gate")!;
     this.caseModal = document.getElementById("case-briefing")!;
-    window.addEventListener("resize", this.updateGate);
-    this.coarsePointer.addEventListener("change", this.updateGate);
     document.addEventListener("keydown", (event) => {
       if (!this.blocked) return;
       // Capture prevents game shortcuts from firing through a modal.
       event.stopImmediatePropagation();
       if (event.key === "Tab") this.trapFocus(event);
-      else if (!this.phone && event.key === "Escape") this.tutorialOpen ? this.finish("escape") : this.beginCase("escape");
-      else if (!this.phone && this.tutorialOpen && event.key === "ArrowRight") { event.preventDefault(); this.next(); }
-      else if (!this.phone && this.tutorialOpen && event.key === "ArrowLeft" && this.index > 0) { event.preventDefault(); track("tutorial_navigate", { action: "back", slide_number: this.index + 1, slide_id: slides[this.index].asset }); this.index--; this.renderSlide(); }
+      else if (event.key === "Escape") this.tutorialOpen ? this.finish("escape") : this.beginCase("escape");
+      else if (this.tutorialOpen && event.key === "ArrowRight") { event.preventDefault(); this.next(); }
+      else if (this.tutorialOpen && event.key === "ArrowLeft" && this.index > 0) { event.preventDefault(); track("tutorial_navigate", { action: "back", slide_number: this.index + 1, slide_id: slides[this.index].asset }); this.index--; this.renderSlide(); }
     }, true);
     if (this.tutorialOpen) track("tutorial_begin", { entry: "first_visit" });
     this.renderSlide(false);
-    this.updateGate();
     this.sync();
   }
 
-  get blocked() { return this.phone || this.tutorialOpen || !!this.briefing; }
-  get phoneBlocked() { return this.phone; }
+  get blocked() { return this.tutorialOpen || !!this.briefing; }
 
   showCase(briefing: MissionBriefing) {
     this.briefing = briefing;
@@ -106,7 +89,7 @@ export class Onboarding {
   }
 
   private beginCase(reason: string) {
-    if (!this.briefing || this.phone) return;
+    if (!this.briefing) return;
     track("case_intro_start", { reason, duration_ms: Math.round(performance.now() - this.caseOpenedAt) });
     this.briefing = null;
     this.sync();
@@ -126,7 +109,6 @@ export class Onboarding {
   }
 
   private finish(reason = "skip") {
-    if (this.phone) return;
     this.tutorialOpen = false;
     track(reason === "complete" ? "tutorial_complete" : "tutorial_skip", { reason, slide_number: this.index + 1, duration_ms: Math.round(performance.now() - this.tutorialOpenedAt) });
     try { localStorage.setItem(storageKey, "complete"); } catch { /* An unavailable store only means another first-visit briefing. */ }
@@ -138,37 +120,30 @@ export class Onboarding {
     else { track("tutorial_navigate", { action: "next", slide_number: this.index + 1, slide_id: slides[this.index].asset }); this.index++; this.renderSlide(); }
   }
 
-  private updateGate = () => {
-    const next = needsLaptop(window.innerWidth, Math.min(screen.width, screen.height), this.coarsePointer.matches);
-    if (this.phone === next) return;
-    this.phone = next;
-    track(next ? "device_gate_view" : "device_gate_exit", { width_px: innerWidth, height_px: innerHeight, orientation: innerWidth > innerHeight ? "landscape" : "portrait" });
-    this.sync();
-  };
-
   private sync() {
     const app = document.getElementById("app")!;
     if (this.blocked && !app.inert) this.previousFocus = document.activeElement as HTMLElement;
     app.inert = this.blocked;
-    this.gate.hidden = !this.phone;
-    const showTutorial = !this.phone && this.tutorialOpen;
+    const showTutorial = this.tutorialOpen;
     this.tutorial.hidden = !showTutorial;
     if (showTutorial && !this.tutorialVisible) track("tutorial_slide_view", { slide_id: slides[this.index].asset, slide_number: this.index + 1 });
     this.tutorialVisible = showTutorial;
-    const showCase = !this.phone && !this.tutorialOpen && !!this.briefing;
+    const showCase = !this.tutorialOpen && !!this.briefing;
     this.caseModal.hidden = !showCase;
     if (showCase && !this.caseVisible) { this.caseOpenedAt = performance.now(); track("case_intro_view", { entry: this.briefing!.entry }); }
     this.caseVisible = showCase;
     this.onBlockingChange();
-    if (this.phone) document.getElementById("phone-title")!.focus();
-    else if (this.tutorialOpen) this.tutorial.querySelector<HTMLButtonElement>("#tutorial-next")?.focus();
+    if (this.tutorialOpen) this.tutorial.querySelector<HTMLButtonElement>("#tutorial-next")?.focus();
     else if (showCase) this.caseModal.querySelector<HTMLButtonElement>("#case-start")?.focus();
-    else if (this.previousFocus?.isConnected) this.previousFocus.focus();
+    else if (this.previousFocus?.isConnected) {
+      const closedMenu = this.previousFocus.closest<HTMLDetailsElement>("details:not([open])");
+      (closedMenu?.querySelector<HTMLElement>("summary") ?? this.previousFocus).focus({ preventScroll: true });
+    }
   }
 
   private renderSlide(focus = true) {
     const slide = slides[this.index];
-    if (this.tutorialVisible && !this.phone) track("tutorial_slide_view", { slide_id: slide.asset, slide_number: this.index + 1 });
+    if (this.tutorialVisible) track("tutorial_slide_view", { slide_id: slide.asset, slide_number: this.index + 1 });
     this.tutorial.querySelector(".tutorial-card")!.innerHTML = `
       <div class="tutorial-top"><span class="tutorial-brand">${icon("compass")}PATROL BRIEFING</span><button id="tutorial-skip" class="text-button">Skip tutorial</button></div>
       <div class="tutorial-visual"><picture><source media="(prefers-reduced-motion: reduce)" srcset="${import.meta.env.BASE_URL}tutorial/${slide.asset}.png"><img src="${import.meta.env.BASE_URL}tutorial/${slide.asset}.gif" alt="${slide.alt}" width="${CONFIG.tutorial.animation.widthPx}" height="${CONFIG.tutorial.animation.heightPx}"></picture><span class="visual-label">FIELD SIMULATION / ${String(this.index + 1).padStart(2, "0")}</span></div>
@@ -177,13 +152,13 @@ export class Onboarding {
     this.tutorial.querySelector("#tutorial-next")!.addEventListener("click", () => this.next());
     this.tutorial.querySelector("#tutorial-back")!.addEventListener("click", () => { if (this.index > 0) { track("tutorial_navigate", { action: "back", slide_number: this.index + 1, slide_id: slides[this.index].asset }); this.index--; this.renderSlide(); } });
     this.tutorial.querySelector("#tutorial-skip")!.addEventListener("click", () => this.finish());
-    if (focus && !this.phone) this.tutorial.querySelector<HTMLButtonElement>("#tutorial-next")!.focus();
+    if (focus) this.tutorial.querySelector<HTMLButtonElement>("#tutorial-next")!.focus();
   }
 
   private trapFocus(event: KeyboardEvent) {
-    const modal = this.phone ? this.gate : this.tutorialOpen ? this.tutorial : this.caseModal;
+    const modal = this.tutorialOpen ? this.tutorial : this.caseModal;
     const controls = [...modal.querySelectorAll<HTMLElement>("button:not(:disabled), [tabindex='0']")];
-    if (!controls.length) { event.preventDefault(); document.getElementById("phone-title")!.focus(); return; }
+    if (!controls.length) { event.preventDefault(); modal.focus(); return; }
     const first = controls[0], last = controls.at(-1)!;
     if (!modal.contains(document.activeElement) || (event.shiftKey && document.activeElement === first)) { event.preventDefault(); last.focus(); }
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }

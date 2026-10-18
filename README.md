@@ -20,7 +20,7 @@ allows this browser origin. Select a white border post to highlight its border,
 then choose the squad to send there. Clicking a squad without a selected open
 post brings it into view without issuing an order. Number keys choose squads;
 Escape clears the selected post. Games start moderately zoomed around the
-fugitive. Country view fits the entire zone, and Find fugitive centres and zooms to the fugitive. The selected squad’s
+fugitive. The selected squad’s
 post receives a bright ring; the counters sit on the right side of the map.
 
 New campaigns use the device timezone to choose a supported opening country:
@@ -42,9 +42,16 @@ and later hunts run without guidance. Existing off-sequence saves are left alone
 After guidance is skipped or completed, **How to play** opens the optional
 five-slide animated reference. It pauses an in-progress move until closed.
 Reduced-motion visitors see static reference posters and a stationary pointer.
-Phones show a non-dismissible
-message asking the player to open Patrol on a laptop or desktop, including in
-landscape. Narrow desktop windows show the same message until enlarged.
+Phones, tablets, and desktop windows share the full game. On small screens,
+Hint stays on the map; **More** contains Case file,
+How to play, Restart, Previous hunt, and the best score. Select border posts
+directly on the map; pan and pinch to explore. Pick a post, then a squad; the dock's **Clear selected post and
+squad** control cancels a selection without spending a move. On mobile, selecting a post opens the squad picker at the bottom. Clearing the
+selection closes it; an active move shows only the journey strip. Hint rests
+near the bottom and moves above the picker while it is open.
+The logo/country bar and +/− zoom buttons are hidden on phones, including
+landscape; the large moves counter is centered at the top with More at the right. Use pinch gestures to zoom. Desktop and larger tablets retain country
+selection and zoom buttons. Rotation and browser resizing preserve the current chase.
 
 **Show hint** provides four recommendations per browser without spending moves,
 points, or game time. The button shows the remaining count. Using the final hint
@@ -132,8 +139,9 @@ the original assets intact. India uses its own khaki police uniform, cotton
 kurta, Indian street scene and default officer; USA and Hungary share the
 existing illustration. Artwork follows the capture report's country, with a
 separate cache per preset. Artwork and masks are prepared only when opened,
-then reused during editing. The full clipping and primary Share action fit in
-the desktop editor's initial view.
+then reused during editing. The phone editor stacks the clipping preview and personalization controls;
+Close/Skip and Share/Download remain outside the scrolling content, including
+when the keyboard opens. The desktop editor retains its two-column layout.
 Native file sharing includes an invitation to https://rohittp.com/patrol; browsers
 without file sharing download the PNG and offer invitation text to copy.
 
@@ -144,7 +152,7 @@ the photo clears the saved crop. Storage failure leaves export available.
 
 ## Analytics and performance
 
-PostHog covers the entry, tutorial, device gate, case introductions,
+PostHog covers the entry, tutorial, case introductions,
 country loading, selections, moves, hints, outcomes, historical sources, and
 newspaper creation/export/share journey. The central research contract is
 [src/telemetry/events.ts](src/telemetry/events.ts): every event, allowed parameter,
@@ -156,11 +164,14 @@ enabled in the SDK; the project's Record user sessions setting must also be on.
 
 ## Tuning and validation
 
+[Mobile web notes](docs/mobile-web.md) describe the responsive controls, browser
+regression commands, review fixes, measurements, and device verification limits.
+
 - [CONTEXT.md](CONTEXT.md) defines the game vocabulary and rules.
 - [src/game/playtest.config.ts](src/game/playtest.config.ts) contains documented
   tuning values, including speeds, playback, squad counts, budgets, colours,
   map tolerances, the ordered country list, hint search limits, tutorial version,
-  GIF dimensions/timing, and phone detection thresholds.
+  GIF dimensions/timing, and interface interaction/camera tuning.
 - [docs/level-design.md](docs/level-design.md) explains compiled geometry,
   navigation, source attribution, and prototype limitations.
 

@@ -1,0 +1,90 @@
+/* Modal content scrolls independently; navigation stays reachable on short screens. */
+#tutorial, #case-briefing {
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  overscroll-behavior: contain;
+}
+#tutorial .tutorial-card, #case-briefing .case-card {
+  max-height: calc(var(--visual-viewport-height, 100dvh) - max(12px, env(safe-area-inset-top)) - max(12px, env(safe-area-inset-bottom)));
+  overscroll-behavior: contain;
+  scroll-padding: 70px 0;
+}
+#tutorial .tutorial-top, #tutorial .tutorial-footer {
+  position: sticky;
+  z-index: 1;
+  background: #102126;
+}
+#tutorial .tutorial-top { top: 0; }
+#tutorial .tutorial-footer { bottom: 0; padding-top: 12px; border-top: 1px solid var(--line); }
+#tutorial button, #case-briefing button, .hunt-guide .guide-skip { min-height: 44px; }
+#case-briefing .case-footer {
+  position: sticky;
+  bottom: -26px;
+  background: #14252a;
+  padding-bottom: 16px;
+}
+.hunt-guide {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.hunt-guide .guide-card {
+  max-width: calc(var(--visual-viewport-width, 100vw) - 32px - env(safe-area-inset-left) - env(safe-area-inset-right));
+  overflow: auto;
+  overscroll-behavior: contain;
+  scroll-padding-top: 52px;
+}
+.hunt-guide .guide-pointer { pointer-events: none; }
+.hunt-guide .guide-card-top { position: sticky; top: 0; z-index: 1; background: #102126; margin-bottom: 8px; }
+.hunt-guide .guide-skip { padding: 8px 0 8px 8px; }
+
+@media (max-width: 600px) {
+  #tutorial .tutorial-top { padding: 6px 16px; gap: 8px; }
+  #tutorial .tutorial-brand { font-size: 8px; letter-spacing: .8px; }
+  #tutorial .tutorial-top .text-button { font-size: 10px; }
+  #tutorial .tutorial-visual img { max-height: 26dvh; }
+  #tutorial .visual-label { left: 16px; bottom: 6px; }
+  #tutorial .tutorial-copy { padding: 18px 20px; }
+  #tutorial .tutorial-copy h2 { font-size: 25px; }
+  #tutorial .tutorial-copy p { line-height: 1.65; }
+  #tutorial .tutorial-note { margin-top: 14px; padding: 10px 12px; }
+  #tutorial .tutorial-footer { padding: 10px 16px; gap: 12px; }
+  #tutorial .tutorial-footer .primary-button { min-width: 105px; padding: 12px; }
+  #tutorial .tutorial-progress { gap: 5px; }
+  #case-briefing .case-card { padding: 18px 20px 0; }
+  #case-briefing .case-top { padding-bottom: 14px; gap: 12px; font-size: 8px; }
+  #case-briefing .case-content { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 18px 0; }
+  #case-briefing .case-portrait { width: min(120px, 35vw); justify-self: center; }
+  #case-briefing .case-portrait span { font-size: 8px; margin-top: 9px; letter-spacing: 2px; }
+  #case-briefing .case-story h2 { font-size: 28px; margin-top: 10px; }
+  #case-briefing .case-story h3 { line-height: 1.4; }
+  #case-briefing .case-assignment { padding: 12px; }
+  #case-briefing .case-footer { bottom: 0; flex-direction: column-reverse; gap: 10px; align-items: stretch; padding-top: 14px; }
+  #case-briefing .case-footer .primary-button { justify-content: center; }
+  #case-briefing .case-footer small { max-width: none; font-size: 9px; }
+  .hunt-guide .guide-card { width: calc(100vw - 32px - env(safe-area-inset-left) - env(safe-area-inset-right)); padding: 10px 14px 12px; }
+  .hunt-guide .guide-card-top { gap: 8px; margin-bottom: 2px; }
+  .hunt-guide .guide-card-top .eyebrow { font-size: 7px; }
+  .hunt-guide .guide-card h2 { font-size: 20px; margin: 5px 0 7px; }
+  .hunt-guide .guide-card p { font-size: 12px; line-height: 1.45; }
+  .hunt-guide .guide-footnote { margin-top: 10px; padding-top: 8px; font-size: 10px; }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  #tutorial .tutorial-card { width: min(690px, 100%); }
+  #tutorial .tutorial-top { padding: 3px 20px; }
+  #tutorial .tutorial-visual img { max-height: 34dvh; }
+  #tutorial .tutorial-copy { padding: 14px 22px; }
+  #tutorial .tutorial-copy h2 { font-size: 24px; }
+  #tutorial .tutorial-footer { padding: 6px 20px; }
+  #case-briefing .case-card { padding-top: 16px; }
+  #case-briefing .case-content { padding: 16px 0; gap: 20px; grid-template-columns: 100px minmax(0, 1fr); }
+  #case-briefing .case-portrait { width: 100px; }
+  #case-briefing .case-story h2 { font-size: 25px; margin-top: 8px; }
+  #case-briefing .case-portrait span { font-size: 8px; letter-spacing: 1px; }
+  #case-briefing .case-footer { padding-top: 10px; }
+  .hunt-guide .guide-card { width: min(var(--guide-width), 38vw); padding: 8px 12px 10px; }
+  .hunt-guide .guide-card-top { margin-bottom: 0; gap: 4px; }
+  .hunt-guide .guide-card-top .eyebrow { display: none; }
+  .hunt-guide .guide-skip { margin-left: auto; }
+  .hunt-guide .guide-card h2 { font-size: 18px; margin: 5px 0 7px; }
+  .hunt-guide .guide-card p { font-size: 11px; line-height: 1.4; }
+  .hunt-guide .guide-footnote { margin-top: 8px; padding-top: 6px; font-size: 10px; }
+}

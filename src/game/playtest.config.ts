@@ -160,9 +160,7 @@ export const PLAYTEST_CONFIG = {
       minimumInlandLakeAreaKm2: 500,
     },
 
-    /** STARTER: camera edge margin in CSS pixels; HUD clearance is added automatically. */
-    fitPaddingPx: 50,
-    /** STARTER: minimum zoom when using Focus runner; a closer zoom is preserved. */
+    /** STARTER: closest zoom allowed when fitting a starting or guided chase view, >= 0. */
     runnerFocusZoom: 7,
     /** STARTER: camera transition duration in milliseconds when revealing an actor. */
     focusDurationMs: 600,
@@ -352,15 +350,12 @@ export const PLAYTEST_CONFIG = {
     animation: { widthPx: 640, heightPx: 360, framesPerSecond: 10, durationSeconds: 6 },
   },
 
-  deviceGate: {
-    /** AGREED: phones get a non-dismissible request to play on a laptop. */
-    enabled: true,
-    /** STARTER: maximum viewport width in CSS pixels for the small-screen gate.
-     * Narrow desktop windows also show the message until enlarged. */
-    maxViewportWidthPx: 767,
-    /** STARTER: maximum short screen side for coarse-pointer devices, in CSS
-     * pixels. Keeps phones blocked in landscape; larger tablets are allowed. */
-    maxTouchScreenShortSidePx: 767,
+  interface: {
+    /** STARTER: CSS-pixel clearance between visible controls and camera framing, >= 0. */
+    mapClearancePx: 12,
+    /** STARTER: maximum pointer displacement in CSS pixels for selecting a post, > 0.
+     * Longer drags belong to map navigation and must not select a destination. */
+    postTapSlopPx: 10,
   },
 
   poster: {

@@ -76,7 +76,7 @@ Suggested funnels:
 The in-game tutorial uses `guide_begin`, `guide_step_view`, `guide_skip`, and
 `guide_complete`. Break down step views by `guide_move` and `guide_step` (post,
 squad, moving) to find where players stop. A step view means its actual target was
-visible; hiding it behind a case card, help, or device gate emits no step view.
+visible; hiding it behind a case card or help emits no step view.
 Completion means the verified guided capture, while skipping preserves the chase.
 The optional slide reference retains the separate `tutorial_*` events.
 
@@ -169,3 +169,10 @@ Movement events fire on issue, arrival, and resolution. Crop events fire after g
 not while dragging. SDK loading is separate from gameplay chunks.
 [PostHog configuration](https://posthog.com/docs/libraries/js/config)
 documents the SDK controls.
+
+## Mobile presentation
+
+Phones and narrow windows now enter the same campaign; the old
+`device_gate_view` and `device_gate_exit` events are no longer emitted.
+`app_open` retains viewport dimensions for entry comparisons. No separate mobile
+game rules, storage schema, or survey audience is introduced.
