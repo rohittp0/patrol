@@ -3,20 +3,49 @@ import { PLAYTEST_CONFIG as CONFIG } from "./game/playtest.config";
 import { GAME_URL, newspaperCopy, playerName } from "./poster-content";
 import { removePortraitBackground } from "./game/portrait-matte";
 import { newspaperPaper } from "./poster-paper";
+import { portraitBounds, sceneInk, type PortraitBounds } from "./poster-image";
 
 export const newspaperArtwork = (country: string) => CONFIG.poster.artwork[country === "india" ? "india" : "shared"];
-export interface NewspaperAssets { scene: HTMLImageElement; officer: HTMLImageElement; mastheadFamily: string; artwork: ReturnType<typeof newspaperArtwork> }
+interface PrintedPortrait { canvas: HTMLCanvasElement; bounds: PortraitBounds }
+export interface NewspaperAssets { scene: HTMLCanvasElement; officer: PrintedPortrait; mastheadFamily: string; artwork: ReturnType<typeof newspaperArtwork> }
 const assetsByArtwork = new Map<string, Promise<NewspaperAssets>>();
 let mastheadPromise: Promise<string> | null = null;
-const portraitCache = new WeakMap<HTMLImageElement, HTMLCanvasElement>();
+const portraitCache = new WeakMap<HTMLImageElement, PrintedPortrait>();
+const playerCache = new WeakMap<HTMLImageElement | HTMLCanvasElement, PrintedPortrait>();
 
-function printPortrait(image: HTMLImageElement): HTMLCanvasElement {
-  const cached = portraitCache.get(image); if (cached) return cached;
-  const canvas = document.createElement("canvas"); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
-  const ctx = canvas.getContext("2d")!; ctx.drawImage(image, 0, 0);
+function printPortrait(image: HTMLImageElement | HTMLCanvasElement, drawn: boolean, officer = false): PrintedPortrait {
+  const cached = drawn ? portraitCache.get(image as HTMLImageElement) : playerCache.get(image);
+  if (cached) return cached;
+  const canvas = document.createElement("canvas");
+  canvas.width = image instanceof HTMLImageElement ? image.naturalWidth : image.width;
+  canvas.height = image instanceof HTMLImageElement ? image.naturalHeight : image.height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true })!; ctx.drawImage(image, 0, 0);
   const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  removePortraitBackground(pixels.data, canvas.width, canvas.height, CONFIG.poster.portraitMatteTolerance);
-  ctx.putImageData(pixels, 0, 0); portraitCache.set(image, canvas); return canvas;
+  if (drawn) removePortraitBackground(pixels.data, canvas.width, canvas.height, CONFIG.poster.portraitMatteTolerance);
+  const neck = CONFIG.poster.officerNeck;
+  for (let y = 0; y < canvas.height; y++) for (let x = 0; x < canvas.width; x++) {
+    const i = (y * canvas.width + x) * 4, data = pixels.data;
+    if (officer && (y >= canvas.height * neck.bottom ||
+      (y >= canvas.height * neck.shoulderY && (x < canvas.width * neck.left || x >= canvas.width * neck.right)))) data[i + 3] = 0;
+    // Prepare once; the final compositor needs neither filters nor blend modes.
+    data[i] = data[i + 1] = data[i + 2] = .2126 * data[i] + .7152 * data[i + 1] + .0722 * data[i + 2];
+  }
+  const bounds = drawn ? portraitBounds(pixels.data, canvas.width, canvas.height) : { x: 0, y: 0, width: canvas.width, height: canvas.height };
+  ctx.putImageData(pixels, 0, 0);
+  const printed = { canvas, bounds };
+  if (drawn) portraitCache.set(image as HTMLImageElement, printed); else playerCache.set(image, printed);
+  return printed;
+}
+
+function printScene(image: HTMLImageElement): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.min(image.naturalWidth, CONFIG.poster.sceneRasterWidthPx);
+  canvas.height = Math.round(canvas.width * image.naturalHeight / image.naturalWidth);
+  const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  sceneInk(pixels.data); ctx.putImageData(pixels, 0, 0);
+  return canvas;
 }
 
 /** The illustration and locally hosted font load only when the editor opens.
@@ -24,10 +53,10 @@ function printPortrait(image: HTMLImageElement): HTMLCanvasElement {
 export function prepareNewspaperAssets(country: string): Promise<NewspaperAssets> {
   const artwork = newspaperArtwork(country), cached = assetsByArtwork.get(artwork.id);
   if (cached) return cached;
-  const image = (path: string) => new Promise<HTMLImageElement>((resolve, reject) => {
-    const value = new Image(); value.onload = () => resolve(value); value.onerror = reject;
-    value.src = `${import.meta.env.BASE_URL}${path}`;
-  });
+  const image = async (path: string) => {
+    const value = new Image(); value.src = `${import.meta.env.BASE_URL}${path}`;
+    await value.decode(); return value;
+  };
   const masthead = async () => {
     try {
       const font = new FontFace("PatrolMasthead", `url("${import.meta.env.BASE_URL}fonts/UnifrakturCook-Bold.ttf")`, { weight: "700" });
@@ -36,7 +65,7 @@ export function prepareNewspaperAssets(country: string): Promise<NewspaperAssets
   };
   mastheadPromise ??= masthead();
   const promise = Promise.all([image(artwork.scenePath), image(artwork.officerPath), mastheadPromise])
-    .then(([scene, officer, mastheadFamily]) => ({ scene, officer, mastheadFamily, artwork }))
+    .then(([scene, officer, mastheadFamily]) => ({ scene: printScene(scene), officer: printPortrait(officer, true, true), mastheadFamily, artwork }))
     .catch((error) => { assetsByArtwork.delete(artwork.id); throw error; });
   assetsByArtwork.set(artwork.id, promise);
   return promise;
@@ -139,27 +168,26 @@ export function drawNewspaper(canvas: HTMLCanvasElement, report: CaptureReport, 
 
   // The framed editorial illustration replaces the old flat vector cartoon.
   const photo = { x: 48, y: 456, width: 715, height: 430 };
-  const scale = Math.max(photo.width / assets.scene.naturalWidth, photo.height / assets.scene.naturalHeight);
-  const left = photo.x + (photo.width - assets.scene.naturalWidth * scale) / 2;
-  const top = photo.y + (photo.height - assets.scene.naturalHeight * scale) * CONFIG.poster.sceneVerticalAlign;
+  const scene = assets.scene;
+  const scale = Math.max(photo.width / scene.width, photo.height / scene.height);
+  const left = photo.x + (photo.width - scene.width * scale) / 2;
+  const top = photo.y + (photo.height - scene.height * scale) * CONFIG.poster.sceneVerticalAlign;
   ctx.save(); ctx.beginPath(); ctx.rect(photo.x, photo.y, photo.width, photo.height); ctx.clip();
-  ctx.filter = "grayscale(1)"; ctx.globalCompositeOperation = "multiply";
-  ctx.drawImage(assets.scene, left, top, assets.scene.naturalWidth * scale, assets.scene.naturalHeight * scale);
-  const head = (source: CanvasImageSource, placement: { x: number; y: number; radius: number }) => {
-    const x = left + placement.x * assets.scene.naturalWidth * scale;
-    const baseRadius = placement.radius * assets.scene.naturalWidth * scale, r = baseRadius * CONFIG.poster.headScale;
-    // Preserve the lower neck connection while enlarging the head upwards.
-    const y = top + placement.y * assets.scene.naturalHeight * scale - (r - baseRadius);
-    ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.clip();
-    ctx.globalCompositeOperation = "source-over";
-    ctx.drawImage(source, x - r, y - r, r * 2, r * 2); ctx.restore();
+  ctx.drawImage(scene, left, top, scene.width * scale, scene.height * scale);
+  const head = (portrait: PrintedPortrait, placement: { x: number; y: number; width: number; height: number }) => {
+    const box = portrait.bounds;
+    const fit = Math.min(placement.width * scene.width / box.width, placement.height * scene.height / box.height) * scale;
+    const width = box.width * fit, height = box.height * fit;
+    const x = left + placement.x * scene.width * scale - width / 2;
+    const y = top + placement.y * scene.height * scale - height;
+    ctx.drawImage(portrait.canvas, box.x, box.y, box.width, box.height, x, y, width, height);
   };
-  head(player ?? printPortrait(assets.officer), assets.artwork.sceneHeads.player);
-  head(printPortrait(fugitive), assets.artwork.sceneHeads.fugitive);
+  head(player ? printPortrait(player, false) : assets.officer, player ? assets.artwork.sceneHeads.playerPhoto : assets.artwork.sceneHeads.player);
+  head(printPortrait(fugitive, true), assets.artwork.sceneHeads.fugitive);
   // A light, regular screen unifies uploaded photos and the drawn scene in print.
   const screen = document.createElement("canvas"); screen.width = screen.height = 4;
   const screenCtx = screen.getContext("2d")!; screenCtx.fillStyle = "#17151118"; screenCtx.beginPath(); screenCtx.arc(1, 1, .4, 0, Math.PI * 2); screenCtx.fill();
-  ctx.filter = "none"; ctx.globalCompositeOperation = "source-over"; ctx.fillStyle = ctx.createPattern(screen, "repeat")!; ctx.fillRect(photo.x, photo.y, photo.width, photo.height);
+  ctx.fillStyle = ctx.createPattern(screen, "repeat")!; ctx.fillRect(photo.x, photo.y, photo.width, photo.height);
   ctx.restore();
   text("PATROL POST / ARTIST'S IMPRESSION", 763, 902, 10, sans, "right");
   block(copy.caption, { x: 48, y: 913, width: 715, height: 40 }, 17, serif, "italic", 1.15);

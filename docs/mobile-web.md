@@ -42,6 +42,7 @@ npx --yes --package @playwright/cli playwright-cli -s=patrol-mobile open http://
 npx --yes --package @playwright/cli playwright-cli -s=patrol-mobile run-code --filename=scripts/check-mobile.js
 npx --yes --package @playwright/cli playwright-cli -s=patrol-mobile run-code --filename=scripts/check-survey.js
 npx --yes --package @playwright/cli playwright-cli -s=patrol-mobile run-code --filename=scripts/check-newspaper.js
+npx --yes --package @playwright/cli playwright-cli -s=patrol-mobile run-code --filename=scripts/check-newspaper-art.js
 npx --yes --package @playwright/cli playwright-cli -s=patrol-mobile close
 ```
 
@@ -93,3 +94,29 @@ The CPU sample was higher while frame pacing remained similar. Tile preparation,
 map framing, and garbage collection were not isolated; these single samples do
 not establish CPU or retained-memory equivalence or an improvement. They are
 local desktop observations, not phone performance acceptance evidence.
+
+
+## Newspaper compositor verification — 2026-10-19
+
+- `npm test`: 95 passed; build and diff whitespace checks passed.
+- Renderer-only checks passed in desktop Chrome and WebKit: all 18 case
+  compositions, decode rejection, empty-raster rejection/retry, warm asset reuse,
+  officer collar masking, and unchanged player-crop pixels/printed scale.
+- Chrome mobile newspaper UI callback: 10 checks passed, including upload/crop,
+  exact latest 1200 × 1500 PNG, share activation/cancellation, download fallback,
+  and stale async export during close/reopen. No page errors were recorded.
+- Both review axes passed. The upload-scale concern was fixed by retaining a
+  separate circular-photo slot and checked visually in the generated gallery.
+
+An injected skipped filtered-multiply draw made the original scene disappear
+(body-region contrast 6.1 rather than 50.6). The new compositor retains the scene
+under that probe. This models the reported symptom; the OnePlus Chrome cause and
+physical-device outcome remain unverified. The renderer harness isolates the
+newspaper from game/map layout; it does not establish whole-app WebKit support.
+
+A single laptop Chrome baseline measured India/USA drawing at 32.9/16.7 ms;
+the same harness with prepared scene canvases measured 23.9/13.1 ms. Preparation
+is cached separately. These are individual samples, not device performance or
+frame-rate acceptance. The cached scene raster is 768 × 512 RGBA (1.5 MiB),
+compared with the 1536 × 1024 source (6 MiB); browser/GPU total memory remains
+unmeasured.

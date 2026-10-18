@@ -88,7 +88,7 @@ deadline is first observed, including after refresh, rather than at an exact
 time while the app is closed. Countdown ticks produce no events. The allowance
 is browser-wide and does not reset between hunts or countries.
 
-Every `poster_*` event carries `entry`, `newspaper_version` (currently 3), and
+Every `poster_*` event carries `entry`, `newspaper_version` (currently 4), and
 `newspaper_artwork`: `india_v1` for India or `shared_v3` for USA and Hungary.
 Compare automatic second-hunt impressions with optional result-card opens,
 and compare share/export conversion by design version and artwork. `poster_skip` means the

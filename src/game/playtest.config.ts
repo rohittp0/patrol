@@ -363,7 +363,7 @@ export const PLAYTEST_CONFIG = {
      * capture in each country. Zero-based index, in [0, setups.poolSize). */
     introductionHuntIndex: 1,
     /** STARTER: version of the clipping artwork/layout, attached to its funnel. */
-    designVersion: 3,
+    designVersion: 4,
     /** STARTER: exported newspaper dimensions, in pixels, at a 4:5 aspect ratio. */
     widthPx: 1200, heightPx: 1500,
     /** STARTER: player-name length in Unicode characters; keeps headlines legible. */
@@ -377,24 +377,30 @@ export const PLAYTEST_CONFIG = {
     /** STARTER: maximum per-channel difference (0–255) from corner ivory for
      * edge-connected newspaper portrait masking. Does not alter map artwork. */
     portraitMatteTolerance: 24,
-    /** STARTER: newspaper-only head enlargement relative to the calibrated
-     * scene slots, unitless and > 0. Scale upward from the neck connection. */
-    headScale: 1.15,
+    /** STARTER: decoded scene raster width, in pixels, > 0. Covers the 715px
+     * print panel while bounding the cached RGBA buffer to about 1.5 MiB. */
+    sceneRasterWidthPx: 768,
+    /** STARTER: default officer's neck mask, fractions of portrait dimensions
+     * in [0,1]. Keep the full face above shoulderY, only neck below it, and
+     * discard the portrait's shirt so the scene supplies the uniform. */
+    officerNeck: { shoulderY: .70, left: .34, right: .66, bottom: .86 },
     /** STARTER: vertical scene alignment in the photo crop, in [0,1].
      * 0 = top, 1 = bottom; top alignment leaves room for enlarged heads. */
     sceneVerticalAlign: 0,
     /** AGREED: India has its own illustration and default officer; USA and
      * Hungary share the existing art. Asset paths are relative to the base URL.
-     * STARTER: head centres are fractions of source width/height; radii are
-     * fractions of source width. All must be in [0,1]. Calibrate with the art. */
+     * STARTER: each head slot uses centre x and bottom-of-neck y; width/height
+     * bound the visible portrait. Fractions of scene width/height in [0,1].
+     * playerPhoto retains the circular crop's previous printed scale/neck join. */
     artwork: {
       shared: {
         id: "shared_v3",
         scenePath: "newspaper/arrest-scene-v3.webp",
         officerPath: "newspaper/officer-portrait.webp",
         sceneHeads: {
-          player: { x: 0.3236, y: 0.1807, radius: 0.081 },
-          fugitive: { x: 0.654, y: 0.1885, radius: 0.0795 },
+          player: { x: .3236, y: .335, width: .153, height: .322 },
+          playerPhoto: { x: .3236, y: .302, width: .1863, height: .2795 },
+          fugitive: { x: .654, y: .340, width: .153, height: .322 },
         },
       },
       india: {
@@ -402,8 +408,9 @@ export const PLAYTEST_CONFIG = {
         scenePath: "newspaper/arrest-scene-india-v1.webp",
         officerPath: "newspaper/officer-portrait-india-v1.webp",
         sceneHeads: {
-          player: { x: 0.3236, y: 0.1807, radius: 0.081 },
-          fugitive: { x: 0.654, y: 0.1885, radius: 0.0795 },
+          player: { x: .3236, y: .335, width: .153, height: .322 },
+          playerPhoto: { x: .3236, y: .302, width: .1863, height: .2795 },
+          fugitive: { x: .654, y: .340, width: .153, height: .322 },
         },
       },
     },

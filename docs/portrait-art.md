@@ -57,7 +57,7 @@ head crop is persisted.
   WebP.
 
 The original generated PNGs were converted to WebP for delivery. The scene's
-head centres and radii are documented in `PLAYTEST_CONFIG.poster.artwork`.
+neck anchors and visible head bounds are documented in `PLAYTEST_CONFIG.poster.artwork`.
 Artwork and the masthead font load only when the newspaper editor opens.
 
 ## Newspaper clipping, third version
@@ -136,10 +136,25 @@ when the editor opens, and cached by artwork ID. USA and Hungary share one cache
 entry; India's scene and officer have a separate entry. A failed preset load can
 be retried without clearing the other preset. The masthead font is shared.
 
-`PLAYTEST_CONFIG.poster.headScale` enlarges both the officer/player and fugitive
-heads to 115% of the calibrated slots, anchored at the lower neck connection.
-The photo crop aligns the scene at the top to preserve headroom. These are
-newspaper-only placement controls; the source portraits stay unchanged.
+The fourth compositor fits each visible portrait (excluding transparent ivory
+margins) into a width/height slot anchored at the bottom of its neck. These slots
+are fractions of each scene's dimensions in `PLAYTEST_CONFIG.poster.artwork`.
+The default officer's extra shoulders and shirt are masked below the jaw, so the
+scene supplies the uniform. Uploaded circular crops retain their chosen framing and previous printed size
+and neck join through a separate playerPhoto slot.
+The source images, map portraits, and saved photo crops stay unchanged.
+
+Scene images are explicitly decoded and prepared once at 768 × 512 pixels with a
+read-friendly canvas context. Grayscale scene pixels become black ink plus alpha;
+normal source-over reproduces multiply on the paper without a runtime canvas
+filter/blend draw. Portraits are also grayscaled once. A completely empty scene
+raster rejects preparation, and a failed preset can be retried. This bounds the
+cached scene buffer to 1.5 MiB, versus 6 MiB at the source resolution.
+
+`scripts/check-newspaper-art.js` checks all 18 cases, failed-raster retry, and an
+injected dropped filtered-multiply draw. That injection models the heads-only
+symptom; it does not establish the cause on the reported OnePlus Chrome device.
+The physical device still needs a retest of this renderer.
 
 Exact India scene edit prompt:
 
