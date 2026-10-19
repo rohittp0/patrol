@@ -152,6 +152,12 @@ the photo clears the saved crop. Storage failure leaves export available.
 
 ## Analytics and performance
 
+Meta Pixel `1412945137121409` records page views, hunt starts/resumes and outcomes,
+captures, guided tutorial completion, and newspaper downloads/successful shares.
+It follows the production/debug telemetry gate and sends no player profile data.
+See [the telemetry contract](docs/telemetry.md#meta-pixel) for event definitions,
+Meta's browser attribution behavior, and verification instructions.
+
 PostHog covers the entry, tutorial, case introductions,
 country loading, selections, moves, hints, outcomes, historical sources, and
 newspaper creation/export/share journey. The central research contract is

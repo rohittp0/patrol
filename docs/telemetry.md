@@ -6,6 +6,68 @@ There are no service-account credentials. Analytics runs on `https://rohittp.com
 after idle time; local development does not send events by default. Change
 documented controls in `src/game/playtest.config.ts` under `telemetry`.
 
+## Meta Pixel
+
+`src/telemetry/meta-pixel.ts` initializes the owner's public pixel
+`1412945137121409` using the asynchronous Meta bootstrap. It uses the same
+production/development/debug gate as PostHog, but starts independently so a
+blocked PostHog SDK does not drop Meta events. Ordinary local playtests send no
+Meta requests. `?telemetry_debug=1` enables **both live providers**, including on
+localhost; use request interception for automated tests to avoid fake conversions.
+
+| Meta event | Patrol trigger | Meaning |
+| --- | --- | --- |
+| `PageView` (standard) | Pixel initialization | Once per document load, including refresh. |
+| `GameStart` | `level_start` | A new hunt attempt is prepared, including retries and replays. |
+| `GameResume` | `game_resume` | Saved chase restored; not a new attempt or completion. |
+| `GameCompleted` | `level_end` | Hunt ends by capture or loss; `success` is 1 or 0. |
+| `GameWon` | `level_end` with `success = 1` | Capture conversion only. |
+| `TutorialCompleted` | `guide_complete` | Opening guided hunt completed; not the optional help slides. |
+| `NewspaperDownloaded` | `poster_download` | PNG handed to the browser, including share fallback downloads. |
+| `NewspaperShared` | Successful `poster_share_result` | Native share API resolved; no claim of recipient delivery. |
+
+All gameplay events are custom Meta events, scoped to this pixel with
+`trackSingleCustom`. Completion means **one hunt**, not finishing the campaign:
+the current campaign loops. Existing attempt outcome guards prevent repeated
+renders or refreshing a completed save from emitting another completion. A replay
+is a new attempt and can produce another conversion. Wins emit both completion
+and capture events; use `GameWon` alone when counting captures.
+
+Only selected gameplay properties are forwarded: country, case/setup IDs,
+campaign position/opening country, move counts, squad count, success, score,
+outcome reason, elapsed seconds, hints used, entry and sharing method. Player
+names, profile IDs, attempt IDs, photos and survey answers are not passed to Meta.
+Automatic configuration is disabled before pixel initialization; no advanced
+matching data is supplied. Meta's SDK still handles its own browser identifiers,
+cookies, page URL/referrer and ad attribution. PostHog's URL/attribution scrubbing
+does not apply to Meta. There is no no-JavaScript image fallback because the game
+requires JavaScript and an unconditional image would bypass the runtime gate.
+
+`window.__PATROL_TELEMETRY__.metaReady` means the bridge is installed, not that
+Meta has received an event. Ad blockers/network restrictions may prevent delivery;
+they must never interrupt a hunt or PostHog. After deployment, use Meta Events
+Manager Test Events / Pixel Helper with the pixel above to confirm receipt and
+configure a custom conversion for `GameWon` if required for ad optimization.
+Browser interception proves outbound payloads, not Events Manager ingestion.
+[Meta conversion tracking reference](https://developers.facebook.com/docs/meta-pixel/implementation/conversion-tracking/).
+
+Run `scripts/check-meta-pixel.js` with Playwright CLI `run-code --filename`
+against `npm run dev`. It creates and closes isolated contexts, intercepts Meta
+uploads, and checks local gating, real SDK payloads, a two-move guided capture,
+resume/outcome deduplication, download/share triggers, profile exclusion and a
+blocked pixel. Close the parent CLI browser session when finished.
+
+On 2026-10-19, these checks passed with zero application exceptions. An initial
+800 ms Chromium sample at a 390 × 844 viewport compared the same PostHog-blocked
+session with only the Meta bridge disabled/enabled. Cold/warm country preparation
+was 287/226 ms without Meta and 249/218 ms with it; frame rate was 109/111 versus
+111/110 FPS, and p95 frame time was 9.3/9.1 versus 9.3/10.5 ms. Main-thread task
+time over each sample was 232/193 versus 185/203 ms; JS heap was 36/45 versus
+29/48 MiB. A move with Meta enabled sampled 120 FPS, 8.6 ms p95, 222 ms task
+time and 48 MiB heap. These short observations are not a controlled performance
+benchmark. Physical-device CPU/memory, frame rates and native sharing remain
+unverified; the share check mocks successful native API resolution.
+
 ## Research entry point
 
 `src/telemetry/events.ts` is the canonical catalog: event names, descriptions,
