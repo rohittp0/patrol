@@ -92,7 +92,7 @@ export type PlayerAction =
   | { kind: "train"; squad: Specialist }
   | { kind: "selection"; selection: (SquadId | null)[] }
   | { kind: "prompt" };
-/** Shared validated transition. Server supplies its clock; clients cannot credit wins. */
+/** Browser game transition with an explicit clock for training and repeatable tests. */
 export function applyAction(
   current: PlayerState,
   action: PlayerAction,

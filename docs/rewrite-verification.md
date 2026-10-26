@@ -84,3 +84,42 @@ backend deployment permissions also need verification in the live workflow.
 Neither local emulator success nor a successful build establishes a production
 deployment. Real Google OAuth, production save continuation and map-resource
 access from the new domain need live acceptance after the backend is deployed.
+
+## Browser-owned saves update
+
+The user subsequently selected the simpler client-authoritative approach. The
+Functions source, dependency lockfile, build script and deployment configuration
+are removed. Browser code now performs progression transitions; Firestore stores
+one private document per authenticated player. Transactions, mutation IDs and a
+local checkpoint journal retain retry and device-conflict recovery.
+
+The earlier server-verification and server-clock observations above describe the
+superseded implementation. They do not apply to the simplified release. Its
+security boundary is private owner access and basic schema validation, with
+player-controlled money/results/clocks intentionally accepted. See ADR-0001.
+
+CI deploys Hosting with its existing permissions; Firestore rules are deployed
+using the owner's local Firebase CLI. This removes the need to grant the CI
+account Firebase Rules Admin or enable Blaze for Functions.
+
+The simplified version passed 109 unit tests, the direct-Firestore integration
+suite and three rules tests (including a full six-squad collection). The same
+41 browser checks passed with no page errors against Auth and Firestore emulators.
+The integration suite covers retry deduplication, partial-move restoration,
+training deadlines, Google account linking and a second simulated device,
+including rejection of stale writes.
+
+| Desktop emulation sample | Functions version | Direct Firestore |
+| --- | ---: | ---: |
+| Cache-disabled readiness | 729.8 ms | 137.8 ms |
+| Cache-enabled readiness | 62.7 ms | 59.5 ms |
+| Opening move wall time | 1,165 ms | 1,169 ms |
+| Median / p95 frame interval | 8.3 / 9.0 ms | 8.3 / 9.3 ms |
+| Browser task CPU in move sample | 171.4 ms | 163.2 ms |
+| Ending JS heap | 36.0 MiB | 38.7 MiB |
+| Production entry JS, gzip | 61 KB | 118 KB |
+
+These are separate single samples with browser cache disabled/enabled, not
+controlled server-cache or phone comparisons. Firestore's browser SDK increases
+the entry bundle; MapLibre remains deferred until gameplay. No statistical
+performance improvement is claimed.

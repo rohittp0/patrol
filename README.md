@@ -11,9 +11,7 @@ Use Node.js 22 and Java 21 or newer for the Firebase emulators.
 
 ```sh
 npm ci
-npm ci --prefix functions
-npm run build:functions
-firebase emulators:start --only auth,firestore,functions --project patrol-daac9
+firebase emulators:start --only auth,firestore --project patrol-daac9
 ```
 
 In another terminal:
@@ -24,8 +22,7 @@ VITE_FIREBASE_EMULATORS=1 npm run dev
 
 Open **http://localhost:3000/**. This uses local accounts and local Firestore,
 not production player saves. The development-only `?local=1` option is an isolated
-browser-local gameplay sandbox; its progress is not uploaded. Production builds
-always use the trusted Firebase backend.
+browser-local gameplay sandbox; its progress is not uploaded. Production builds save private player documents directly to Firestore.
 
 ## Campaign and squads
 
@@ -70,27 +67,29 @@ choice loads that save and preserves a browser-local guest backup; balances are
 never silently combined.
 
 Firestore stores the collection, wallet, results, selection, training deadlines
-and active attempt per UID. A restored chase is rebuilt from its commands and
+and active attempt per UID. A restored chase is rebuilt in the browser from its commands and
 partial move time. A local checkpoint journal recovers interrupted uploads after
 refresh. Conflicting device writes require a reload instead of overwriting newer
 progress. Prototype v1 saves are not converted or credited to the new campaign.
 
-Clients can read only their own player document. Only the callable backend can
-write game state: it derives prices/stats, uses server training deadlines,
-replays winning moves and atomically credits reward differences. Request receipts
-make interrupted/retried purchases and rewards idempotent. Server SDK writes
-bypass Firestore rules, so the callable also validates authentication, ownership,
-roster, level unlock, move log and expected save revision.
+Players can read and write only their own save. Firestore rules reject other
+players' access, listing, deletion, malformed top-level saves and stale revision
+updates. Transactions and mutation IDs recover interrupted uploads and prevent
+accidental duplicate operations or lost updates between tabs/devices.
+
+The browser calculates wins, rewards, purchases and training deadlines. This is
+a casual single-player trust model: players who deliberately modify their own
+save or system clock can cheat. The rules protect privacy and save structure;
+they do not prove gameplay results or enforce server-side training time. No
+Cloud Functions backend is required.
 
 ## Validation and tuning
 
 ```sh
 npm test
 npm run build
-npm run build:functions
-npx tsc --noEmit -p tsconfig.functions.json
 # With the emulators running:
-npm run test:backend
+npm run test:saves
 npm run test:rules
 # After changing rules, stats or campaign authoring:
 npm run prepare:campaign
@@ -129,20 +128,18 @@ npm ci
 firebase deploy --project patrol-daac9
 ```
 
-Cloud Functions deployment requires the project's **Blaze billing plan**. Billing
-was disabled when checked during implementation; enabling it remains an owner
-account action. Google and anonymous sign-in and the custom Auth domain have been
-configured, but real production Google login still needs a human acceptance run.
+This version uses Firebase Hosting, Authentication and Firestore, with no
+Functions deployment or Functions billing prerequisite. It can use the existing
+Spark project within its service quotas. Google and anonymous sign-in and the
+custom Auth domain are configured; real Google OAuth still needs a human
+acceptance run.
 
-Pushing `main` runs unit/build/emulator checks, then deploys Firestore rules,
-Functions and Hosting together. Pull requests run checks without production
-credentials. The existing `FIREBASE_SERVICE_ACCOUNT_PATROL_DAAC9` GitHub secret
-is used through Application Default Credentials. Its service account must have
-Cloud Functions/Cloud Run deployment and service-account-use permissions as well
-as Hosting and Firebase Rules permissions; the default Hosting-only account may
-need these granted by the project owner. Deployment failures stay visible and
-prevent the Hosting step from publishing a client without its backend.
+Pushing `main` runs unit/build/Auth-and-Firestore-emulator checks, then deploys
+Hosting using the existing `FIREBASE_SERVICE_ACCOUNT_PATROL_DAAC9` secret. CI
+keeps its existing Hosting permissions. Deploy security-rule changes locally
+with `firebase deploy --only firestore:rules --project patrol-daac9`, or deploy
+all configured services with the command above. Pull requests run the same
+checks without production credentials.
 
 The old GitHub Pages deployment workflow is removed. Existing Pages content is
-not deleted by this repository change. Roll back code and compatible campaign/
-backend versions together; never roll back to a release that trusts client money.
+not deleted by this repository change. Roll back compatible code, campaign and save-schema versions together.

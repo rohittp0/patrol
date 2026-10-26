@@ -164,4 +164,4 @@ async (basePage) => {
   } finally {
     await context.close();
   }
-};
+}

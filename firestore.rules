@@ -2,10 +2,53 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function owner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+    function validPlayer(p) {
+      return p is map
+        && p.keys().hasAll(['version', 'revision', 'wallet', 'unlocked', 'squads', 'results', 'selection', 'loginPrompted', 'firstPurchase'])
+        && p.keys().hasOnly(['version', 'revision', 'wallet', 'unlocked', 'squads', 'results', 'selection', 'loginPrompted', 'firstPurchase'])
+        && p.version == 2 && p.revision is int && p.revision >= 0
+        && p.wallet is int && p.wallet >= 0
+        && p.unlocked is int && p.unlocked >= 1 && p.unlocked <= 15
+        && p.squads is map
+        && p.squads.keys().hasAll(['patrol-1', 'patrol-2', 'patrol-3'])
+        && p.squads.keys().hasOnly(['patrol-1', 'patrol-2', 'patrol-3', 'rapid', 'helicopter', 'marksman'])
+        && p.results is map
+        && p.results.keys().hasOnly(['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15'])
+        && p.selection is list && p.selection.size() == 3
+        && p.loginPrompted is bool && p.firstPurchase is bool;
+    }
+    function validAttempt(a) {
+      return a == null || (a is map
+        && a.keys().hasAll(['id', 'level', 'selection', 'steps', 'setup', 'rules', 'moves'])
+        && a.keys().hasOnly(['id', 'level', 'selection', 'steps', 'setup', 'rules', 'moves'])
+        && a.id is string && a.id.size() <= 80
+        && a.level is int && a.level >= 1 && a.level <= 15
+        && a.selection is list && a.selection.size() == 3
+        && a.steps is list && a.steps.size() <= 3
+        && a.setup is map && a.rules is map
+        && a.moves is list && a.moves.size() <= 15);
+    }
+    // Browser-owned single-player progression. These checks protect ownership and
+    // document shape, not the honesty of a player's own money or game results.
+    function validSave(d) {
+      return d.keys().hasAll(['player', 'active', 'pendingHours', 'reward', 'lastMutationId', 'updatedAt'])
+        && d.keys().hasOnly(['player', 'active', 'pendingHours', 'reward', 'lastMutationId', 'updatedAt'])
+        && validPlayer(d.player) && validAttempt(d.active)
+        && (d.pendingHours == null || (d.pendingHours is number && d.pendingHours >= 0))
+        && d.reward is int && d.reward >= 0
+        && d.lastMutationId is string && d.lastMutationId.size() >= 10 && d.lastMutationId.size() <= 80
+        && d.updatedAt == request.time;
+    }
     match /players/{uid} {
-      allow get: if request.auth != null && request.auth.uid == uid;
-      // Economy and snapshots are written only by validated callable operations.
-      allow list, create, update, delete: if false;
+      allow get: if owner(uid);
+      allow list, delete: if false;
+      allow create: if owner(uid) && validSave(request.resource.data)
+        && request.resource.data.player.revision == 0;
+      allow update: if owner(uid) && validSave(request.resource.data)
+        && request.resource.data.player.revision == resource.data.player.revision + 1;
       match /{document=**} { allow read, write: if false; }
     }
     match /{document=**} { allow read, write: if false; }

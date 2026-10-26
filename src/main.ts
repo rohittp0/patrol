@@ -79,13 +79,11 @@ function errorText(error: unknown) {
       : "";
   if (
     [
-      "functions/unavailable",
-      "functions/not-found",
-      "functions/internal",
-      "functions/deadline-exceeded",
+      "unavailable",
+      "deadline-exceeded",
     ].includes(code)
   )
-    return "Progress service is unavailable. Your last confirmed save is safe. Retry when connected.";
+    return "Could not sync your save. Reconnect and reload to recover your pending changes.";
   if (
     code === "auth/popup-closed-by-user" ||
     code === "auth/cancelled-popup-request"
@@ -509,7 +507,7 @@ function showResult(won: boolean) {
   if (!panel || !game) return;
   panel.hidden = false;
   const previous = player().results[String(levelNumber)];
-  panel.innerHTML = `<span class="eyebrow">${won ? "ASSIGNMENT COMPLETE" : "REGROUP AND RETRY"}</span><h1>${won ? "Case closed." : "They got away."}</h1><p>${won ? `Captured in ${game.ordersUsed} moves. ${previous ? `Your best: ${previous.bestMoves} moves.` : ""}` : game.outcome.kind === "lost" && game.outcome.reason === "budget" ? "Your moves are up. Train your specialists or try a different approach." : "The fugitive crossed a land exit. A faster response could make the difference."}</p>${won ? `<div class="reward-display">${award === null ? "Confirming reward…" : `+ ◈ ${money(award)}`}</div><small>${award === 0 ? "No extra money: beat your best move count and reach a higher reward tier." : "Rewards are confirmed against your saved move history."}</small>` : ""}<div class="result-actions">${won && award === null ? button("Retry saving result", "retry-award", "data-network", "button primary full") : won && levelNumber < ECONOMY.levelCount ? button("Next level →", "next", "", "button primary full") : button(won ? "India complete · View levels" : "Choose squads and retry", "retry", "", "button primary full")}${button("Training academy", "academy", "", "text-button")}${button("Home", "home", "", "text-button")}</div>`;
+  panel.innerHTML = `<span class="eyebrow">${won ? "ASSIGNMENT COMPLETE" : "REGROUP AND RETRY"}</span><h1>${won ? "Case closed." : "They got away."}</h1><p>${won ? `Captured in ${game.ordersUsed} moves. ${previous ? `Your best: ${previous.bestMoves} moves.` : ""}` : game.outcome.kind === "lost" && game.outcome.reason === "budget" ? "Your moves are up. Train your specialists or try a different approach." : "The fugitive crossed a land exit. A faster response could make the difference."}</p>${won ? `<div class="reward-display">${award === null ? "Confirming reward…" : `+ ◈ ${money(award)}`}</div><small>${award === 0 ? "No extra money: beat your best move count and reach a higher reward tier." : "This result is saved with your campaign."}</small>` : ""}<div class="result-actions">${won && award === null ? button("Retry saving result", "retry-award", "data-network", "button primary full") : won && levelNumber < ECONOMY.levelCount ? button("Next level →", "next", "", "button primary full") : button(won ? "India complete · View levels" : "Choose squads and retry", "retry", "", "button primary full")}${button("Training academy", "academy", "", "text-button")}${button("Home", "home", "", "text-button")}</div>`;
 }
 async function hintAction() {
   if (!game || game.activeOrder || game.outcome.kind !== "playing" || hintBusy)
@@ -768,7 +766,7 @@ async function initialize() {
       board = await b.json();
       levels = (await c.json()).levels;
       navigation = new Navigation(board);
-      client = new ProgressClient(board, levels);
+      client = new ProgressClient(board, levels, navigation);
     }
     await client.load();
     if (location.hash === "#play" && client.response.active) {

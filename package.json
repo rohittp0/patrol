@@ -12,9 +12,8 @@
     "prepare:setups": "node --import tsx scripts/prepare-setups.ts",
     "prepare:tutorial": "node --import tsx scripts/prepare-tutorial.ts",
     "prepare:campaign": "node --import tsx scripts/prepare-campaign.ts",
-    "build:functions": "node scripts/build-functions.mjs",
     "test:rules": "node --import tsx --test scripts/firestore-rules.test.ts",
-    "test:backend": "node --import tsx --test scripts/backend.test.ts"
+    "test:saves": "node --import tsx --test scripts/firestore-progress.test.ts"
   },
   "dependencies": {
     "firebase": "12.6.0",
@@ -25,7 +24,6 @@
     "@firebase/rules-unit-testing": "^5.0.2",
     "@types/geojson": "^7946.0.16",
     "@types/node": "^22.0.0",
-    "esbuild": "^0.28.2",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
     "vite": "8.3.4"

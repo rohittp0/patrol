@@ -47,23 +47,12 @@
       }
     ]
   },
-  "functions": [
-    {
-      "source": "functions",
-      "codebase": "patrol",
-      "predeploy": ["npm --prefix functions ci", "npm run build:functions"],
-      "ignore": ["node_modules", "src", "*.log"]
-    }
-  ],
   "emulators": {
     "auth": {
       "port": 9099
     },
     "firestore": {
       "port": 8080
-    },
-    "functions": {
-      "port": 5001
     },
     "ui": {
       "enabled": false

@@ -51,3 +51,10 @@ implementation plan or a claim that the rewrite is complete.
   The user reports deploying Hosting and connecting the domain; live domain
   access was not verified in this interview environment.
 - Remove the newspaper and sharing features. Fugitive powerups are future scope.
+
+- The user chose browser-owned progression instead of a trusted Functions
+  backend. Browser code handles rewards, purchases, wins and training time;
+  authenticated players save directly to their private Firestore documents.
+  Deliberate cheating of a player's own progress is accepted for this release.
+  Transactions, save revisions and mutation IDs protect normal retry/concurrency
+  behavior. Firebase deployment uses Hosting and Firestore without Functions.

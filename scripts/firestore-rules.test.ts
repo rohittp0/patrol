@@ -1,4 +1,5 @@
 import test from "node:test";
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   initializeTestEnvironment,
@@ -13,7 +14,10 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  serverTimestamp,
+  Timestamp,
 } from "firebase/firestore";
+import { initialProgress } from "../src/game/player-progress";
 
 const environment = await initializeTestEnvironment({
   projectId: "patrol-daac9",
@@ -24,30 +28,88 @@ const environment = await initializeTestEnvironment({
   },
 });
 test.after(() => environment.cleanup());
-test("only the owner can read an individual player save; no client can write game state", async () => {
-  await environment.withSecurityRulesDisabled(async (context) => {
-    await setDoc(doc(context.firestore(), "players/rules-owner"), {
-      player: { wallet: 30 },
-    });
-  });
-  const owner = environment.authenticatedContext("rules-owner").firestore();
-  const other = environment.authenticatedContext("rules-other").firestore();
+const freshSave = () => ({
+  ...initialProgress(),
+  lastMutationId: crypto.randomUUID(),
+  updatedAt: serverTimestamp(),
+});
+
+test("owners can create and update their own well-formed saves, but cannot access other players", async () => {
+  const id = `rules-${crypto.randomUUID()}`;
+  const owner = environment.authenticatedContext(id).firestore();
+  const other = environment.authenticatedContext(`other-${id}`).firestore();
   const guest = environment.unauthenticatedContext().firestore();
-  await assertSucceeds(getDoc(doc(owner, "players/rules-owner")));
-  await assertFails(getDoc(doc(other, "players/rules-owner")));
-  await assertFails(getDoc(doc(guest, "players/rules-owner")));
+  const ref = doc(owner, "players", id);
+  await assertSucceeds(setDoc(ref, freshSave()));
+  await assertSucceeds(getDoc(ref));
+  // Deliberate casual-game trust boundary: owners control their own money.
+  await assertSucceeds(
+    updateDoc(ref, {
+      "player.wallet": 9999,
+      "player.revision": 1,
+      updatedAt: serverTimestamp(),
+    }),
+  );
+  assert.equal((await getDoc(ref)).data()!.player.wallet, 9999);
+  await assertFails(getDoc(doc(other, "players", id)));
+  await assertFails(getDoc(doc(guest, "players", id)));
+  await assertFails(setDoc(doc(other, "players", id), freshSave()));
+  await assertFails(setDoc(doc(guest, "players", id), freshSave()));
   await assertFails(getDocs(collection(owner, "players")));
+  await assertFails(deleteDoc(ref));
+  await assertFails(getDoc(doc(owner, "players", id, "receipts", "private")));
+});
+
+test("save rules reject stale revisions, malformed data and spoofed update times", async () => {
+  const id = `shape-${crypto.randomUUID()}`;
+  const db = environment.authenticatedContext(id).firestore(),
+    ref = doc(db, "players", id);
+  await assertSucceeds(setDoc(ref, freshSave()));
+  const invalid = [
+    { "player.revision": 0 },
+    { "player.wallet": -1, "player.revision": 1 },
+    { "player.unlocked": 16, "player.revision": 1 },
+    { "player.version": 3, "player.revision": 1 },
+    { "player.squads": "invalid", "player.revision": 1 },
+    { "player.selection": [], "player.revision": 1 },
+    { "player.loginPrompted": "yes", "player.revision": 1 },
+    { active: "invalid", "player.revision": 1 },
+    { reward: -1, "player.revision": 1 },
+    { pendingHours: -1, "player.revision": 1 },
+    { injected: true, "player.revision": 1 },
+  ];
+  for (const data of invalid)
+    await assertFails(
+      updateDoc(ref, { ...data, updatedAt: serverTimestamp() }),
+    );
   await assertFails(
-    updateDoc(doc(owner, "players/rules-owner"), { "player.wallet": 9999 }),
+    updateDoc(ref, {
+      "player.revision": 1,
+      updatedAt: Timestamp.fromMillis(0),
+    }),
   );
-  await assertFails(
-    setDoc(doc(owner, "players/rules-owner"), { player: { wallet: 9999 } }),
+  await assertSucceeds(
+    updateDoc(ref, {
+      "player.selection": [null, null, null],
+      "player.revision": 1,
+      updatedAt: serverTimestamp(),
+    }),
   );
-  await assertFails(deleteDoc(doc(owner, "players/rules-owner")));
-  await assertFails(
-    setDoc(doc(other, "players/rules-new"), { player: { wallet: 0 } }),
-  );
-  await assertFails(
-    getDoc(doc(owner, "players/rules-owner/receipts/private-receipt")),
+});
+
+test("a full six-squad collection and in-progress training fit the rules evaluation budget", async () => {
+  const id = `full-${crypto.randomUUID()}`;
+  const db = environment.authenticatedContext(id).firestore(),
+    ref = doc(db, "players", id);
+  const save = freshSave();
+  save.player.unlocked = 15;
+  for (const squad of ["rapid", "helicopter", "marksman"] as const)
+    save.player.squads[squad] = {
+      step: 3,
+      training: { step: 4, readyAt: Date.now() + 600000 },
+    };
+  await assertSucceeds(setDoc(ref, save));
+  await assertSucceeds(
+    updateDoc(ref, { "player.revision": 1, updatedAt: serverTimestamp() }),
   );
 });

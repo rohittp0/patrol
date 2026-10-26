@@ -2,7 +2,6 @@
 /out-tsc
 
 /node_modules
-/functions/node_modules
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -23,7 +22,6 @@ output/playwright/
 firebase-debug.log*
 firestore-debug.log*
 ui-debug.log*
-functions/lib/
 .env.local
 .env.*.local
 gha-creds-*.json

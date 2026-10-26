@@ -8,47 +8,43 @@ import {
   signInWithCredential,
   signOut,
 } from "firebase/auth";
-import {
-  connectFunctionsEmulator,
-  getFunctions,
-  httpsCallable,
-} from "firebase/functions";
+import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
 import { FIREBASE_CONFIG } from "./firebase.config";
 import {
-  applyAction,
-  awardWin,
-  newPlayer,
   settleTraining,
   type PlayerAction,
-  type PlayerState,
   type SquadId,
 } from "./game/collection";
 import {
-  createMission,
-  replayAttempt,
-  type Mission,
-  type MissionAttempt,
-} from "./game/missions";
+  advanceProgress,
+  initialProgress,
+  type PlayerProgress,
+  type ProgressMutation,
+} from "./game/player-progress";
+import type { Mission, MissionAttempt } from "./game/missions";
 import type { CountryBoard } from "./game/types";
+import type { Navigation } from "./game/navigation";
+import { ProgressStore } from "./progress-store";
 
-export interface ProgressResponse {
-  player: PlayerState;
-  active: MissionAttempt | null;
-  pendingHours: number | null;
-  reward: number;
-  serverNow: number;
+interface PendingSave {
+  uid: string;
+  input: ProgressMutation;
 }
+interface Checkpoint {
+  uid: string;
+  attemptId: string;
+  moves: MissionAttempt["moves"];
+  pendingHours: number | null;
+}
+type CachedProgress =
+  | PlayerProgress
+  | { uid: string; progress: PlayerProgress };
+
 const KEY = "patrol:progress:v2",
-  PENDING = "patrol:pending:v2";
-const CHECKPOINT = "patrol:checkpoint:v2";
+  PENDING = "patrol:pending:v2",
+  CHECKPOINT = "patrol:checkpoint:v2";
 export class ProgressClient {
-  response: ProgressResponse = {
-    player: newPlayer(),
-    active: null,
-    pendingHours: null,
-    reward: 0,
-    serverNow: Date.now(),
-  };
+  response: PlayerProgress = initialProgress();
   private app = initializeApp({
     ...FIREBASE_CONFIG,
     ...(location.hostname === "patrol.rohittp.com"
@@ -56,15 +52,18 @@ export class ProgressClient {
       : {}),
   });
   readonly auth = getAuth(this.app);
-  private functions = getFunctions(this.app, "asia-south1");
+  private db = getFirestore(this.app);
+  private store: ProgressStore;
   readonly local =
     import.meta.env.DEV &&
     new URLSearchParams(location.search).get("local") === "1";
-  private offset = 0;
   private serial: Promise<unknown> = Promise.resolve();
+  private volatile = new Map<string, string>();
+
   constructor(
     private board: CountryBoard,
     private levels: Mission[],
+    private navigation?: Navigation,
   ) {
     if (
       import.meta.env.DEV &&
@@ -73,8 +72,9 @@ export class ProgressClient {
       connectAuthEmulator(this.auth, "http://127.0.0.1:9099", {
         disableWarnings: true,
       });
-      connectFunctionsEmulator(this.functions, "127.0.0.1", 5001);
+      connectFirestoreEmulator(this.db, "127.0.0.1", 8080);
     }
+    this.store = new ProgressStore(this.db, board, levels, navigation);
   }
   get player() {
     return settleTraining(this.response.player, this.now());
@@ -83,168 +83,165 @@ export class ProgressClient {
     return !!this.auth.currentUser && !this.auth.currentUser.isAnonymous;
   }
   now() {
-    return Date.now() + this.offset;
+    return Date.now();
   }
-  private store() {
+  private get(key: string) {
     try {
-      localStorage.setItem(KEY, JSON.stringify(this.response));
+      return localStorage.getItem(key);
     } catch {
-      /* Server state remains authoritative. */
+      return this.volatile.get(key) ?? null;
     }
   }
-  private accept(response: ProgressResponse) {
+  private put(key: string, value: string) {
+    this.volatile.set(key, value);
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      /* Online saves still work if local storage is unavailable. */
+    }
+  }
+  private remove(key: string) {
+    this.volatile.delete(key);
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* Memory-only session. */
+    }
+  }
+  private read<T>(key: string): T | null {
+    try {
+      return JSON.parse(this.get(key) ?? "null") as T | null;
+    } catch {
+      this.remove(key);
+      return null;
+    }
+  }
+  private accept(response: PlayerProgress) {
     this.response = response;
-    this.offset = response.serverNow - Date.now();
-    this.store();
+    this.put(
+      KEY,
+      JSON.stringify({
+        uid: this.auth.currentUser?.uid ?? "local",
+        progress: response,
+      }),
+    );
     return response;
-  }
-  async load() {
-    if (this.local) {
-      try {
-        const saved = JSON.parse(localStorage.getItem(KEY) ?? "null");
-        if (saved?.player?.version === 2) this.response = saved;
-      } catch {
-        /* Fresh local test. */
-      }
-      return this.accept({ ...this.response, serverNow: Date.now() });
-    }
-    await this.auth.authStateReady();
-    if (!this.auth.currentUser) await signInAnonymously(this.auth);
-    const pending = localStorage.getItem(PENDING);
-    if (pending) {
-      const saved = JSON.parse(pending);
-      if (saved.uid === this.auth.currentUser!.uid) {
-        try {
-          await this.remote(saved.input);
-        } catch (error) {
-          if (!this.definitive(error)) throw error;
-        }
-      }
-      localStorage.removeItem(PENDING);
-    }
-    await this.remote({ op: "load", actionId: crypto.randomUUID() });
-    const checkpoint = localStorage.getItem(CHECKPOINT);
-    if (checkpoint) {
-      const saved = JSON.parse(checkpoint);
-      if (
-        saved.uid === this.auth.currentUser!.uid &&
-        saved.attemptId === this.response.active?.id
-      ) {
-        try {
-          await this.operation("save", saved);
-        } catch (error) {
-          if (!this.definitive(error)) throw error;
-        }
-      }
-      localStorage.removeItem(CHECKPOINT);
-    }
-    return this.response;
   }
   private definitive(error: unknown) {
     return (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      [
-        "functions/aborted",
-        "functions/failed-precondition",
-        "functions/invalid-argument",
-        "functions/permission-denied",
-        "functions/unauthenticated",
-      ].includes(String(error.code))
+      error instanceof Error &&
+      (!("code" in error) ||
+        [
+          "progress/conflict",
+          "permission-denied",
+          "invalid-argument",
+          "unauthenticated",
+        ].includes(String(error.code)))
     );
   }
-  private async remote(input: Record<string, unknown>) {
-    const call = httpsCallable<Record<string, unknown>, ProgressResponse>(
-      this.functions,
-      "patrol",
-      { timeout: 60000 },
-    );
-    const result = await call(input);
-    return this.accept(result.data);
+  async load() {
+    await this.serial.catch(() => {});
+    if (this.local) {
+      const saved = this.read<CachedProgress>(KEY);
+      const progress = saved && "progress" in saved ? saved.progress : saved;
+      if (progress?.player?.version === 2) this.response = progress;
+    } else {
+      await this.auth.authStateReady();
+      if (!this.auth.currentUser) await signInAnonymously(this.auth);
+      this.response = await this.store.load(this.auth.currentUser!.uid);
+    }
+    const uid = this.auth.currentUser?.uid ?? "local";
+    const pending = this.read<PendingSave>(PENDING);
+    if (pending) {
+      if (pending.uid === uid) {
+        try {
+          this.response = this.local
+            ? advanceProgress(
+                this.response,
+                pending.input,
+                this.board,
+                this.levels,
+                this.now(),
+                this.navigation,
+              )
+            : await this.store.mutate(uid, pending.input);
+        } catch (error) {
+          if (!this.definitive(error)) throw error;
+        }
+      }
+      this.remove(PENDING);
+    }
+    const checkpoint = this.read<Checkpoint>(CHECKPOINT);
+    if (checkpoint) {
+      if (
+        checkpoint.uid === uid &&
+        checkpoint.attemptId === this.response.active?.id
+      ) {
+        const input: ProgressMutation = {
+          ...checkpoint,
+          op: "save",
+          actionId: crypto.randomUUID(),
+          revision: this.response.player.revision,
+        };
+        try {
+          this.response = this.local
+            ? advanceProgress(
+                this.response,
+                input,
+                this.board,
+                this.levels,
+                this.now(),
+                this.navigation,
+              )
+            : await this.store.mutate(uid, input);
+        } catch (error) {
+          if (!this.definitive(error)) throw error;
+        }
+      }
+      this.remove(CHECKPOINT);
+    }
+    return this.accept(this.response);
   }
-  private operation(op: string, data: Record<string, unknown> = {}) {
+  private operation(
+    op: ProgressMutation["op"],
+    data: Omit<Partial<ProgressMutation>, "op"> = {},
+  ) {
     const frozen = structuredClone(data);
     const next = this.serial
       .catch(() => {})
-      .then(() => this.perform(op, frozen));
+      .then(async () => {
+        if (this.get(PENDING))
+          throw new Error(
+            "An earlier action is waiting to sync. Reload to recover it safely.",
+          );
+        const input: ProgressMutation = {
+          ...frozen,
+          op,
+          actionId: crypto.randomUUID(),
+          revision: this.response.player.revision,
+        };
+        const uid = this.auth.currentUser?.uid ?? "local";
+        this.put(PENDING, JSON.stringify({ uid, input }));
+        try {
+          const result = this.local
+            ? advanceProgress(
+                this.response,
+                input,
+                this.board,
+                this.levels,
+                this.now(),
+                this.navigation,
+              )
+            : await this.store.mutate(uid, input);
+          this.remove(PENDING);
+          return this.accept(result);
+        } catch (error) {
+          if (this.definitive(error)) this.remove(PENDING);
+          throw error;
+        }
+      });
     this.serial = next;
     return next;
-  }
-  private async perform(op: string, data: Record<string, unknown>) {
-    const input = {
-      op,
-      ...data,
-      actionId: crypto.randomUUID(),
-      revision: this.response.player.revision,
-    };
-    if (this.local) return this.localOperation(op, data);
-    if (localStorage.getItem(PENDING))
-      throw new Error(
-        "An earlier action is waiting to sync. Reload to recover it safely.",
-      );
-    localStorage.setItem(
-      PENDING,
-      JSON.stringify({ uid: this.auth.currentUser?.uid, input }),
-    );
-    try {
-      const result = await this.remote(input);
-      localStorage.removeItem(PENDING);
-      return result;
-    } catch (error) {
-      if (this.definitive(error)) localStorage.removeItem(PENDING);
-      throw error;
-    }
-  }
-  private localOperation(op: string, data: Record<string, unknown>) {
-    const r = structuredClone(this.response);
-    r.reward = 0;
-    r.serverNow = Date.now();
-    if (op === "action")
-      r.player = applyAction(r.player, data.action as PlayerAction, this.now());
-    else if (op === "start") {
-      const mission = this.levels.find((x) => x.number === data.level)!;
-      const selection = data.selection as (SquadId | null)[];
-      const { setup, rules, steps } = createMission(
-        this.board,
-        mission,
-        r.player,
-        selection,
-        this.now(),
-      );
-      r.active = {
-        id: crypto.randomUUID(),
-        level: mission.number,
-        selection,
-        setup,
-        rules,
-        steps,
-        moves: [],
-      };
-      r.pendingHours = null;
-      r.player.selection = selection;
-      r.player.revision++;
-    } else if (op === "save" && r.active) {
-      r.active.moves = data.moves as MissionAttempt["moves"];
-      r.pendingHours = data.pendingHours as number | null;
-      r.player.revision++;
-    } else if (op === "finish" && r.active) {
-      const game = replayAttempt(this.board, {
-        ...r.active,
-        moves: data.moves as MissionAttempt["moves"],
-      });
-      if (!game.won) throw new Error("Win not verified");
-      const result = awardWin(r.player, r.active.level, game.ordersUsed);
-      r.player = result.player;
-      r.reward = result.reward;
-      r.active = null;
-      r.pendingHours = null;
-    } else if (op === "abandon") {
-      r.active = null;
-      r.pendingHours = null;
-      r.player.revision++;
-    }
-    return this.accept(r);
   }
   action(action: PlayerAction) {
     return this.operation("action", { action });
@@ -254,16 +251,12 @@ export class ProgressClient {
   }
   checkpoint(moves: MissionAttempt["moves"], pendingHours: number | null) {
     const value = JSON.stringify({
-      uid: this.auth.currentUser?.uid,
+      uid: this.auth.currentUser?.uid ?? "local",
       attemptId: this.response.active?.id,
       moves,
       pendingHours,
     });
-    try {
-      localStorage.setItem(CHECKPOINT, value);
-    } catch {
-      /* Online checkpoints still work. */
-    }
+    this.put(CHECKPOINT, value);
     return value;
   }
   async save(moves: MissionAttempt["moves"], pendingHours: number | null) {
@@ -273,8 +266,7 @@ export class ProgressClient {
       moves,
       pendingHours,
     });
-    if (localStorage.getItem(CHECKPOINT) === journal)
-      localStorage.removeItem(CHECKPOINT);
+    if (this.get(CHECKPOINT) === journal) this.remove(CHECKPOINT);
     return result;
   }
   async finish(moves: MissionAttempt["moves"]) {
@@ -282,7 +274,7 @@ export class ProgressClient {
       attemptId: this.response.active?.id,
       moves,
     });
-    localStorage.removeItem(CHECKPOINT);
+    this.remove(CHECKPOINT);
     return result;
   }
   abandon() {
@@ -291,6 +283,10 @@ export class ProgressClient {
   async google() {
     if (this.local)
       throw new Error("Google sign-in is available on the hosted game");
+    if (this.get(PENDING))
+      throw new Error(
+        "Reconnect and reload to finish saving before signing in",
+      );
     const provider = new GoogleAuthProvider();
     try {
       await linkWithPopup(this.auth.currentUser!, provider);
@@ -311,18 +307,21 @@ export class ProgressClient {
           )
         )
           return;
-        localStorage.setItem(
-          "patrol:guest-backup:v2",
-          JSON.stringify(this.response),
-        );
+        this.put("patrol:guest-backup:v2", JSON.stringify(this.response));
         await signInWithCredential(this.auth, credential);
       } else throw error;
     }
     await this.load();
   }
   async signOut() {
+    await this.serial.catch(() => {});
+    if (this.get(PENDING))
+      throw new Error(
+        "Reconnect and reload to finish saving before signing out",
+      );
     await signOut(this.auth);
-    localStorage.removeItem(KEY);
+    this.remove(KEY);
+    this.remove(CHECKPOINT);
     await this.load();
   }
 }
