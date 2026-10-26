@@ -323,3 +323,25 @@ Local validation:
 
 Map implementation references: [OpenFreeMap custom styles](https://openfreemap.org/quick_start/)
 and [OpenMapTiles schema](https://openmaptiles.org/docs/schema/).
+
+
+Live release acceptance (2026-10-27):
+
+- Application commit `43b87f09c1a9da9e75c7d4c54b982e716e9d2b25` was pushed
+  to `origin/main`. Firebase CLI deployment completed for Hosting, Firestore
+  rules and indexes. [CI run 40421925261](https://github.com/rohittp0/patrol/actions/runs/40421925261)
+  passed validation and deployment.
+- At `https://patrol.rohittp.com/`, 53 held-cloud gameplay checks passed with
+  fresh guest saves. Start took 79 ms, recruitment 30 ms and training 36 ms while
+  save responses were held. Reconnection preserved the exact balance and
+  original training deadline.
+- All 13 selection/toast checks, nine audio checks and five loading checks
+  passed on the deployed game. The basemap loaded four vector tiles without
+  failed resources; blocked-font and blocked-source cases retained their
+  expected ready/fallback behavior.
+- The live Google popup reached the account screen with the registered Firebase
+  callback and no redirect mismatch. Canceling preserved the game. Credential
+  entry and complete personal Google sign-in were not automated.
+- Browser checks wait for real cloud catch-up and allow training to finish on
+  its original deadline during that wait. Toast clock checks use margins around
+  the 20-second boundary to avoid assertion overhead crossing a 1 ms window.

@@ -239,7 +239,8 @@ async (basePage) => {
       () =>
         JSON.parse(localStorage.getItem("patrol:outbox:v1") || "null")?.pending
           .length === 0,
-      { timeout: 30000 },
+      null,
+      { timeout: 60000 },
     );
     const saved = await journal();
     check(
@@ -257,11 +258,17 @@ async (basePage) => {
       "A fresh cloud read has no duplicated coins or purchases",
     );
     await page.locator('[data-action="choose"][data-level="3"]').click();
+    const stillTraining = await page.evaluate(
+      (end) => Date.now() < end,
+      deadline,
+    );
     check(
-      await page
+      (await page
         .locator('[data-action="add-squad"][data-id="rapid"]')
-        .isDisabled(),
-      "Training squads remain unavailable",
+        .isDisabled()) === stillTraining,
+      stillTraining
+        ? "Training squads remain unavailable"
+        : "Training finishes on its original deadline during delayed cloud sync",
     );
     await page.locator('[data-action="remove-slot"][data-slot="1"]').click();
     await page.locator('[data-action="start"]').click();

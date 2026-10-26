@@ -103,12 +103,12 @@ async (basePage) => {
     await page.clock.install();
     await page.locator(`[data-border="${levels[0].posts[0]}"]`).click();
     await page.locator(".toast.visible").waitFor();
-    await page.clock.fastForward(19999);
+    await page.clock.fastForward(19000);
     check(
       (await page.locator(".toast.visible").count()) === 1,
       "Toast remains visible before its 20-second deadline",
     );
-    await page.clock.fastForward(2);
+    await page.clock.fastForward(1100);
     check(
       (await page.locator(".toast.visible").count()) === 0,
       "Toast automatically dismisses after 20 seconds",
