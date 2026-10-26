@@ -184,6 +184,7 @@ async (basePage) => {
       "Coach resumes with training after login is dismissed",
     );
     await page.locator('[data-action="train"][data-id="rapid"]').click();
+    await page.locator('[data-training="rapid"]').waitFor();
     check(
       (await coach().innerText()).includes("Training is underway"),
       "Training timer and unavailability are explained",

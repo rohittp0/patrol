@@ -203,3 +203,23 @@ Current local-save desktop Chromium touch-emulation sample: cache-disabled ready
 95.5 ms, cache-enabled ready 51.9 ms; first move 1,186 ms wall time, 70 frame
 samples, 16.7/16.8 ms median/p95 frame interval (59.9 median FPS), 57.0 ms browser
 task CPU, 26.7 MiB ending JS heap. Production Firebase/network timing is separate.
+
+### Live acceptance
+
+Game commit `f8bb8e0a2927e98491c754635964b89b0234bcf9` was pushed to
+`origin/main`. The installed Firebase CLI successfully deployed Hosting,
+Firestore rules and indexes. GitHub Actions run
+[40407560331](https://github.com/rohittp0/patrol/actions/runs/40407560331)
+passed validation and automatic Hosting deployment. The same 67 gameplay checks
+and five blocked-entry loading checks passed at `https://patrol.rohittp.com/`
+with isolated anonymous saves. The live test explicitly waits for the real
+training save to commit before checking the timer; browser-local mutation timing
+is not assumed to represent cloud latency.
+
+A production-build desktop Chromium touch-emulation sample measured 9,079.6 ms
+cache-disabled readiness and 2,705.6 ms cache-enabled readiness. The animation is
+visible before the entry bundle, but these numbers show that campaign startup
+still has a meaningful network/authentication/save wait; no startup-speed win is
+claimed. First move: 1,183 ms, 68 frames, 16.7/16.8 ms median/p95 frame interval
+(59.9 median FPS), 363.2 ms browser task CPU and 30.2 MiB ending JS heap. These
+are one cold/warm pair and one move, not physical-phone or statistical evidence.
