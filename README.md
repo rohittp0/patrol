@@ -69,6 +69,12 @@ regression checks; the new app does not load or expose those features.
 ## Saves and security
 
 The game starts a Firebase anonymous session without a sign-in interruption.
+Google sign-in uses Firebase Auth's `GoogleAuthProvider` and `linkWithPopup` to
+preserve the anonymous player's UID and save. Keep the configured
+`patrol-daac9.firebaseapp.com` auth domain: the Hosting domain alone does not
+register a new Google OAuth callback. The popup callback is
+`https://patrol-daac9.firebaseapp.com/__/auth/handler`.
+
 Google sign-in is optional and prompted after completing Level 4 or making the
 first purchase, whichever happens first. Linking a new Google account keeps the
 same player save. If the Google account already has a campaign, an explicit

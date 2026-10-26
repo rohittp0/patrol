@@ -223,3 +223,27 @@ still has a meaningful network/authentication/save wait; no startup-speed win is
 claimed. First move: 1,183 ms, 68 frames, 16.7/16.8 ms median/p95 frame interval
 (59.9 median FPS), 363.2 ms browser task CPU and 30.2 MiB ending JS heap. These
 are one cold/warm pair and one move, not physical-phone or statistical evidence.
+
+
+### Firebase Google popup callback repair (2026-10-27)
+
+The real Google popup regression reproduced the reported failure before the fix:
+`redirectUri=https://patrol.rohittp.com/__/auth/handler`,
+`redirectMismatch=true`, `accountScreen=false`. `ProgressClient` was overriding
+Firebase's exported `authDomain` with the Hosting hostname. Firebase documents
+that custom OAuth callbacks require separate provider registration; Hosting alone
+does not provide it. The override is removed, keeping the configured Firebase
+project callback and existing `GoogleAuthProvider` + `linkWithPopup` account
+linking, preserving guest UID/save behavior. No Google Cloud permissions or
+OAuth client configuration are changed.
+
+The production bundle was exercised through the real Google/Firebase service
+before publishing: the callback became
+`https://patrol-daac9.firebaseapp.com/__/auth/handler` and Google's email/phone
+sign-in screen appeared. Build and the Auth/Firestore integration suite passed,
+including guest account linking, cross-device save continuation and revision
+conflict rejection. The browser probe stops before entering credentials and
+closes its isolated guest context. Full personal Google sign-in is not claimed.
+
+References: [Firebase Google sign-in](https://firebase.google.com/docs/auth/web/google-signin#customizing-the-redirect-domain-for-google-sign-in),
+[Firebase provider linking](https://firebase.google.com/docs/auth/web/account-linking).

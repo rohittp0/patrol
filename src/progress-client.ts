@@ -45,12 +45,9 @@ const KEY = "patrol:progress:v2",
   CHECKPOINT = "patrol:checkpoint:v2";
 export class ProgressClient {
   response: PlayerProgress = initialProgress();
-  private app = initializeApp({
-    ...FIREBASE_CONFIG,
-    ...(location.hostname === "patrol.rohittp.com"
-      ? { authDomain: location.hostname }
-      : {}),
-  });
+  // Keep Firebase's registered OAuth handler. A custom Hosting domain is not
+  // automatically registered as a Google OAuth callback.
+  private app = initializeApp(FIREBASE_CONFIG);
   readonly auth = getAuth(this.app);
   private db = getFirestore(this.app);
   private store: ProgressStore;
