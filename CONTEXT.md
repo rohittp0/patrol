@@ -22,7 +22,7 @@ The country in which the campaign begins, currently India for every player.
 The numbered sequence of levels within each country, followed by the next country in the campaign. Every player follows the same progression beginning in India, regardless of location.
 
 **Guided level**:
-The opening campaign level, taught by highlighting the border post and squad for each move through the capture. Players follow those moves or skip guidance to take command freely.
+Level 1, beginning immediately after Play: select three squads, choose a squad and a destination, preview movement, deploy, and continue through the first capture. Level 2 has no guide. Level 3 has a separate Academy lesson for recruiting Rapid Action and starting its first upgrade, with enough earned money for both. The timer explains unavailability and sequential upgrades; tutorials end there. Players may skip either lesson; completion is saved with campaign progress.
 
 **Campaign progress**:
 The player's campaign position, level results, money, squad collection, training progress, last-used squad selection, and current chase state. Signed-in players can continue their saved progress on another device.
@@ -34,7 +34,7 @@ The level's base money award multiplied by the winning move-count multiplier: th
 The positive difference between a replay's level reward and the highest reward already earned for that level, payable only when the player wins in fewer moves than their previous best. A better move count within the same multiplier tier improves the record without awarding more money.
 
 **Case file**:
-The historical fugitive and story assigned to one level. Each level introduces a different case; the chase is imagined, while its epilogue recounts how the real manhunt ended, whether by arrest, surrender, or death.
+The illustrated historical fugitive and sourced story assigned to one level. All fifteen India levels use distinct members of the existing case cast, beginning with Veerappan; their India encounters are fictional and do not relocate their historical biographies. A case file shows running speed during squad selection and remains inspectable while its level is locked. Historical outcomes retain their sourced arrest, surrender, or death.
 
 **Starting setup**:
 The fugitive's initial position and the initial border posts associated with a level's deployment slots. Selected ground squads deploy automatically at their slots' posts, while Helicopter Squads begin in reserve; each level has a verified winning sequence with a stated roster.
@@ -138,3 +138,9 @@ _Avoid_: Ocean border
 A closed enclosure around the fugitive formed by guarded borders alone or by guarded borders together with coastline, sealing every land escape route. Achieving containment wins the level, as does a stationed Marksman Squad killing the fugitive within its firing radius.
 
 Engine identifiers such as `runner`, `order`, and `secured` remain internal aliases; player-facing copy uses fugitive, move, and guarded.
+
+**Running speed**:
+The fugitive's simulated kilometres per hour, independently tunable for each level in the campaign opponent configuration. It is a game value rather than a claim about the historical person. Longer squad journeys allow more fugitive travel; thinking time is paused. Playback uses one uniform accelerated clock across orders, so long journeys never silently increase the displayed running speed.
+
+**Movement preview**:
+A detached simulation of the selected squad's proposed order, showing its blue route, the fugitive's gold route and endpoint, travel distance and arrival time, including turns at border closures. Deploy commits the previewed order and costs one move. The faint gold escape route remains visible before selecting a destination.

@@ -62,12 +62,33 @@ export const PLAYTEST_CONFIG = {
     helicopterGuardMoves: [2, 3, 3, 4, 4],
     /** STARTER: firing radius in geographic km, positive and increasing. */
     marksmanRadiusKm: [25, 45, 70, 100, 140],
-    /** STARTER: base ground speed, fugitive speed and per-level speed increment, km/h. */
-    patrolSpeedKmh: 120, runnerSpeedKmh: 60, runnerSpeedStepKmh: 4,
+    /** STARTER: ground squad speed in simulated km/h, positive. */
+    patrolSpeedKmh: 120,
+    /** AGREED: one distinct illustrated opponent and independently tunable running
+     * speed per India level. STARTER speeds are simulated km/h, positive and
+     * increasing; fictional chase values, never historical athletic claims. */
+    opponents: [
+      { caseId: "veerappan", speedKmh: 48 },
+      { caseId: "sobhraj", speedKmh: 52 },
+      { caseId: "phoolan", speedKmh: 60 },
+      { caseId: "raghav", speedKmh: 64 },
+      { caseId: "tomar", speedKmh: 72 },
+      { caseId: "malkhan", speedKmh: 80 },
+      { caseId: "bulger", speedKmh: 84 },
+      { caseId: "kelly", speedKmh: 88 },
+      { caseId: "karpis", speedKmh: 92 },
+      { caseId: "dillinger", speedKmh: 96 },
+      { caseId: "barrow", speedKmh: 100 },
+      { caseId: "nelson", speedKmh: 104 },
+      { caseId: "ambrus", speedKmh: 108 },
+      { caseId: "rozsa", speedKmh: 112 },
+      { caseId: "savanyu", speedKmh: 116 },
+    ],
     /** STARTER: runner minimum per move as fraction of sqrt(India land area). */
     travelFloorFraction: 0.008,
-    /** STARTER: accelerated simulated seconds per real second; maximum move animation seconds. */
-    playbackScale: 6000, maximumPlaybackSeconds: 4,
+    /** STARTER: simulated seconds per real second, positive. One uniform clock
+     * across all orders; never accelerate a long journey to meet a duration cap. */
+    playbackScale: 6000,
     /** STARTER: worker search bounds; not a proof of impossibility. */
     searchBeam: 24, searchDepth: 15,
   },

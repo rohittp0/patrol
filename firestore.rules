@@ -8,7 +8,11 @@ service cloud.firestore {
     function validPlayer(p) {
       return p is map
         && p.keys().hasAll(['version', 'revision', 'wallet', 'unlocked', 'squads', 'results', 'selection', 'loginPrompted', 'firstPurchase'])
-        && p.keys().hasOnly(['version', 'revision', 'wallet', 'unlocked', 'squads', 'results', 'selection', 'loginPrompted', 'firstPurchase'])
+        && p.keys().hasOnly(['version', 'revision', 'wallet', 'unlocked', 'squads', 'results', 'selection', 'loginPrompted', 'firstPurchase', 'tutorials'])
+        && (!('tutorials' in p) || (p.tutorials is map
+          && p.tutorials.keys().hasAll(['field', 'academy'])
+          && p.tutorials.keys().hasOnly(['field', 'academy'])
+          && p.tutorials.field is bool && p.tutorials.academy is bool))
         && p.version == 2 && p.revision is int && p.revision >= 0
         && p.wallet is int && p.wallet >= 0
         && p.unlocked is int && p.unlocked >= 1 && p.unlocked <= 15

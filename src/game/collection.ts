@@ -23,6 +23,8 @@ export interface PlayerState {
   selection: (SquadId | null)[];
   loginPrompted: boolean;
   firstPurchase: boolean;
+  /** Optional for saves made before the action-guided tutorials. */
+  tutorials?: { field: boolean; academy: boolean };
 }
 export function newPlayer(): PlayerState {
   return {
@@ -37,6 +39,7 @@ export function newPlayer(): PlayerState {
     selection: [...INITIAL_SQUADS],
     loginPrompted: false,
     firstPurchase: false,
+    tutorials: { field: false, academy: false },
   };
 }
 export const squadName = (id: SquadId) =>
@@ -91,7 +94,8 @@ export type PlayerAction =
   | { kind: "purchase"; squad: Specialist }
   | { kind: "train"; squad: Specialist }
   | { kind: "selection"; selection: (SquadId | null)[] }
-  | { kind: "prompt" };
+  | { kind: "prompt" }
+  | { kind: "tutorial"; lesson: "field" | "academy" };
 /** Browser game transition with an explicit clock for training and repeatable tests. */
 export function applyAction(
   current: PlayerState,
@@ -124,6 +128,12 @@ export function applyAction(
   } else if (action.kind === "selection") {
     validateSelection(next, action.selection, now);
     next.selection = [...action.selection];
+  } else if (action.kind === "tutorial") {
+    next.tutorials = {
+      field: !!next.tutorials?.field,
+      academy: !!next.tutorials?.academy,
+    };
+    next.tutorials[action.lesson] = true;
   } else if (action.kind === "prompt") next.loginPrompted = true;
   else throw new Error("Unknown action");
   next.revision++;

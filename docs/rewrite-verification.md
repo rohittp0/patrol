@@ -141,3 +141,65 @@ with `https://rohittp.com` or `http://localhost:3000` returns the matching heade
 The style host must allow the new origin. The fallback's authoritative geometry,
 borders and gameplay remain functional; full basemap acceptance is pending that
 upstream configuration change. No embedded map key was copied into source.
+
+## Game interface, tutorials and movement update (2026-10-27)
+
+The interface now uses illustrated wanted cards, SVG squad/navigation icons,
+short labels, compact deployment controls and inspectable locked case files.
+All 15 cases are distinct, sourced members of the existing illustrated cast;
+India encounters are fictional and labelled accordingly. Running speed is the
+only opponent gameplay attribute, configured per level in `progressionV2.opponents`.
+Starter speeds run from 48 to 116 simulated km/h. Level 3 recommends the first
+Rapid upgrade. A late one-move Marksman setup was replaced; the Level 12 witness
+now takes four moves. All 15 recommended witnesses replay successfully. Eleven
+later witnesses fail with the same moves and basic squads; that is a bounded
+comparison, not a proof that every alternative basic-squad strategy is impossible.
+
+The full guide starts when Play opens Level 1 roster selection, then teaches
+squad → post → preview → Deploy through the first win. It resumes the saved
+move after refresh. Level 2 is unguided; the Level 3 lesson covers Academy,
+Rapid purchase, first upgrade and training timer/unavailability. Completion
+and skips are private-save fields compatible with earlier saves. No tutorials
+appear at Levels 6/10. Minimum first-two-level earnings are 75 coins, covering
+25 recruitment + 20 training and leaving 30 without replays.
+
+Movement diagnosis found two concrete predictability gaps. Sampled arrival
+reroutes changed heading by up to 60 degrees, without advance notice. More
+seriously, the previous four-second animation cap accelerated distant orders.
+The long-journey regression failed with "Long order to post 11 changed the runner
+playback speed" before the fix and passes with one uniform playback clock.
+A detached simulation now previews actual trajectories, arrival turns, travel
+floors, firing, escape, distance and endpoint before commitment. Preview/actual
+comparisons cover all 40 moves in the 15 winning witnesses under 127 animation
+substeps per order, without mutating the playable state.
+
+The HTML includes an animated squad/fugitive chase before application JavaScript
+loads, live loading-stage text and a reduced-motion static scene. Map downloads
+begin from HTML preloads; the browser verifies a single reused geometry request.
+There is no artificial minimum loading delay or invented percentage.
+
+Validation completed locally:
+
+- 116 unit/regression tests and production TypeScript/Vite build.
+- Firebase Auth/Firestore integration suite plus four ownership/schema rule tests,
+  including existing saves, six-squad evaluation budget and cross-device tutorial flags.
+- 67 browser checks: five viewport sizes, locked previews, actual first two wins,
+  saved guide resume, purchase login prompt, Academy/training, empty slots and reloads.
+- Three gameplay layouts (320×568, 844×390, 390×844): coach and deployment controls
+  do not overlap; the guided squad, destination and Deploy are clickable.
+- Five loading checks with entry JavaScript held: immediate paint, actual movement,
+  reduced motion, immediate transition to game and reused geometry preload.
+- Isolated desktop engine sample: first-use forecast median 6.13 ms / p95 25.98 ms;
+  800 cached forecasts median 0.030 ms / p95 0.066 ms. This is route-cache cost,
+  not end-to-end loading or physical-device evidence.
+
+The earlier direct-Firestore desktop sample recorded 8.3/9.3 ms median/p95 frame
+interval and 38.7 MiB heap. The current browser is running at a different refresh
+cadence and uses local saves, so these are not controlled before/after timings.
+Physical-phone frame rate, CPU and memory remain unverified. Production entry
+JavaScript grows from about 118 KB to 126 KB gzip; map code remains deferred.
+
+Current local-save desktop Chromium touch-emulation sample: cache-disabled ready
+95.5 ms, cache-enabled ready 51.9 ms; first move 1,186 ms wall time, 70 frame
+samples, 16.7/16.8 ms median/p95 frame interval (59.9 median FPS), 57.0 ms browser
+task CPU, 26.7 MiB ending JS heap. Production Firebase/network timing is separate.

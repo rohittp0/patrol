@@ -33,7 +33,7 @@ const titles = [
   "India: command test",
 ];
 const briefings = [
-  "Guard every land route. Select a post, then choose the squad to move.",
+  "Choose a squad, pick a post, then deploy. Seal every land escape.",
   "A new starting position. The coast can help complete your enclosure.",
   "Rapid Action is available in the academy. Reach posts sooner.",
   "Speed matters: long journeys give the fugitive more time.",
@@ -104,12 +104,11 @@ function solve(game: PatrolGame, targets: number[], maxDepth = 6) {
 }
 
 const missions: Mission[] = [];
-const bases = [0, 1, 0, 1, 3, 0, 1, 3, 3, 2, 3, 1, 3, 0, 3];
+const bases = [0, 1, 0, 1, 3, 0, 1, 3, 3, 2, 3, 3, 3, 0, 3];
 for (let i = 0; i < ECONOMY.levelCount; i++) {
   const level = i + 1,
     base = board.setups[bases[i]];
-  const rapidStep =
-    level < 5 ? 0 : level < 8 ? 1 : level < 12 ? 2 : level < 14 ? 3 : 4;
+  const rapidStep = level < 8 ? 1 : level < 12 ? 2 : level < 14 ? 3 : 4;
   const recommended: Mission["recommended"] =
     level < 3
       ? [
@@ -170,7 +169,7 @@ for (let i = 0; i < ECONOMY.levelCount; i++) {
       briefing: briefings[i],
       runnerNode: spawn,
       posts,
-      runnerSpeed: ECONOMY.runnerSpeedKmh + i * ECONOMY.runnerSpeedStepKmh,
+      runnerSpeed: ECONOMY.opponents[i].speedKmh,
       recommended,
       witness: [],
     };

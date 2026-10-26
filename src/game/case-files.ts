@@ -1,3 +1,4 @@
+import { PLAYTEST_CONFIG } from "./playtest.config";
 /** Authored case order matches the six challenges in each country. These are
  * historical introductions, not claims that the puzzle reenacts the real chase.
  * Never replace an arrest, surrender, or death with a fictional historical ending.
@@ -157,3 +158,12 @@ export function caseForChallenge(country: string, index: number): CaseFile {
 }
 
 export const portraitPath = (file: CaseFile) => `portraits/${file.id}.webp`;
+
+/** The whole campaign is staged in India. These are imaginary encounters with
+ * the existing sourced cast, not recreations of their historical manhunts. */
+export function caseForLevel(level: number): CaseFile {
+  const opponent = PLAYTEST_CONFIG.progressionV2.opponents[level - 1];
+  const file = Object.values(CASE_FILES).flat().find(file => file.id === opponent?.caseId);
+  if (!file) throw new Error(`Unknown campaign opponent: ${level}`);
+  return file;
+}

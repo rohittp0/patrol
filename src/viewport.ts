@@ -24,7 +24,7 @@ if (typeof window !== "undefined") installViewport();
 
 /** Read layout only when camera framing or an overlay changes, never per frame. */
 export function usableMapPadding(container: DOMRect, options: { includeGuide?: boolean } = {}) {
-  const selectors = [".topbar", ".metrics", ".map-caption", ".squad-dock", ".map-toolbar", "#hint-panel", ".maplibregl-ctrl-group", ".maplibregl-ctrl-attrib", "#command-menu[open] .command-actions"];
+  const selectors = [".topbar", ".coach", ".metrics", ".map-caption", ".squad-dock", ".map-toolbar", "#hint-panel", ".maplibregl-ctrl-group", ".maplibregl-ctrl-attrib", "#command-menu[open] .command-actions"];
   if (options.includeGuide) selectors.push('.hunt-guide:not([hidden])[data-phase="moving"] .guide-card');
   const obstacles: ViewRectangle[] = [];
   for (const selector of selectors) {

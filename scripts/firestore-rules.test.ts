@@ -73,6 +73,14 @@ test("save rules reject stale revisions, malformed data and spoofed update times
     { "player.squads": "invalid", "player.revision": 1 },
     { "player.selection": [], "player.revision": 1 },
     { "player.loginPrompted": "yes", "player.revision": 1 },
+    {
+      "player.tutorials": { field: "yes", academy: false },
+      "player.revision": 1,
+    },
+    {
+      "player.tutorials": { field: true, academy: false, injected: true },
+      "player.revision": 1,
+    },
     { active: "invalid", "player.revision": 1 },
     { reward: -1, "player.revision": 1 },
     { pendingHours: -1, "player.revision": 1 },
@@ -112,4 +120,25 @@ test("a full six-squad collection and in-progress training fit the rules evaluat
   await assertSucceeds(
     updateDoc(ref, { "player.revision": 1, updatedAt: serverTimestamp() }),
   );
+});
+
+test("legacy saves can add tutorial completion without replacing their campaign", async () => {
+  const id = `legacy-${crypto.randomUUID()}`;
+  const db = environment.authenticatedContext(id).firestore(),
+    ref = doc(db, "players", id);
+  const save = freshSave();
+  delete save.player.tutorials;
+  save.player.wallet = 75;
+  save.player.unlocked = 3;
+  await assertSucceeds(setDoc(ref, save));
+  await assertSucceeds(
+    updateDoc(ref, {
+      "player.tutorials": { field: true, academy: true },
+      "player.revision": 1,
+      updatedAt: serverTimestamp(),
+    }),
+  );
+  const saved = (await getDoc(ref)).data()!;
+  assert.equal(saved.player.wallet, 75);
+  assert.equal(saved.player.unlocked, 3);
 });

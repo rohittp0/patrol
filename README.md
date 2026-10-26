@@ -26,6 +26,15 @@ browser-local gameplay sandbox; its progress is not uploaded. Production builds 
 
 ## Campaign and squads
 
+- The opening HTML plays a tiny squad/fugitive chase while files and saved progress
+  load, with a static scene for reduced-motion users and early map preloading.
+- Every level has a distinct illustrated case, starting with Veerappan. Inspect
+  any locked case to preview its running speed; play unlocks remain sequential.
+- Level 1 guides roster selection through the first win. Level 2 is unguided;
+  Level 3 guides Rapid recruitment and one upgrade, then tutorials end. The
+  minimum 75 coins from the first two wins cover both costs (25 + 20).
+- Select a squad, choose a free post, inspect both paths, then Deploy. Playback
+  uses one uniform clock; distant orders never secretly accelerate the fugitive.
 - Every level allows 15 moves. Guard every land escape route, or intercept the
   fugitive with a stationed Marksman Squad. Thinking time is paused.
 - Moving a ground squad opens its origin immediately and guards its destination

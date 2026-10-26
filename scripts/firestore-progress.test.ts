@@ -173,6 +173,13 @@ test("browser progression saves directly, deduplicates retries, restores moves a
         ),
       /unavailable/,
     );
+    state = await s.store.mutate(
+      s.uid,
+      mutation(state, {
+        op: "action",
+        action: { kind: "tutorial", lesson: "academy" },
+      }),
+    );
     now = 31000;
     state = await s.store.mutate(
       s.uid,
@@ -209,6 +216,7 @@ test("browser progression saves directly, deduplicates retries, restores moves a
       assert.equal(continued.player.wallet, state.player.wallet);
       assert.equal(continued.active!.id, state.active!.id);
       assert.equal(continued.player.squads.rapid!.step, 1);
+      assert.equal(continued.player.tutorials?.academy, true);
       const stale = state;
       state = await other.store.mutate(
         other.uid,

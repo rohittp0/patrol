@@ -58,3 +58,24 @@ implementation plan or a claim that the rewrite is complete.
   Deliberate cheating of a player's own progress is accepted for this release.
   Transactions, save revisions and mutation IDs protect normal retry/concurrency
   behavior. Firebase deployment uses Hosting and Firestore without Functions.
+
+- The full tutorial starts on Play at Level 1 and teaches actual roster selection,
+  squad selection, destination choice, movement preview and deployment through
+  the first win. Level 2 has no tutorial. Level 3 returns only for Academy,
+  one Rapid Action purchase and one sequential upgrade, including the training
+  timer and squad unavailability. No guided unlocks follow Level 3.
+- The minimum first-two-level payout is 75 coins. Rapid recruitment costs 25
+  and its first upgrade costs 20, leaving 30 without replaying either level.
+- Restore the illustrated, sourced case cast, beginning with Veerappan. Assign
+  a distinct character to every one of the 15 India levels. Existing global
+  characters join fictional India pursuits; biographical facts retain their
+  original settings and sources. Locked levels allow inspection, never play.
+- Running speed is the only opponent gameplay attribute shown. Every level has
+  its own positive simulated km/h tuning entry in playtest.config.ts.
+- Order flow is squad → free post → preview → Deploy. Preview includes the
+  actual future trajectory and timing, including closure-triggered turns,
+  rather than suggesting constant distance per turn. Both actors pause between
+  orders. Specialist speed, fixed helicopter deployment and firing remain intact.
+- Playback uses one uniform accelerated clock. Long squad journeys no longer
+  increase the fugitive's on-screen speed to squeeze into a four-second cap;
+  the path preview and the underlying simulated running speed remain consistent.

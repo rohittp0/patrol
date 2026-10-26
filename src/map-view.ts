@@ -11,6 +11,7 @@ import type { PatrolGame } from "./game/engine";
 import type { CountryBoard, Position } from "./game/types";
 import { icon } from "./icons";
 import { usableMapPadding } from "./viewport";
+import type { OrderForecast } from "./game/order-forecast";
 
 // Bundle MapLibre's worker explicitly so both Vite and /patrol/ static builds
 // serve the correct URL instead of a missing dependency-prebundle sibling.
@@ -32,6 +33,7 @@ export class PatrolMap {
   private ready = false;
   private usedFallback = false;
   private cleanup = () => {};
+  private forecast: OrderForecast | null = null;
   private ranges: { position: Position; radius: number }[] = [];
 
   constructor(private board: CountryBoard, onPost: (border: number) => void, onMapStatus: (fallback: boolean) => void) {
@@ -56,6 +58,7 @@ export class PatrolMap {
       this.refreshGeometry();
       if (this.game) this.renderState(this.game, this.selected, this.focusedSquad);
       this.setRanges(this.ranges);
+      this.setForecast(this.forecast);
       onMapStatus(this.usedFallback);
     });
     const runnerElement = document.createElement("div");
@@ -142,7 +145,7 @@ export class PatrolMap {
 
   private addLayers() {
     const empty = collection([]);
-    for (const name of ["land", "outside", "coast", "frontiers", "borders", "route", "ranges"]) this.map.addSource(`patrol-${name}`, { type: "geojson", data: empty });
+    for (const name of ["land", "outside", "coast", "frontiers", "borders", "route", "ranges", "intent", "forecast", "forecast-end"]) this.map.addSource(`patrol-${name}`, { type: "geojson", data: empty });
     this.map.addLayer({ id: "patrol-range-fill", type: "fill", source: "patrol-ranges", paint: { "fill-color": "#c46f47", "fill-opacity": 0.18 } });
     this.map.addLayer({ id: "patrol-range-line", type: "line", source: "patrol-ranges", paint: { "line-color": "#e7a688", "line-width": 1.5, "line-dasharray": [3, 3] } });
     this.map.addLayer({ id: "patrol-outside", type: "fill", source: "patrol-outside", paint: { "fill-color": "#081519", "fill-opacity": 0.42 } });
@@ -153,6 +156,9 @@ export class PatrolMap {
     this.map.addLayer({ id: "patrol-secured-glow", type: "line", source: "patrol-borders", filter: ["==", ["get", "secured"], true], layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": CONFIG.appearance.securedBorderGlow.color, "line-width": CONFIG.appearance.securedBorderGlow.widthPx, "line-blur": CONFIG.appearance.securedBorderGlow.blurPx, "line-opacity": CONFIG.appearance.securedBorderGlow.opacity } });
     this.map.addLayer({ id: "patrol-borders", type: "line", source: "patrol-borders", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": ["get", "colour"], "line-width": ["case", ["get", "secured"], CONFIG.appearance.borderWidthPx.secured, CONFIG.appearance.borderWidthPx.open], "line-opacity": ["case", ["get", "secured"], CONFIG.appearance.borderOpacity.secured, CONFIG.appearance.borderOpacity.open] } });
     this.map.addLayer({ id: "patrol-selected-border", type: "line", source: "patrol-borders", filter: ["==", ["get", "selected"], true], layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": CONFIG.appearance.selectedBorder.color, "line-width": CONFIG.appearance.selectedBorder.widthPx } });
+    this.map.addLayer({ id: "patrol-intent", type: "line", source: "patrol-intent", paint: { "line-color": "#b66b25", "line-width": 2, "line-dasharray": [2,3], "line-opacity": 0.65 } });
+    this.map.addLayer({ id: "patrol-forecast", type: "line", source: "patrol-forecast", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": ["get", "color"], "line-width": 4, "line-dasharray": [2,1] } });
+    this.map.addLayer({ id: "patrol-forecast-end", type: "circle", source: "patrol-forecast-end", paint: { "circle-color": "#f6b94d", "circle-radius": 7, "circle-stroke-width": 2, "circle-stroke-color": "#1b2825" } });
     this.map.addLayer({ id: "patrol-route", type: "line", source: "patrol-route", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": CONFIG.appearance.squadMarker.iconColor, "line-width": 2.5, "line-dasharray": [2, 2], "line-opacity": 0.8 } });
   }
 
@@ -189,6 +195,7 @@ export class PatrolMap {
     const travelling = game.activeOrder && game.squads[game.activeOrder.squad].border === null;
     if (this.ready) {
       this.setData("borders", collection(this.board.borders.map((border, index) => line(border.coordinates, { colour: CONFIG.appearance.borderPalette[index][secured.has(index) ? "secured" : "open"], secured: secured.has(index), selected: index === selected || !!travelling && index === game.activeOrder?.to }))));
+      this.setData("intent", collection(game.runner.route.length ? [line([game.runner.position,...game.runner.route.map(point=>point.position)])] : []));
       this.setData("route", collection(travelling && game.activeOrder ? [line(game.activeOrder.path)] : []));
     }
     this.posts.forEach(({ element }, index) => {
@@ -220,6 +227,18 @@ export class PatrolMap {
       this.movingSquad.setLngLat(game.squads[game.activeOrder.squad].actor.position);
       if (!this.movingVisible) { this.movingSquad.addTo(this.map); this.movingVisible = true; }
     } else if (this.movingVisible) { this.movingSquad.remove(); this.movingVisible = false; }
+  }
+
+  setForecast(forecast: OrderForecast | null) {
+    this.forecast = forecast;
+    if (!this.ready) return;
+    this.setData("forecast", collection(forecast ? [line(forecast.squadPath, {color:"#3389dc"}), ...(forecast.runnerPath.length>1 ? [line(forecast.runnerPath,{color:"#d98a18"})] : [])] : []));
+    this.setData("forecast-end", collection(forecast ? [{type:"Feature",properties:{},geometry:{type:"Point",coordinates:forecast.runnerPath.at(-1)!}}] : []));
+  }
+
+  showForecast(forecast: OrderForecast) {
+    const points = [...forecast.squadPath,...forecast.runnerPath];
+    this.map.fitBounds([[Math.min(...points.map(p=>p[0])),Math.min(...points.map(p=>p[1]))],[Math.max(...points.map(p=>p[0])),Math.max(...points.map(p=>p[1]))]], {padding:this.cameraPadding(true),absolutePadding:true,maxZoom:CONFIG.map.runnerFocusZoom,duration:matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : CONFIG.map.focusDurationMs});
   }
 
   fitCountry(animate = true) {
