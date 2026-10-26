@@ -1,4 +1,9 @@
 const paths: Record<string, string> = {
+  sound: '<path d="m11 4-6 5H2v6h3l6 5zM15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/>',
+  mute: '<path d="m11 4-6 5H2v6h3l6 5zM16 9l6 6m0-6-6 6"/>',
+  cloud: '<path d="M6 18a5 5 0 0 1-1-10 7 7 0 0 1 13-1 5.5 5.5 0 0 1 0 11z"/><path d="m9 12 3 3 4-5"/>',
+  radio: '<path d="M6 8h12v14H6zM8 8V2m2 12h4m-4 4h4m4-14 3 3m-1-5 3 3"/>',
+  commander: '<path d="M4 22v-3c0-4 16-4 16 0v3M7 8v3a5 5 0 0 0 10 0V8M4 6l8-4 8 4-3 3H7zM8 6h8M9 12h.1m5.9 0h.1M11 15h2"/>',
   home: '<path d="m3 10 9-7 9 7v11h-6v-7H9v7H3z"/>',
   levels: '<path d="M5 20V4m0 0h13l-3 4 3 4H5"/><circle cx="5" cy="20" r="1"/>',
   academy: '<path d="m2 8 10-5 10 5-10 5zM6 10v7q6 5 12 0v-7M22 8v9"/>',

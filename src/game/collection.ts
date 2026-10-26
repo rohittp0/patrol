@@ -123,7 +123,7 @@ export function applyAction(
     next.wallet -= cost;
     unit.training = {
       step: unit.step + 1,
-      readyAt: now + ECONOMY.trainingSeconds[unit.step] * 1000,
+      readyAt: now + ECONOMY.trainingSeconds[action.squad][unit.step] * 1000,
     };
   } else if (action.kind === "selection") {
     validateSelection(next, action.selection, now);

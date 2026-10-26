@@ -247,3 +247,79 @@ closes its isolated guest context. Full personal Google sign-in is not claimed.
 
 References: [Firebase Google sign-in](https://firebase.google.com/docs/auth/web/google-signin#customizing-the-redirect-domain-for-google-sign-in),
 [Firebase provider linking](https://firebase.google.com/docs/auth/web/account-linking).
+
+## Tactical map, uninterrupted flow and mandatory command guides (2026-10-27)
+
+This release replaces the previous remote style entirely with an app-owned
+11-layer tactical style over OpenFreeMap/OpenMapTiles vector data and Noto fonts.
+No old map key or style is copied. Attribution stays visible. Acceptance checks
+actual rendered vector tiles and place labels, rather than treating successful
+style access or the game's own border overlay as a working basemap. A healthy
+browser sample loaded four vector tiles and one font without failures. Source,
+India tile and font HTTP probes returned 200 with wildcard browser access.
+The browser also verifies a missing font keeps the basemap ready, while failure
+of the TileJSON source produces an honest playable fallback.
+
+The UI now applies validated campaign actions immediately and queues immutable
+snapshots for background persistence (ADR 0002). A held-network repro previously
+left Start on the roster after 1.2 seconds. In the final emulator-backed browser
+pass, with every cloud response held, Start took 83 ms, recruitment 36 ms and
+training 37 ms. Both first wins, rewards, recruitment, training and guide
+completion proceeded before acknowledgements. Refresh restored the pending
+campaign, then reconnecting persisted the exact 180-coin balance and original
+training deadline without duplicate rewards/purchases. Response-lost receipts,
+stale device conflicts and immutable attempt IDs have regression coverage.
+Selecting a newer cloud campaign fetches it successfully before replacing the
+local outbox, retaining a backup. Existing-user Google account switches and
+sign-out flush the old identity's pending writes first.
+
+The command-card guide is mandatory at Level 1 and at the Level 3 Academy lesson.
+Skip, navigation detours and Escape cannot bypass it. Older unfinished saves
+that conflict with the required guide are backed up before returning to the
+lesson; deployed squads cannot deadlock the Academy training step. Existing wins
+and promised training deadlines remain intact. Hints, both manual focus buttons,
+the top information control, their handlers and the active-app hint worker are
+removed. Map gestures and automatic framing remain.
+
+Squads/posts can be selected in either order, including the taught move. Switching
+squads preserves the destination and recalculates the preview; neither selection
+spends a move. Only the current taught post glows. Toasts dismiss after 20 seconds;
+a new toast resets its deadline, and manual dismissal still works. Browser clock
+checks cover before/after the deadline and replacement-message timing.
+
+The original procedural score and event sounds play only after a gesture. Mute
+persists, muted play creates no audio engine, and hidden pages suspend sound.
+Browser audio instrumentation verified continuous note scheduling, non-silent
+samples, selection effects, muting and hidden-page suspension. Physical phone
+speakers/headphones have not been auditioned.
+
+Capture pans/zooms to the actual fugitive and plays a brief gold celebration
+before the reward card. The fugitive remains visible above/beside the card on
+all tested layouts. Victory shows base × move bonus, net coins and balance
+addition, including zero extra payment for equal replays. It has Next and a
+secondary Home button with its icon; Academy is absent on wins. Reduced-motion
+preferences disable camera/confetti animation. Specialist training now follows
+separate increasing real-time ladders: Rapid 30s/1m/3m/10m; Helicopter
+15m/30m/1h/2h; Marksman 3h/4h/6h/8h. Each later track starts beyond the prior
+track's final duration; these starter values remain centrally tunable.
+
+Local validation:
+
+- 124 unit/regression tests and production build passed.
+- Two Auth/Firestore integration tests and four rule tests passed.
+- 53 held-cloud gameplay checks, 13 selection/toast/replay checks and nine audio
+  checks passed. Five complete tutorial/capture layouts passed at 320×568,
+  390×844, 844×390, 768×1024 and 1440×900, with no guide/control overlap or clipped
+  Home button. Two legacy-guide fixtures and three map-availability cases passed.
+- Desktop Chromium touch-emulation, development/local-save sample with the real
+  map and soundtrack: 97.9 ms cache-disabled readiness, 54.7 ms cache-enabled;
+  preview interaction 71 ms; first move 1,199 ms; 70 frames; median/p95 frame
+  interval 16.7/16.8 ms (59.9 median FPS), browser task CPU 253.5 ms and ending
+  JS heap 30.3 MiB. This differs from earlier fallback-map/cloud-save workloads,
+  so it is not a controlled performance improvement claim.
+- The production entry is about 129 KB gzip. Map code remains deferred; the hint
+  worker and audio downloads are absent. Physical-device FPS/CPU/memory and live
+  rotation acceptance remain unverified.
+
+Map implementation references: [OpenFreeMap custom styles](https://openfreemap.org/quick_start/)
+and [OpenMapTiles schema](https://openmaptiles.org/docs/schema/).

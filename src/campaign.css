@@ -1891,3 +1891,752 @@ button .icon {
     transition: none !important;
   }
 }
+/* Sound and background-sync controls share the compact game HUD. */
+.audio-button {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 38px;
+  height: 40px;
+  min-width: 38px;
+  border: 1px solid #60774d;
+  border-radius: 9px;
+  background: #263b2c;
+  color: #dce5bd;
+  box-shadow: 0 3px 0 #101e15;
+}
+.audio-button .icon {
+  width: 19px;
+  height: 19px;
+}
+.audio-button[aria-pressed="false"] {
+  color: #80927b;
+}
+.wallet {
+  position: relative;
+  padding-right: 20px;
+}
+.sync-badge {
+  position: absolute;
+  right: 4px;
+  bottom: 3px;
+  display: flex;
+  color: #b3ce91;
+}
+.sync-badge .icon {
+  width: 10px;
+  height: 10px;
+}
+.sync-badge.saving {
+  color: #e8be6b;
+  animation: sync-pulse 1.2s ease-in-out infinite;
+}
+.sync-badge.offline {
+  color: #ddb45c;
+}
+.sync-badge.conflict {
+  color: #f2a08b;
+}
+.game-sound {
+  width: 44px;
+  height: 44px;
+  background: #1b2e23ee;
+}
+.game-tools,
+.help-button {
+  display: none;
+}
+@keyframes sync-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+/* Command transmissions advance only when the actual taught action happens. */
+.command-coach {
+  border: 2px solid #bda36a;
+  border-radius: 13px;
+  background: linear-gradient(120deg, #34432d, #172c23 80%);
+  padding: 16px 18px;
+  box-shadow:
+    0 7px 0 #0d1b12,
+    0 15px 45px #0009;
+  overflow: hidden;
+}
+.command-coach:before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: repeating-linear-gradient(
+    120deg,
+    #d9bd76 0 12px,
+    #68754a 12px 24px
+  );
+}
+.command-coach .coach-top {
+  justify-content: flex-start;
+  gap: 10px;
+  margin: 1px 0 12px;
+}
+.commander-badge {
+  display: grid !important;
+  place-items: center;
+  width: 38px;
+  height: 40px;
+  color: #f4d691 !important;
+  background: linear-gradient(#697448, #354e32);
+  border: 1px solid #c2b475;
+  border-radius: 9px;
+  flex-shrink: 0;
+}
+.commander-badge .icon {
+  display: block !important;
+  width: 29px !important;
+  height: 29px !important;
+}
+.command-coach .coach-top strong {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 1.6px;
+  color: #efdaad;
+}
+.command-coach .coach-top small {
+  display: block;
+  font-size: 7px;
+  letter-spacing: 0.7px;
+  color: #98ad88;
+  margin-top: 4px;
+}
+.radio-signal {
+  display: flex !important;
+  align-items: center;
+  gap: 3px;
+  height: 17px;
+  margin-left: auto;
+  color: #d8c684;
+}
+.radio-signal i {
+  display: block;
+  background: #aabd79;
+  width: 3px;
+  height: 7px;
+  border-radius: 2px;
+  animation: radio 1.2s ease-in-out infinite;
+}
+.radio-signal i:nth-child(2) {
+  height: 13px;
+  animation-delay: 0.2s;
+}
+.radio-signal i:nth-child(3) {
+  height: 9px;
+  animation-delay: 0.4s;
+}
+.coach-stage-track {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 12px;
+}
+.coach-stage-track > span {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-radius: 4px;
+  background: #112218;
+  color: #526f50;
+  padding: 6px 4px;
+  border: 1px solid #3a5036;
+}
+.coach-stage-track .icon {
+  width: 13px;
+  height: 13px;
+}
+.coach-stage-track small {
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: 0.4px;
+}
+.coach-stage-track > span.lit {
+  color: #b3c77d;
+  border-color: #596d43;
+}
+.coach-stage-track > span.current {
+  background: #b8a465;
+  color: #26321e;
+  border-color: #ead08a;
+}
+.command-coach h2 {
+  font-size: 20px;
+  letter-spacing: -0.35px;
+  color: #fff0c7;
+  margin-bottom: 7px;
+}
+.command-coach p {
+  font-size: 12px;
+  color: #bfd0ab;
+  line-height: 1.5;
+}
+.coach-required {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #829a76;
+  margin-top: 13px;
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.coach-required .icon {
+  width: 11px;
+  height: 11px;
+}
+.page .coach-target {
+  z-index: 24;
+  box-shadow:
+    0 0 0 100vmax #03120ba6,
+    0 0 24px #ffd07c77;
+}
+.page .coach-target.squad-card {
+  box-shadow:
+    0 0 0 100vmax #03120b70,
+    0 0 24px #ffd07c77;
+}
+.command-coach .primary {
+  font-size: 11px;
+  letter-spacing: 1px;
+  min-height: 43px;
+}
+.game-page .command-coach {
+  padding: 13px 15px;
+  width: 310px;
+  top: 95px;
+}
+.game-page .command-coach h2 {
+  font-size: 17px;
+}
+.game-page .command-coach p {
+  font-size: 11px;
+}
+.game-page .coach-target#journey {
+  outline: none !important;
+  background: #304b2d;
+  border-radius: 5px;
+  padding: 3px;
+  color: #d5e4b0;
+}
+.game-page .border-post.coach-target {
+  z-index: 5;
+}
+.game-page .border-post.coach-target:after {
+  content: "";
+  position: absolute;
+  inset: -12px;
+  border: 2px solid #f5d17a;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: post-beacon 1.4s ease-out infinite;
+}
+@keyframes post-beacon {
+  to {
+    transform: scale(1.45);
+    opacity: 0;
+  }
+}
+@keyframes radio {
+  50% {
+    transform: scaleY(0.4);
+    opacity: 0.5;
+  }
+}
+/* A capture happens on the map before the reward card enters. */
+.capture-moment .squad-dock,
+.capture-moment .metrics {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+.capture-celebration {
+  position: absolute;
+  inset: 0;
+  z-index: 16;
+  pointer-events: none;
+  overflow: hidden;
+}
+.capture-word {
+  position: absolute;
+  left: 50%;
+  top: 32%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #ffe1a0;
+  font-size: 28px;
+  letter-spacing: 4px;
+  font-weight: 1000;
+  text-shadow:
+    0 4px 0 #3d421f,
+    0 0 30px #fac05e66;
+  white-space: nowrap;
+  animation: capture-title 1.2s ease-out both;
+}
+.capture-word .icon {
+  width: 30px;
+  height: 30px;
+}
+.capture-celebration > i {
+  position: absolute;
+  left: var(--x);
+  top: 24%;
+  width: 6px;
+  height: 11px;
+  background: #eed279;
+  border: 1px solid #ffe8ad;
+  animation: capture-confetti 1.7s var(--delay) ease-out both;
+}
+.capture-celebration > i:nth-child(3n) {
+  background: #a4c683;
+}
+.runner-marker.captured {
+  overflow: visible;
+  border-color: #ffe4a7;
+  box-shadow:
+    0 0 0 8px #e9c16655,
+    0 0 50px #ffdb7e88;
+}
+.runner-marker.captured:after {
+  content: "";
+  position: absolute;
+  inset: -20px;
+  border: 2px solid #ffe3a5;
+  border-radius: 50%;
+  animation: capture-ring 1s ease-out 3;
+}
+.runner-marker.captured img {
+  border-radius: 50%;
+}
+.result-panel.victory {
+  top: auto;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  padding: 24px;
+  border-color: #c1b176;
+  background: linear-gradient(135deg, #3b5032, #1b3123 70%);
+  box-shadow:
+    0 10px 0 #0c1c12,
+    0 20px 70px #0009;
+  max-height: calc(100dvh - 190px);
+}
+.result-medal {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 12px;
+  color: #e9c476;
+  border: 1px solid #bba571;
+  background: #4b6138;
+  border-radius: 14px;
+  box-shadow: 0 4px 0 #1a2c1d;
+}
+.result-medal .icon {
+  width: 28px;
+  height: 28px;
+}
+.result-panel h1 {
+  font-size: 25px;
+  margin: 12px 0 8px;
+}
+.result-panel p {
+  font-size: 11px;
+}
+.result-panel .result-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+.result-panel .result-actions .button {
+  min-height: 45px;
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+.result-panel .result-actions .secondary {
+  background: #273e2b;
+  color: #c3cfa9;
+  border-color: #657e51;
+  box-shadow: 0 3px 0 #102016;
+}
+.reward-breakdown {
+  margin-top: 18px;
+  border: 1px solid #6a8050;
+  border-radius: 11px;
+  background: #172d1f99;
+  padding: 14px;
+}
+.reward-equation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  color: #e3d29b;
+}
+.reward-equation > span {
+  font-weight: 900;
+  font-size: 22px;
+  white-space: nowrap;
+}
+.reward-equation small {
+  display: block;
+  font-size: 7px;
+  letter-spacing: 1px;
+  color: #98b084;
+  margin-bottom: 7px;
+}
+.reward-equation > span:last-child {
+  color: #ffda87;
+}
+.reward-equation .icon {
+  width: 16px;
+  height: 16px;
+}
+.reward-equation > b {
+  font-size: 17px;
+  color: #8ea575;
+}
+.reward-earned {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 12px;
+  margin-top: 12px;
+  border-top: 1px solid #4b6440;
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: #b0c38f;
+}
+.reward-earned strong {
+  font-size: 22px;
+  color: #ffd884;
+  letter-spacing: 0;
+}
+.balance-equation {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 9px;
+  margin-top: 11px;
+  color: #8fa77b;
+}
+.balance-equation b {
+  color: #c8d9ac;
+  letter-spacing: 0.5px;
+}
+.replay-reward {
+  font-size: 9px !important;
+  line-height: 1.5;
+  margin-top: 10px;
+  color: #a9bb91;
+}
+.result-panel.victory .eyebrow {
+  font-size: 9px;
+}
+@keyframes capture-ring {
+  to {
+    transform: scale(2.8);
+    opacity: 0;
+  }
+}
+@keyframes capture-title {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 15px) scale(0.8);
+  }
+  15%,
+  60% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -25px) scale(1.04);
+  }
+}
+@keyframes capture-confetti {
+  0% {
+    opacity: 0;
+    transform: translate(0, -30px) rotate(var(--spin));
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--drift), 330px) rotate(calc(var(--spin) + 300deg));
+  }
+}
+@media (max-width: 480px) {
+  .site-header .header-actions {
+    gap: 6px;
+  }
+  .site-header .audio-button {
+    min-width: 34px;
+    width: 34px;
+    height: 38px;
+  }
+  .site-header .account-button {
+    min-width: 36px;
+    min-height: 38px;
+  }
+  .site-header .wallet {
+    font-size: 12px;
+    min-height: 38px;
+    padding: 8px 15px 8px 8px;
+  }
+  .site-header .wallet > .icon {
+    width: 16px;
+  }
+  .game-page .command-coach {
+    left: 12px;
+    right: 85px;
+    width: auto;
+    padding: 11px 12px;
+  }
+  .game-page .command-coach .coach-top {
+    gap: 8px;
+    margin-bottom: 9px;
+  }
+  .game-page .command-coach .commander-badge {
+    width: 31px;
+    height: 33px;
+  }
+  .game-page .command-coach .commander-badge .icon {
+    width: 24px !important;
+    height: 24px !important;
+  }
+  .game-page .command-coach .coach-top strong {
+    font-size: 8px;
+    letter-spacing: 1px;
+  }
+  .game-page .command-coach .coach-top small {
+    font-size: 6px;
+  }
+  .game-page .command-coach .radio-signal {
+    gap: 2px;
+  }
+  .game-page .command-coach h2 {
+    font-size: 15px;
+  }
+  .game-page .command-coach p {
+    font-size: 10px;
+  }
+  .game-page .command-coach .coach-stage-track small {
+    display: none;
+  }
+  .game-page .command-coach .coach-stage-track {
+    margin-bottom: 10px;
+  }
+  .game-page .command-coach .coach-stage-track > span {
+    padding: 4px;
+  }
+  .game-page .command-coach .coach-required {
+    font-size: 7px;
+    margin-top: 10px;
+  }
+  .command-coach {
+    padding: 15px;
+  }
+  .command-coach h2 {
+    font-size: 18px;
+  }
+  .command-coach p {
+    font-size: 11px;
+  }
+  .result-panel.victory {
+    padding: 18px;
+    max-height: calc(100dvh - 175px);
+  }
+  .result-medal {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 10px;
+  }
+  .result-panel h1 {
+    font-size: 23px;
+  }
+  .reward-breakdown {
+    padding: 12px;
+    margin-top: 14px;
+  }
+  .capture-word {
+    font-size: 24px;
+  }
+  .game-sound {
+    width: 40px;
+    height: 42px;
+  }
+}
+@media (max-width: 360px) {
+  .site-header .brand {
+    font-size: 17px;
+    letter-spacing: 2px;
+  }
+  .site-header .brand-icon .icon {
+    width: 25px;
+    height: 25px;
+  }
+  .site-header .header-actions {
+    gap: 5px;
+  }
+  .game-page .command-coach {
+    top: 85px;
+  }
+  .result-panel.victory h1 {
+    font-size: 21px;
+  }
+  .result-panel.victory {
+    max-height: calc(100dvh - 155px);
+    padding: 15px;
+  }
+  .reward-equation > span {
+    font-size: 19px;
+  }
+  .result-panel .result-actions {
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .result-panel .result-actions .button {
+    min-height: 40px;
+    padding: 9px;
+  }
+  .result-medal {
+    display: none;
+  }
+  .reward-breakdown {
+    margin-top: 12px;
+  }
+  .balance-equation {
+    font-size: 8px;
+  }
+}
+@media (max-height: 650px) {
+  .game-page .command-coach .coach-stage-track {
+    display: none;
+  }
+  .game-page .command-coach .coach-top {
+    margin-bottom: 7px;
+  }
+  .game-page .command-coach h2 {
+    font-size: 13px;
+    margin-bottom: 5px;
+  }
+  .game-page .command-coach p {
+    font-size: 9px;
+  }
+  .game-page .command-coach .coach-required {
+    font-size: 6px;
+    margin-top: 8px;
+  }
+  .game-page .command-coach .commander-badge {
+    width: 28px;
+    height: 29px;
+  }
+  .game-page .command-coach {
+    padding: 9px 11px;
+  }
+  .game-page .command-coach .coach-top small {
+    font-size: 5px;
+  }
+  .game-page .command-coach .coach-top strong {
+    font-size: 7px;
+  }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .game-page .command-coach {
+    top: 92px;
+    left: 12px;
+    width: 39vw;
+    right: auto;
+  }
+  .result-panel.victory {
+    left: auto;
+    right: 14px;
+    bottom: 14px;
+    top: 14px;
+    transform: none;
+    width: 46vw;
+    max-height: none;
+    padding: 15px;
+  }
+  .result-panel.victory .result-medal {
+    display: none;
+  }
+  .result-panel.victory h1 {
+    font-size: 19px;
+    margin: 7px 0;
+  }
+  .result-panel.victory .reward-breakdown {
+    margin-top: 10px;
+    padding: 10px;
+  }
+  .result-panel.victory .result-actions {
+    margin-top: 10px;
+    grid-template-columns: 1fr 1fr;
+    gap: 9px;
+  }
+  .result-panel.victory .result-actions .button {
+    font-size: 9px;
+    min-height: 38px;
+    padding: 8px;
+  }
+  .result-panel.victory .reward-equation > span {
+    font-size: 18px;
+  }
+  .result-panel.victory .reward-earned {
+    padding-top: 8px;
+    margin-top: 8px;
+  }
+  .result-panel.victory .balance-equation {
+    margin-top: 7px;
+  }
+  .capture-word {
+    left: 25%;
+    top: 38%;
+    font-size: 20px;
+  }
+  .capture-word .icon {
+    width: 22px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .command-coach *,
+  .capture-celebration *,
+  .runner-marker.captured:after,
+  .sync-badge {
+    animation: none !important;
+  }
+  .capture-celebration {
+    display: none;
+  }
+}
+.maplibregl-ctrl-attrib {
+  background: #152b21ed !important;
+  color: #a8bc98 !important;
+  padding: 2px 6px !important;
+  border-radius: 4px 0 0 0 !important;
+  line-height: 12px !important;
+  font-size: 8px !important;
+}
+.maplibregl-ctrl-attrib a {
+  color: #c7d8b4 !important;
+}
+.maplibregl-ctrl-attrib .maplibregl-ctrl-attrib-inner {
+  color: inherit;
+}
+.maplibregl-ctrl-bottom-right {
+  bottom: 0;
+  right: 0;
+}

@@ -13,6 +13,7 @@ import {
 import type { CountryBoard } from "./game/types";
 import type { Mission } from "./game/missions";
 import type { Navigation } from "./game/navigation";
+import type { PendingProgress, ProgressReceipt } from "./game/progress-outbox";
 
 export class ProgressConflict extends Error {
   readonly code = "progress/conflict";
@@ -51,17 +52,52 @@ export class ProgressStore {
   ) {}
 
   async load(uid: string): Promise<PlayerProgress> {
+    return (await this.loadWithReceipt(uid)).progress;
+  }
+  async loadWithReceipt(uid: string): Promise<ProgressReceipt> {
     const ref = doc(this.db, "players", uid);
     return runTransaction(this.db, async (transaction) => {
       const snapshot = await transaction.get(ref);
-      if (snapshot.exists()) return readProgress(snapshot.data());
-      const progress = initialProgress();
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        return {
+          progress: readProgress(data),
+          lastMutationId:
+            typeof data.lastMutationId === "string"
+              ? data.lastMutationId
+              : null,
+        };
+      }
+      const progress = initialProgress(),
+        lastMutationId = crypto.randomUUID();
       transaction.set(ref, {
         ...progress,
-        lastMutationId: crypto.randomUUID(),
+        lastMutationId,
         updatedAt: serverTimestamp(),
       });
-      return progress;
+      return { progress, lastMutationId };
+    });
+  }
+  /** The browser has already validated and applied this single-player transition.
+   * Persist its exact snapshot, guarded by ownership, revision and receipt ID. */
+  async commit(uid: string, entry: PendingProgress): Promise<PlayerProgress> {
+    const ref = doc(this.db, "players", uid);
+    return runTransaction(this.db, async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists()) throw new Error("Reload to initialize your save");
+      const data = snapshot.data(),
+        current = readProgress(data);
+      if (data.lastMutationId === entry.actionId) return current;
+      if (current.player.revision !== entry.revision)
+        throw new ProgressConflict();
+      if (entry.progress.player.revision !== entry.revision + 1)
+        throw new Error("Invalid save revision");
+      transaction.set(ref, {
+        ...entry.progress,
+        lastMutationId: entry.actionId,
+        updatedAt: serverTimestamp(),
+      });
+      return entry.progress;
     });
   }
 

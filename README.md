@@ -31,9 +31,10 @@ browser-local gameplay sandbox; its progress is not uploaded. Production builds 
 - Every level has a distinct illustrated case, starting with Veerappan. Inspect
   any locked case to preview its running speed; play unlocks remain sequential.
 - Level 1 guides roster selection through the first win. Level 2 is unguided;
-  Level 3 guides Rapid recruitment and one upgrade, then tutorials end. The
+  Level 3 guides Rapid recruitment and one upgrade, then tutorials end. Both lessons are mandatory. The
   minimum 75 coins from the first two wins cover both costs (25 + 20).
-- Select a squad, choose a free post, inspect both paths, then Deploy. Playback
+- Choose a squad and a free post in either order, inspect both paths, then Deploy.
+  Changing squads retains the destination and recalculates the preview. Playback
   uses one uniform clock; distant orders never secretly accelerate the fugitive.
 - Every level allows 15 moves. Guard every land escape route, or intercept the
   fugitive with a stationed Marksman Squad. Thinking time is paused.
@@ -41,7 +42,7 @@ browser-local gameplay sandbox; its progress is not uploaded. Production builds 
   on arrival. The fugitive moves during the order; ocean is impassable to ground
   units and the fugitive.
 - Start with three Patrol Squads and three deployment slots. Slots may be empty.
-  The Level 15 and Level 25 additional slots are future purchase placeholders.
+  Additional deployment slots are future content.
 - Recruit each specialist once: Rapid Action at Level 3, Helicopter at Level 6,
   Marksman at Level 10. Levels 6/10 and numerical prices/stats are starter values.
 - Rapid Action trains movement speed. Helicopter training alternates longer
@@ -83,9 +84,13 @@ never silently combined.
 
 Firestore stores the collection, wallet, results, selection, training deadlines
 and active attempt per UID. A restored chase is rebuilt in the browser from its commands and
-partial move time. A local checkpoint journal recovers interrupted uploads after
-refresh. Conflicting device writes require a reload instead of overwriting newer
-progress. Prototype v1 saves are not converted or credited to the new campaign.
+partial move time. Every action validates and updates locally immediately. An
+ordered, durable outbox syncs immutable snapshots in the background, including
+attempt IDs and absolute training deadlines. A lost response is deduplicated by
+its receipt; refreshing with pending progress restores the local campaign without
+waiting for cloud reads. Reconnecting retries automatically. A conflicting newer
+cloud save pauses uploads, preserving the local campaign; the profile offers an
+explicit cloud-save choice with a local backup. Prototype v1 saves are not converted or credited to the new campaign.
 
 Players can read and write only their own save. Firestore rules reject other
 players' access, listing, deletion, malformed top-level saves and stale revision
@@ -117,9 +122,13 @@ failed witness is not proof that every possible weaker-roster strategy fails.
 The campaign's prices and progression remain playtest tuning, not a claim of
 proven global optimal solutions. See [rewrite verification](docs/rewrite-verification.md).
 
-Use the existing Playwright CLI workflow with `scripts/check-progression.js` for
-mobile/desktop layout, captures, purchases, training and refresh recovery. The
-callback creates and closes its own browser context; close the CLI session too.
+Use the Playwright CLI with `scripts/check-game-ui.js` for the first wins,
+mandatory guides and recruitment/training while cloud requests are held. It also
+checks delayed persistence and reload recovery. `scripts/check-game-layout.js`
+covers phone/landscape/tablet/desktop capture framing, `scripts/check-game-audio.js`
+covers playback and mute behavior, and `scripts/check-basemap-access.ts` checks
+map source/tile/font availability. Browser callbacks close their own contexts;
+close the CLI session too.
 
 - [CONTEXT.md](CONTEXT.md): player-facing vocabulary.
 - [Design decisions](docs/progression-decisions.md): agreed scope.
@@ -127,10 +136,34 @@ callback creates and closes its own browser context; close the CLI session too.
   documented as agreed or starter values with units and limits.
 - [Level geometry](docs/level-design.md): source attribution and legacy validation.
 
-The visual basemap loads directly from the owner-controlled
-`https://dashboard.lascadian.com/maps/default.json`. Its embedded MapTiler key is
-not copied into source. Authoritative gameplay geometry is compiled separately
-from pinned Natural Earth data, with retained attribution and source checksums.
+The app owns its tactical basemap style in `src/game/patrol-map-style.ts`, using
+public OpenFreeMap vector tiles and Noto fonts. It has no dependency on the former
+style server or its embedded key. OpenFreeMap/OpenMapTiles/OpenStreetMap attribution
+stays visible. The separate, authoritative gameplay geometry comes from pinned
+Natural Earth data with retained source attribution/checksums.
+
+All toast messages dismiss automatically after 20 seconds; manual dismissal
+remains available.
+
+The original procedural soundtrack and effects require no downloads. Sound starts
+on a gesture, supports a persistent mute control and suspends when the page is
+hidden. Gains and base/pursuit tempos live in the tuning configuration.
+
+Capture focuses the actual fugitive position before the reward card. Reduced
+motion disables camera/confetti animation. The winning card shows base × bonus,
+net new coins and previous balance + reward = new balance; replay payouts remain
+capped to improvement. It offers Next and a secondary Home action.
+
+Training times increase across specialist tracks (starter values):
+
+| Squad | Upgrade 1 | Upgrade 2 | Upgrade 3 | Upgrade 4 |
+| --- | --- | --- | --- | --- |
+| Rapid Action | 30 sec | 1 min | 3 min | 10 min |
+| Helicopter | 15 min | 30 min | 1 hour | 2 hours |
+| Marksman | 3 hours | 4 hours | 6 hours | 8 hours |
+
+These are real training times; deployment/movement hours are simulated chase time.
+In-progress training retains its stored deadline.
 
 ## Deploy to Firebase
 

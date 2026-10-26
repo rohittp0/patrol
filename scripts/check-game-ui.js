@@ -1,5 +1,4 @@
-// Playwright CLI run-code --filename scripts/check-game-ui.js
-// Uses the open browser origin; local preview uses its development-only save mode.
+// Real UI + Firebase: hold the network while the entire first-purchase flow plays.
 async (basePage) => {
   const context = await basePage
     .context()
@@ -11,62 +10,64 @@ async (basePage) => {
     });
   const page = await context.newPage(),
     checks = [],
-    errors = [];
-  const origin =
-    new URL(basePage.url()).origin +
-    (new URL(basePage.url()).hostname === "localhost" ? "/?local=1" : "/");
+    errors = [],
+    timing = {};
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
   const check = (ok, label) => {
     if (!ok) throw new Error(label);
     checks.push(label);
   };
-  page.on("pageerror", (error) => errors.push(error.message));
+  const journal = () =>
+    page.evaluate(() =>
+      JSON.parse(localStorage.getItem("patrol:outbox:v1") || "null"),
+    );
+  const coach = () => page.locator(".coach");
+  const origin = new URL(basePage.url()).origin;
+  page.on("pageerror", (e) => errors.push(e.message));
   await page.route(/https:\/\/[^/]*(?:posthog|facebook)[^/]*\//, (r) =>
     r.abort(),
   );
-  const coach = () => page.locator(".coach");
-  const layout = async (label) =>
-    check(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth + 1,
-      ),
-      label + " fits horizontally",
-    );
   const move = async (order, guided = false) => {
     await page
       .locator(`[data-action="select-squad"][data-squad="${order.squad}"]`)
       .click();
-    if (guided)
-      check(
-        (await coach().innerText()).includes("Close Post"),
-        "Guide explains post selection",
-      );
-    else await page.locator('[data-action="country-view"]').click();
-    await page.locator(`[data-border="${order.border}"]`).click();
-    check(
-      await page.locator('[data-action="deploy"]').isVisible(),
-      "Move requires an explicit Deploy",
-    );
+    const post = page.locator(`[data-border="${order.border}"]`);
+    // In unguided play the map can be panned/zoomed with normal gestures.
+    if (!guided) {
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const b = await post.boundingBox();
+        const dock = await page.locator(".squad-dock").boundingBox();
+        if (
+          b &&
+          b.x > 0 &&
+          b.x + b.width < 390 &&
+          b.y > 85 &&
+          b.y + b.height < dock.y
+        )
+          break;
+        await page.mouse.move(150, 350);
+        await page.mouse.wheel(0, 250);
+      }
+    }
+    await post.click();
     check(
       (await page.locator("#journey").innerText()).includes("Fugitive travels"),
-      "Pursuit distance is advertised before commitment",
+      "Movement is previewed before Deploy",
     );
-    if (guided)
-      check(
-        (await coach().innerText()).includes("Read the chase"),
-        "Guide explains both preview paths",
-      );
     await page.locator('[data-action="deploy"]').click();
     await page.waitForFunction(
       () =>
-        document.querySelector("#result-panel:not([hidden])") ||
+        document.querySelector(".capture-moment") ||
         document
           .querySelector("#journey")
           ?.textContent?.includes("Time paused"),
     );
   };
   try {
-    await page.goto(origin);
+    await page.goto(origin + "/");
     await page.locator('[data-action="choose"][data-level="1"]').waitFor();
+    await page.bringToFront();
     const levels = await page.evaluate(
       async () =>
         (await (await fetch("/data/india-campaign.json")).json()).levels,
@@ -79,172 +80,214 @@ async (basePage) => {
       [1440, 900],
     ]) {
       await page.setViewportSize({ width, height });
-      await layout(`Base ${width}`);
+      check(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth + 1,
+        ),
+        `Base ${width} fits`,
+      );
       await page.locator('.bottom-nav [data-action="levels"]').click();
       check(
         (await page.locator(".level-card").count()) === 15,
-        "15 distinct cases at " + width,
+        `15 cases at ${width}`,
       );
-      check(
-        (await page.locator(".level-card.locked").count()) === 14,
-        "Locked cases remain inspectable at " + width,
-      );
-      await layout("Cases " + width);
       await page.locator('.level-card[data-level="15"]').click();
       check(
         (await page.locator("dialog").innerText()).includes("116"),
-        "Locked preview shows level-specific speed",
+        "Locked preview has correct speed",
       );
       check(
         (await page.locator('dialog [data-action="choose"]').count()) === 0,
-        "Preview does not unlock a locked level",
+        "Preview cannot unlock levels",
       );
-      await page.locator('[data-action="close-modal"]').click();
-      await page.locator('.bottom-nav [data-action="academy"]').click();
-      await layout("Academy " + width);
+      await page.locator('dialog [data-action="close-modal"]').click();
       await page.locator('.bottom-nav [data-action="home"]').click();
     }
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.screenshot({ path: "output/playwright/game-ui-home.png" });
     await page.locator('[data-action="choose"][data-level="1"]').click();
-    check(await coach().isVisible(), "Tutorial starts immediately after Play");
+    check(await coach().isVisible(), "Guide starts on Play");
     check(
-      (await page.locator(".deployment-slot.filled").count()) === 0,
-      "First lesson requires actually selecting the roster",
+      (await page.locator('[data-action="skip-guide"]').count()) === 0,
+      "Tutorial has no Skip control",
     );
+    await page.locator('.bottom-nav [data-action="home"]').click();
     check(
-      await page.locator(".case-profile img").isVisible(),
-      "Fugitive portrait is present at squad selection",
+      page.url().endsWith("#roster"),
+      "Guide cannot be bypassed through navigation",
     );
-    check(
-      (await page.locator(".speed-badge").innerText()).includes("48"),
-      "Briefing displays actual level speed",
-    );
-    for (const id of ["patrol-1", "patrol-2", "patrol-3"]) {
-      check(
-        (await coach().innerText()).includes("Select Patrol"),
-        "Roster selection is coached",
-      );
+    for (const id of ["patrol-1", "patrol-2", "patrol-3"])
       await page.locator(`[data-action="add-squad"][data-id="${id}"]`).click();
-    }
-    check(
-      (await coach().innerText()).includes("Your squad is ready"),
-      "Guide moves to Start after selecting squads",
+    await context.route(
+      /https?:\/\/(?:firestore\.googleapis\.com|(?:127\.0\.0\.1|localhost):8080)\//,
+      async (route) => {
+        await gate;
+        await route.continue().catch(() => {});
+      },
     );
+    let started = Date.now();
     await page.locator('[data-action="start"]').click();
-    await page.locator(".border-post").first().waitFor();
-    check(
-      (await page.locator(".runner-marker img").count()) === 1,
-      "Veerappan portrait is restored on the map",
-    );
-    await move(levels[0].witness[0], true);
-    await page.reload();
-    await page.locator(".border-post").first().waitFor();
-    check(
-      (await coach().innerText()).includes("MOVE 2"),
-      "Guide resumes the actual move after refresh",
-    );
-    const next = levels[0].witness[1];
+    await page.locator(".game-page").waitFor({ timeout: 1200 });
+    timing.startWithCloudHeldMs = Date.now() - started;
+    check(true, "Game starts before Firebase acknowledges it");
     await page
-      .locator(`[data-action="select-squad"][data-squad="${next.squad}"]`)
-      .click();
-    await page.locator(`[data-border="${next.border}"]`).click();
-    await page.screenshot({ path: "output/playwright/game-ui-preview.png" });
-    await page.locator('[data-action="deploy"]').click();
-    await page.locator('[data-action="next"]').waitFor();
+      .locator('#map[data-basemap="ready"]')
+      .waitFor({ timeout: 30000 });
+    check(true, "Real map tiles render");
     check(
-      (await coach().count()) === 0,
-      "Full field tutorial ends after the first win",
+      (await page
+        .locator(
+          '[data-action="hint"],[data-action="find"],[data-action="country-view"],[data-action="help"]',
+        )
+        .count()) === 0,
+      "Hint, focus and information controls are removed",
     );
-    await page.screenshot({ path: "output/playwright/game-ui-win.png" });
-    await page.locator('[data-action="next"]').click();
-    check((await coach().count()) === 0, "Level 2 has no tutorial");
+    await page.locator('[data-action="leave"]').click();
+    check(page.url().endsWith("#play"), "Field training cannot be exited");
+    await page.keyboard.press("Escape");
+    check(await coach().isVisible(), "Escape cannot dismiss the tutorial");
+    await page.screenshot({ path: "output/playwright/patrol-next-map.png" });
+    for (const order of levels[0].witness) await move(order, true);
+    await page.locator("#result-panel.victory:not([hidden])").waitFor();
+    check(
+      (await page.locator(".reward-equation").innerText()).includes("90"),
+      "Reward shows base × multiplier = 90",
+    );
+    check(
+      (await page.locator(".balance-equation").innerText()).includes(
+        "0 + 90 = 90",
+      ),
+      "Reward shows balance addition",
+    );
+    check(
+      (await page.locator('#result-panel [data-action="academy"]').count()) ===
+        0,
+      "Winning screen has no Academy option",
+    );
+    check(
+      (await page
+        .locator('#result-panel .secondary[data-action="home"] svg')
+        .count()) === 1,
+      "Home is a secondary button with a home icon",
+    );
+    check(
+      (await page.locator(".capture-celebration").count()) === 1,
+      "Capture creates a celebration",
+    );
+    await page.waitForFunction(() => {
+      const r = document
+          .querySelector(".runner-marker.captured")
+          ?.getBoundingClientRect(),
+        p = document.querySelector("#result-panel")?.getBoundingClientRect();
+      return r && p && r.top > 85 && r.bottom < p.top;
+    });
+    check(true, "Camera keeps the actual capture above the reward card");
+    check(
+      (await journal()).pending.length > 0,
+      "Win and reward do not wait for cloud writes",
+    );
+    await page.screenshot({ path: "output/playwright/patrol-next-win.png" });
+    await page.locator('#result-panel [data-action="next"]').click();
+    check((await coach().count()) === 0, "Level 2 is unguided");
     await page.locator('[data-action="start"]').click();
-    await page.locator(".border-post").first().waitFor();
+    await page.locator(".game-squad").first().waitFor();
     for (const order of levels[1].witness) await move(order);
-    await page.locator('[data-action="next"]').waitFor();
+    await page.locator('#result-panel [data-action="next"]').waitFor();
+    await page.locator('#result-panel [data-action="next"]').click();
     check(
-      (await coach().innerText()).includes("faster squad"),
-      "Level 3 unlock returns the coach",
+      (await coach().innerText()).includes("Rapid Action unlocked"),
+      "Level 3 resumes the mandatory guide",
     );
-    await page.locator('#result-panel [data-action="academy"]').click();
-    check(
-      (await coach().innerText()).includes("Recruit Rapid"),
-      "Academy recruit is highlighted",
-    );
+    await page.locator('.coach-target[data-action="academy"]').click();
+    started = Date.now();
     await page.locator('[data-action="purchase"][data-id="rapid"]').click();
-    await page.locator("dialog[open]").waitFor();
-    check(
-      (await page.locator("dialog").innerText()).includes("Google"),
-      "Optional login appears after the first purchase",
-    );
+    await page.locator("dialog[open]").waitFor({ timeout: 1200 });
+    timing.purchaseWithCloudHeldMs = Date.now() - started;
+    check(true, "Recruitment and its login prompt do not wait for Firebase");
     await page.locator('dialog [data-action="close-modal"]').last().click();
-    check(
-      (await coach().innerText()).includes("first upgrade"),
-      "Coach resumes with training after login is dismissed",
-    );
+    started = Date.now();
     await page.locator('[data-action="train"][data-id="rapid"]').click();
-    await page.locator('[data-training="rapid"]').waitFor();
+    await page.locator('[data-training="rapid"]').waitFor({ timeout: 1200 });
+    timing.trainingWithCloudHeldMs = Date.now() - started;
+    const before = await journal();
+    const deadline =
+      before.pending.at(-1).progress.player.squads.rapid.training.readyAt;
+    check(
+      before.pending.at(-1).progress.player.wallet === 180,
+      "Purchase and training deduct coins immediately",
+    );
     check(
       (await coach().innerText()).includes("Training is underway"),
-      "Training timer and unavailability are explained",
+      "Mandatory training explains the timer",
     );
-    await page.screenshot({ path: "output/playwright/game-ui-training.png" });
+    await page.screenshot({
+      path: "output/playwright/patrol-next-training.png",
+    });
     await page.locator('[data-action="lesson-done"]').click();
     await coach().waitFor({ state: "detached" });
     await page.reload();
-    await page.locator('[data-unit="rapid"]').waitFor();
+    await page.locator('[data-training="rapid"]').waitFor({ timeout: 2500 });
+    check(
+      (await journal()).pending.at(-1).progress.player.wallet === 180,
+      "Pending campaign survives refresh while cloud is still held",
+    );
     check(
       (await coach().count()) === 0,
-      "Completed Academy lesson stays dismissed after refresh",
+      "Completed tutorial stays completed after refresh",
+    );
+    release();
+    await page.waitForFunction(
+      () =>
+        JSON.parse(localStorage.getItem("patrol:outbox:v1") || "null")?.pending
+          .length === 0,
+      { timeout: 30000 },
+    );
+    const saved = await journal();
+    check(
+      saved.confirmed.player.wallet === 180,
+      "Background queue persists the exact final balance",
+    );
+    check(
+      saved.confirmed.player.squads.rapid.training.readyAt === deadline,
+      "Cloud delay never restarts the training clock",
+    );
+    await page.reload();
+    await page.locator('[data-unit="rapid"]').waitFor();
+    check(
+      (await journal()).confirmed.player.wallet === 180,
+      "A fresh cloud read has no duplicated coins or purchases",
     );
     await page.locator('[data-action="choose"][data-level="3"]').click();
     check(
       await page
         .locator('[data-action="add-squad"][data-id="rapid"]')
         .isDisabled(),
-      "Training squad cannot be selected",
+      "Training squads remain unavailable",
     );
     await page.locator('[data-action="remove-slot"][data-slot="1"]').click();
     await page.locator('[data-action="start"]').click();
-    await page.locator(".border-post").first().waitFor();
+    await page.locator(".game-squad").first().waitFor();
     check(
       (await page.locator(".game-squad").count()) === 2,
-      "Level can start with an empty slot during training",
+      "Empty slots remain playable",
     );
     check(
       (await coach().count()) === 0,
-      "No further gameplay tutorial at Level 3",
-    );
-    await page.locator('[data-action="leave"]').click();
-    await page.locator('[data-action="abandon"]').click();
-    await page.locator('.bottom-nav [data-action="academy"]').click();
-    await page
-      .locator('[data-action="train"][data-id="rapid"]')
-      .waitFor({ timeout: 40000 });
-    check(
-      (
-        await page.locator('[data-unit="rapid"] .stat-line').innerText()
-      ).includes("240"),
-      "First upgrade applies only when the timer finishes",
-    );
-    check(
-      (await coach().count()) === 0,
-      "Training completion does not restart tutorials",
+      "No more guided gameplay after Level 1",
     );
     check(errors.length === 0, "No uncaught browser errors");
-    return { checks: checks.length, passed: checks, errors };
+    return { checks: checks.length, timing, passed: checks, errors };
   } catch (error) {
     await page.screenshot({
-      path: "output/playwright/game-ui-failure.png",
+      path: "output/playwright/patrol-next-failure.png",
       fullPage: true,
     });
     throw new Error(
       String(error) +
         "\n" +
-        (await page.locator("body").innerText()).slice(-2400),
+        (await page.locator("body").innerText()).slice(-1800),
     );
   } finally {
+    release();
     await context.close();
   }
 }

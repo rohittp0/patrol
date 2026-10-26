@@ -1,17 +1,17 @@
 import type { PlayerState } from "./collection";
 import type { PatrolGame } from "./engine";
 export function needsFieldLesson(player: PlayerState) {
-  return !player.results["1"] && !player.tutorials?.field;
+  return !player.results["1"];
 }
 export function academyLesson(
   player: PlayerState,
 ): "purchase" | "train" | "timer" | null {
   // No surprise onboarding for an existing player beyond the requested cutoff.
-  if (player.unlocked !== 3 || player.results["3"] || player.tutorials?.academy)
-    return null;
+  if (player.unlocked !== 3 || player.results["3"]) return null;
   const rapid = player.squads.rapid;
   if (!rapid) return "purchase";
-  if (rapid.training || rapid.step > 0) return "timer";
+  if (rapid.training || rapid.step > 0)
+    return player.tutorials?.academy ? null : "timer";
   return "train";
 }
 /** An old off-script attempt remains free play; never impose an invalid witness. */

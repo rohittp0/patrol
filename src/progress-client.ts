@@ -25,6 +25,12 @@ import type { Mission, MissionAttempt } from "./game/missions";
 import type { CountryBoard } from "./game/types";
 import type { Navigation } from "./game/navigation";
 import { ProgressStore } from "./progress-store";
+import {
+  ProgressOutbox,
+  type ProgressJournal,
+  type ProgressReceipt,
+  type SyncStatus,
+} from "./game/progress-outbox";
 
 interface PendingSave {
   uid: string;
@@ -42,7 +48,8 @@ type CachedProgress =
 
 const KEY = "patrol:progress:v2",
   PENDING = "patrol:pending:v2",
-  CHECKPOINT = "patrol:checkpoint:v2";
+  CHECKPOINT = "patrol:checkpoint:v2",
+  OUTBOX = "patrol:outbox:v1";
 export class ProgressClient {
   response: PlayerProgress = initialProgress();
   // Keep Firebase's registered OAuth handler. A custom Hosting domain is not
@@ -54,7 +61,35 @@ export class ProgressClient {
   readonly local =
     import.meta.env.DEV &&
     new URLSearchParams(location.search).get("local") === "1";
-  private serial: Promise<unknown> = Promise.resolve();
+  private outbox: ProgressOutbox | null = null;
+  private loadedUid = "";
+  private durable = true;
+  recoveryMessage = "";
+  get syncStatus(): SyncStatus {
+    return this.outbox?.status ?? "saved";
+  }
+  get pendingCount() {
+    return this.outbox?.pendingCount ?? 0;
+  }
+  get syncMessage() {
+    if (this.syncStatus === "conflict")
+      return "Newer cloud progress exists. Open your profile to resolve it; this device keeps its unsynced progress.";
+    if (this.syncStatus === "offline")
+      return this.durable
+        ? "Offline · progress saved on this device"
+        : "Offline · keep this tab open until saved";
+    return this.pendingCount
+      ? "Saving in background"
+      : this.local
+        ? "Saved on this device"
+        : "Progress saved";
+  }
+  retry() {
+    this.outbox?.retry();
+  }
+  flush() {
+    return this.outbox?.flush() ?? Promise.resolve();
+  }
   private volatile = new Map<string, string>();
 
   constructor(
@@ -84,7 +119,7 @@ export class ProgressClient {
   }
   private get(key: string) {
     try {
-      return localStorage.getItem(key);
+      return this.volatile.get(key) ?? localStorage.getItem(key);
     } catch {
       return this.volatile.get(key) ?? null;
     }
@@ -93,8 +128,10 @@ export class ProgressClient {
     this.volatile.set(key, value);
     try {
       localStorage.setItem(key, value);
+      return true;
     } catch {
-      /* Online saves still work if local storage is unavailable. */
+      /* Keep playing in memory while the cloud transport is available. */
+      return false;
     }
   }
   private remove(key: string) {
@@ -124,121 +161,173 @@ export class ProgressClient {
     );
     return response;
   }
-  private definitive(error: unknown) {
-    return (
-      error instanceof Error &&
-      (!("code" in error) ||
-        [
-          "progress/conflict",
-          "permission-denied",
-          "invalid-argument",
-          "unauthenticated",
-        ].includes(String(error.code)))
-    );
-  }
-  async load() {
-    await this.serial.catch(() => {});
-    if (this.local) {
-      const saved = this.read<CachedProgress>(KEY);
-      const progress = saved && "progress" in saved ? saved.progress : saved;
-      if (progress?.player?.version === 2) this.response = progress;
-    } else {
+  async load(knownReceipt?: ProgressReceipt) {
+    if (!this.local) {
       await this.auth.authStateReady();
       if (!this.auth.currentUser) await signInAnonymously(this.auth);
-      this.response = await this.store.load(this.auth.currentUser!.uid);
     }
     const uid = this.auth.currentUser?.uid ?? "local";
+    // Resuming the current screen must never wait for another cloud round trip.
+    if (this.outbox && this.loadedUid === uid) return this.response;
+    this.outbox?.stop();
+    const cached = this.read<CachedProgress>(KEY);
+    const cachedProgress =
+      cached && "progress" in cached
+        ? cached.uid === uid
+          ? cached.progress
+          : null
+        : this.local
+          ? cached
+          : null;
+    const saved = this.read<ProgressJournal & { uid: string }>(OUTBOX);
+    let journal =
+      saved?.uid === uid &&
+      Array.isArray(saved.pending) &&
+      saved.confirmed?.player?.version === 2
+        ? saved
+        : null;
+    const backgroundReceipt =
+      !knownReceipt && journal && journal.pending.length > 0 && !this.local
+        ? this.store.loadWithReceipt(uid)
+        : null;
+    let receipt: ProgressReceipt;
+    try {
+      receipt =
+        knownReceipt ??
+        (backgroundReceipt
+          ? { progress: journal!.confirmed, lastMutationId: null }
+          : this.local
+            ? {
+                progress:
+                  journal?.confirmed ?? cachedProgress ?? initialProgress(),
+                lastMutationId: null,
+              }
+            : await this.store.loadWithReceipt(uid));
+    } catch (error) {
+      if (!journal && !cachedProgress) throw error;
+      receipt = {
+        progress: journal?.confirmed ?? cachedProgress!,
+        lastMutationId: null,
+      };
+    }
+    const connect = (state: ProgressJournal) => {
+      const outbox = new ProgressOutbox(state, {
+        paused: !!backgroundReceipt,
+        commit: (entry) =>
+          this.local
+            ? Promise.resolve(entry.progress)
+            : this.store.commit(uid, entry),
+        persist: (value) => {
+          this.durable = this.put(OUTBOX, JSON.stringify({ uid, ...value }));
+        },
+        changed: () => {
+          if (this.outbox !== outbox) return;
+          this.accept(outbox.response);
+          window.dispatchEvent(new Event("patrol:sync-change"));
+        },
+      });
+      this.outbox = outbox;
+      return outbox;
+    };
+    const outbox = connect(
+      journal ?? { confirmed: receipt.progress, pending: [] },
+    );
+    if (!outbox.reconcile(receipt)) {
+      this.put(
+        "patrol:conflict-backup:v2",
+        JSON.stringify({ uid, ...outbox.snapshot() }),
+      );
+      outbox.stop();
+      journal = null;
+      connect({ confirmed: receipt.progress, pending: [] });
+      this.recoveryMessage =
+        "Loaded newer cloud progress. This device’s unsynced campaign is kept as a backup.";
+    }
+    this.loadedUid = uid;
+    this.accept(this.outbox!.response);
+    // Recover the previous release's one-action journal without duplicating a
+    // transaction that committed just before the browser closed.
     const pending = this.read<PendingSave>(PENDING);
-    if (pending) {
-      if (pending.uid === uid) {
-        try {
-          this.response = this.local
-            ? advanceProgress(
-                this.response,
-                pending.input,
-                this.board,
-                this.levels,
-                this.now(),
-                this.navigation,
-              )
-            : await this.store.mutate(uid, pending.input);
-        } catch (error) {
-          if (!this.definitive(error)) throw error;
-        }
+    if (
+      pending?.uid === uid &&
+      pending.input.actionId !== receipt.lastMutationId
+    ) {
+      try {
+        if (pending.input.revision !== this.response.player.revision)
+          throw new Error("Older pending save");
+        const next = advanceProgress(
+          this.response,
+          pending.input,
+          this.board,
+          this.levels,
+          this.now(),
+          this.navigation,
+        );
+        this.outbox!.enqueue(pending.input.actionId, next);
+        this.accept(this.outbox!.response);
+      } catch {
+        this.put("patrol:legacy-pending-backup:v2", JSON.stringify(pending));
       }
-      this.remove(PENDING);
     }
+    this.remove(PENDING);
     const checkpoint = this.read<Checkpoint>(CHECKPOINT);
-    if (checkpoint) {
-      if (
-        checkpoint.uid === uid &&
-        checkpoint.attemptId === this.response.active?.id
-      ) {
-        const input: ProgressMutation = {
-          ...checkpoint,
-          op: "save",
-          actionId: crypto.randomUUID(),
-          revision: this.response.player.revision,
-        };
-        try {
-          this.response = this.local
-            ? advanceProgress(
-                this.response,
-                input,
-                this.board,
-                this.levels,
-                this.now(),
-                this.navigation,
-              )
-            : await this.store.mutate(uid, input);
-        } catch (error) {
-          if (!this.definitive(error)) throw error;
-        }
+    if (
+      checkpoint?.uid === uid &&
+      checkpoint.attemptId === this.response.active?.id
+    ) {
+      try {
+        await this.operation("save", {
+          attemptId: checkpoint.attemptId,
+          moves: checkpoint.moves,
+          pendingHours: checkpoint.pendingHours,
+        });
+      } catch {
+        /* A newer queued checkpoint already owns this attempt. */
       }
-      this.remove(CHECKPOINT);
     }
-    return this.accept(this.response);
+    this.remove(CHECKPOINT);
+    const activeOutbox = this.outbox!;
+    if (backgroundReceipt) {
+      void backgroundReceipt
+        .then((cloud) => {
+          if (this.outbox !== activeOutbox) return;
+          if (activeOutbox.reconcile(cloud)) activeOutbox.resume();
+          else
+            this.put(
+              "patrol:conflict-backup:v2",
+              JSON.stringify({ uid, ...activeOutbox.snapshot() }),
+            );
+        })
+        .catch(() => {
+          if (this.outbox === activeOutbox) activeOutbox.resume();
+        });
+    } else activeOutbox.resume();
+    return this.response;
   }
   private operation(
     op: ProgressMutation["op"],
     data: Omit<Partial<ProgressMutation>, "op"> = {},
   ) {
-    const frozen = structuredClone(data);
-    const next = this.serial
-      .catch(() => {})
-      .then(async () => {
-        if (this.get(PENDING))
-          throw new Error(
-            "An earlier action is waiting to sync. Reload to recover it safely.",
-          );
-        const input: ProgressMutation = {
-          ...frozen,
-          op,
-          actionId: crypto.randomUUID(),
-          revision: this.response.player.revision,
-        };
-        const uid = this.auth.currentUser?.uid ?? "local";
-        this.put(PENDING, JSON.stringify({ uid, input }));
-        try {
-          const result = this.local
-            ? advanceProgress(
-                this.response,
-                input,
-                this.board,
-                this.levels,
-                this.now(),
-                this.navigation,
-              )
-            : await this.store.mutate(uid, input);
-          this.remove(PENDING);
-          return this.accept(result);
-        } catch (error) {
-          if (this.definitive(error)) this.remove(PENDING);
-          throw error;
-        }
-      });
-    this.serial = next;
-    return next;
+    if (!this.outbox) throw new Error("Your campaign is still loading");
+    const input: ProgressMutation = {
+      ...structuredClone(data),
+      op,
+      actionId: crypto.randomUUID(),
+      revision: this.response.player.revision,
+    };
+    // Validation and the visible transition happen now, once. Cloud writes use
+    // this exact snapshot, so later UI actions do not wait for older requests.
+    const next = advanceProgress(
+      this.response,
+      input,
+      this.board,
+      this.levels,
+      this.now(),
+      this.navigation,
+    );
+    this.outbox.enqueue(input.actionId, next);
+    this.accept(next);
+    return Promise.resolve(next);
   }
   action(action: PlayerAction) {
     return this.operation("action", { action });
@@ -277,13 +366,38 @@ export class ProgressClient {
   abandon() {
     return this.operation("abandon");
   }
+  backupForTutorial() {
+    this.put(
+      "patrol:pre-tutorial-attempt:v2",
+      JSON.stringify({ uid: this.loadedUid, progress: this.response }),
+    );
+  }
+  async reloadCloud() {
+    const uid = this.auth.currentUser?.uid;
+    const receipt = this.local
+      ? {
+          progress: this.outbox?.snapshot().confirmed ?? this.response,
+          lastMutationId: null,
+        }
+      : uid
+        ? await this.store.loadWithReceipt(uid)
+        : null;
+    if (!receipt) throw new Error("Sign in to load your cloud campaign");
+    if (this.outbox)
+      this.put(
+        "patrol:conflict-backup:v2",
+        JSON.stringify({ uid: this.loadedUid, ...this.outbox.snapshot() }),
+      );
+    this.outbox?.stop();
+    this.outbox = null;
+    this.loadedUid = "";
+    this.remove(OUTBOX);
+    this.remove(CHECKPOINT);
+    return this.load(receipt);
+  }
   async google() {
     if (this.local)
       throw new Error("Google sign-in is available on the hosted game");
-    if (this.get(PENDING))
-      throw new Error(
-        "Reconnect and reload to finish saving before signing in",
-      );
     const provider = new GoogleAuthProvider();
     try {
       await linkWithPopup(this.auth.currentUser!, provider);
@@ -304,6 +418,7 @@ export class ProgressClient {
           )
         )
           return;
+        await this.flush();
         this.put("patrol:guest-backup:v2", JSON.stringify(this.response));
         await signInWithCredential(this.auth, credential);
       } else throw error;
@@ -311,11 +426,7 @@ export class ProgressClient {
     await this.load();
   }
   async signOut() {
-    await this.serial.catch(() => {});
-    if (this.get(PENDING))
-      throw new Error(
-        "Reconnect and reload to finish saving before signing out",
-      );
+    await this.flush();
     await signOut(this.auth);
     this.remove(KEY);
     this.remove(CHECKPOINT);

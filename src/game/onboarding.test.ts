@@ -45,11 +45,18 @@ test("old saves preserve earned progress and optional tutorial flags survive ser
   p.unlocked = 10;
   assert.equal(academyLesson(p), null);
   p = applyAction(p, { kind: "tutorial", lesson: "field" }, 0);
-  assert(!needsFieldLesson(JSON.parse(JSON.stringify(p))));
+  assert(
+    needsFieldLesson(JSON.parse(JSON.stringify(p))),
+    "Legacy Skip flags cannot bypass the first capture",
+  );
   assert.equal(p.unlocked, 10);
   p.unlocked = 3;
   p = applyAction(p, { kind: "tutorial", lesson: "academy" }, 0);
-  assert.equal(academyLesson(JSON.parse(JSON.stringify(p))), null);
+  assert.equal(
+    academyLesson(JSON.parse(JSON.stringify(p))),
+    "purchase",
+    "Legacy Skip cannot bypass recruitment and training",
+  );
 });
 test("all 15 accessible case previews have distinct illustrations, sources and exact per-level speed", () => {
   const levels: Mission[] = JSON.parse(
@@ -91,4 +98,25 @@ test("guided first win resumes a correct prefix and never hijacks a different mo
   assert(game.won);
   game.history[0].to = -999;
   assert.equal(guidedOrder(game), null);
+});
+
+test("later specialist training starts above the preceding specialist’s final upgrade", () => {
+  const order = ["rapid", "helicopter", "marksman"] as const;
+  for (const [index, id] of order.entries()) {
+    const times = ECONOMY.trainingSeconds[id];
+    assert.equal(times.length, ECONOMY.upgradeCosts.length);
+    assert(
+      times.every(
+        (seconds, i) => seconds > 0 && (i === 0 || seconds > times[i - 1]),
+      ),
+    );
+    if (index)
+      assert(times[0] > ECONOMY.trainingSeconds[order[index - 1]].at(-1)!);
+    const p = newPlayer();
+    p.wallet = 1000;
+    p.unlocked = 15;
+    const owned = applyAction(p, { kind: "purchase", squad: id }, 1000);
+    const trained = applyAction(owned, { kind: "train", squad: id }, 1000);
+    assert.equal(trained.squads[id]!.training!.readyAt, 1000 + times[0] * 1000);
+  }
 });

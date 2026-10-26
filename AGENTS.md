@@ -8,5 +8,5 @@
 - Keep playtest tuning values in `src/game/playtest.config.ts`, with units,
   constraints, and a clear distinction between agreed and starter values.
 - Target Firebase Hosting in project `patrol-daac9` at `https://patrol.rohittp.com/`.
-- Use the owner-controlled style URL documented in the configuration without
-  copying its embedded MapTiler key into source.
+- Use Patrol’s own tactical map style with the configured OpenFreeMap sources.
+  Keep provider attribution visible and never copy map API keys into source.

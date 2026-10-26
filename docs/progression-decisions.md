@@ -79,3 +79,30 @@ implementation plan or a claim that the rewrite is complete.
 - Playback uses one uniform accelerated clock. Long squad journeys no longer
   increase the fugitive's on-screen speed to squeeze into a four-second cap;
   the path preview and the underlying simulated running speed remain consistent.
+
+- Campaign actions update optimistically and persist in the background. UI flow
+  must not wait for Firebase acknowledgements. Durable, ordered snapshots retain
+  exact attempt identity, rewards and training deadlines across interruptions.
+- Replace the supplied style with a Patrol-owned tactical map style using public
+  vector data/fonts. Actual rendered tiles and labels are acceptance criteria;
+  a successful style request or drawn gameplay borders alone is insufficient.
+- Remove gameplay Hint, both manual focus buttons and the top information button,
+  including their active-app handlers and hint worker dependency. Normal map
+  gestures and automatic guide/capture camera framing remain available.
+- Tutorials cannot be skipped. Level 1 teaches the first capture, then Level 3
+  requires Rapid recruitment, one upgrade and acknowledgement of training.
+  Prior Skip flags alone do not bypass those required actions.
+- Add original music and game-event effects, with a persistent mute control and
+  no sound before a user gesture or while the page is hidden.
+- A capture immediately celebrates at the fugitive's actual map position. The
+  winning screen displays the reward calculation and balance addition, removes
+  Academy, and offers Next plus a secondary Home button with its proper icon.
+- Each later specialist's first training duration exceeds the previous
+  specialist's last. Starter ladders: Rapid 30/60/180/600 seconds; Helicopter
+  900/1800/3600/7200 seconds; Marksman 10800/14400/21600/28800 seconds. Active
+  training retains its existing deadline rather than being retroactively extended.
+- A squad and free border post may be selected in either order, including the
+  taught move during field training. Switching squads keeps the destination and
+  recomputes the preview. Neither selection spends a move; Deploy does.
+- All toast messages dismiss after 20 seconds. A new message receives its own
+  full 20-second deadline and may also be dismissed manually.

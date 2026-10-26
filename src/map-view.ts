@@ -1,16 +1,18 @@
-import { Map, Marker, NavigationControl, setWorkerUrl } from "maplibre-gl";
+import { Map, Marker, setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { track } from "./telemetry";
 import { borderName } from "./game/presentation";
 import { distanceKm } from "./game/navigation";
 import mapWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import type * as GeoJSON from "geojson";
-import type { GeoJSONSource, StyleSpecification } from "maplibre-gl";
+import type { GeoJSONSource } from "maplibre-gl";
 import { PLAYTEST_CONFIG as CONFIG } from "./game/playtest.config";
 import type { PatrolGame } from "./game/engine";
 import type { CountryBoard, Position } from "./game/types";
 import { icon } from "./icons";
 import { usableMapPadding } from "./viewport";
+import { patrolMapStyle } from "./game/patrol-map-style";
+import { BasemapStatus } from "./game/basemap-status";
 import type { OrderForecast } from "./game/order-forecast";
 
 // Bundle MapLibre's worker explicitly so both Vite and /patrol/ static builds
@@ -19,7 +21,7 @@ setWorkerUrl(mapWorkerUrl);
 
 const collection = (features: GeoJSON.Feature[]): GeoJSON.FeatureCollection => ({ type: "FeatureCollection", features });
 const line = (coordinates: Position[], properties: Record<string, unknown> = {}): GeoJSON.Feature => ({ type: "Feature", properties, geometry: { type: "LineString", coordinates } });
-const fallback: StyleSpecification = { version: 8, sources: {}, layers: [{ id: "background", type: "background", paint: { "background-color": "#dde8e8" } }] };
+
 
 export class PatrolMap {
   readonly map: Map;
@@ -31,25 +33,30 @@ export class PatrolMap {
   private selected: number | null = null;
   private focusedSquad: number | null = null;
   private ready = false;
-  private usedFallback = false;
+  private basemap = new BasemapStatus();
   private cleanup = () => {};
   private forecast: OrderForecast | null = null;
   private ranges: { position: Position; radius: number }[] = [];
 
   constructor(private board: CountryBoard, onPost: (border: number) => void, onMapStatus: (fallback: boolean) => void) {
-    this.map = new Map({ container: "map", style: CONFIG.map.styleUrl, attributionControl: { compact: true }, dragRotate: false, pitchWithRotate: false, maxPitch: 0 });
+    this.map = new Map({ container: "map", style: patrolMapStyle(), attributionControl: { compact: false }, dragRotate: false, pitchWithRotate: false, maxPitch: 0 });
     this.map.touchZoomRotate.disableRotation();
     this.map.touchPitch.disable();
-    this.map.addControl(new NavigationControl({ showCompass: false }), "bottom-right");
+    this.map.getContainer().dataset.basemap = "loading";
     this.map.on("dragend", (event) => { if (event.originalEvent) track("map_gesture", { action: "pan", zoom: Math.round(this.map.getZoom() * 10) / 10 }); });
     this.map.on("zoomend", (event) => { if (event.originalEvent) track("map_gesture", { action: "zoom", zoom: Math.round(this.map.getZoom() * 10) / 10 }); });
-    this.map.on("error", () => {
-      // Do not log the remote style or tile URLs: they contain the owner's key.
-      if (!this.ready && !this.usedFallback) {
-        this.usedFallback = true;
-        this.map.setStyle(fallback);
+    this.map.on("error", event => {
+      if(this.basemap.sourceError((event as {sourceId?:string}).sourceId)) {
+        this.map.getContainer().dataset.basemap="fallback";
+        onMapStatus(true);
       }
-      onMapStatus(true);
+    });
+    this.map.on("sourcedata", event => {
+      if(event.sourceId!=="world")return;
+      if(this.basemap.sourceData(event.sourceDataType,event.tile?.state==="loaded")) {
+        this.map.getContainer().dataset.basemap="ready";
+        onMapStatus(false);
+      }
     });
     this.map.on("style.load", () => {
       this.ready = true;
@@ -59,7 +66,7 @@ export class PatrolMap {
       if (this.game) this.renderState(this.game, this.selected, this.focusedSquad);
       this.setRanges(this.ranges);
       this.setForecast(this.forecast);
-      onMapStatus(this.usedFallback);
+
     });
     const runnerElement = document.createElement("div");
     runnerElement.className = "actor-marker runner-marker";
@@ -239,6 +246,14 @@ export class PatrolMap {
   showForecast(forecast: OrderForecast) {
     const points = [...forecast.squadPath,...forecast.runnerPath];
     this.map.fitBounds([[Math.min(...points.map(p=>p[0])),Math.min(...points.map(p=>p[1]))],[Math.max(...points.map(p=>p[0])),Math.max(...points.map(p=>p[1]))]], {padding:this.cameraPadding(true),absolutePadding:true,maxZoom:CONFIG.map.runnerFocusZoom,duration:matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : CONFIG.map.focusDurationMs});
+  }
+
+  celebrateCapture(game: PatrolGame) {
+    this.runner.getElement().classList.add('captured');
+    const {width,height}=this.map.getContainer().getBoundingClientRect();
+    const landscape=width>height&&width>600;
+    const padding=landscape?{top:90,bottom:30,left:25,right:width*.51}:{top:100,bottom:height*.6,left:20,right:20};
+    this.map.easeTo({center:game.runner.position,zoom:CONFIG.celebration.focusZoom,padding,duration:matchMedia('(prefers-reduced-motion: reduce)').matches?0:CONFIG.celebration.cameraMs});
   }
 
   fitCountry(animate = true) {

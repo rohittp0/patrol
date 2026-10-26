@@ -44,8 +44,13 @@ export const PLAYTEST_CONFIG = {
     futureSlots: [15, 25],
     /** STARTER: integer game-money amounts, never real currency. */
     baseReward: 30, rewardStep: 15,
-    /** AGREED: real seconds per sequential upgrade; later entries are STARTER. */
-    trainingSeconds: [30, 60, 180, 600],
+    /** AGREED: real seconds per sequential upgrade. Each specialist's first
+     * upgrade takes longer than the previous specialist's last. Values STARTER. */
+    trainingSeconds: {
+      rapid: [30, 60, 180, 600],
+      helicopter: [900, 1800, 3600, 7200],
+      marksman: [10800, 14400, 21600, 28800],
+    },
     /** STARTER: game money charged for upgrade steps 1–4. */
     upgradeCosts: [20, 30, 50, 70],
     /** STARTER: unlock levels and prices; Rapid at Level 3 is AGREED. */
@@ -91,6 +96,16 @@ export const PLAYTEST_CONFIG = {
     playbackScale: 6000,
     /** STARTER: worker search bounds; not a proof of impossibility. */
     searchBeam: 24, searchDepth: 15,
+  },
+  celebration: {
+    /** STARTER: capture camera zoom (MapLibre zoom units) and milliseconds. */
+    focusZoom: 8.2, cameraMs: 900, resultDelayMs: 700,
+  },
+  audio: {
+    /** STARTER: normalized output gains, 0 (silent) to 1. Music is deliberately quiet. */
+    musicVolume: 0.12, effectsVolume: 0.35,
+    /** STARTER: beats per minute for the original menu and pursuit scores, positive. */
+    baseBpm: 82, pursuitBpm: 96,
   },
   hosting: {
     /** AGREED: production origin, without a path or trailing slash. */
@@ -182,13 +197,10 @@ export const PLAYTEST_CONFIG = {
   },
 
   map: {
-    /**
-     * AGREED: remote MapLibre-compatible style owned by the project owner.
-     * Load this URL directly. Its resource URLs already include the MapTiler
-     * key; do not copy the key or a downloaded style into the repository.
-     * Browser access must allow both production and local development origins.
-     */
-    styleUrl: "https://dashboard.lascadian.com/maps/default.json",
+    /** AGREED: Patrol owns its tactical style. Public OpenFreeMap vector data
+     * and fonts require no key; attribution remains supplied by TileJSON. */
+    tileJsonUrl: "https://tiles.openfreemap.org/planet",
+    glyphsUrl: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
 
     /**
      * STARTER: inclusive length limits for an individual authored border.
@@ -406,6 +418,8 @@ export const PLAYTEST_CONFIG = {
   },
 
   interface: {
+    /** AGREED: all transient messages dismiss after 20,000 milliseconds. */
+    toastDurationMs: 20000,
     /** STARTER: CSS-pixel clearance between visible controls and camera framing, >= 0. */
     mapClearancePx: 12,
     /** STARTER: maximum pointer displacement in CSS pixels for selecting a post, > 0.

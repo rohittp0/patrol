@@ -19,9 +19,9 @@ import type { Mission, MissionAttempt } from "./game/missions";
 import type { PatrolMap } from "./map-view";
 import { borderName } from "./game/presentation";
 import { initTelemetry, track, gameContext } from "./telemetry";
-import type { HintResult } from "./game/hints";
-import { HintQuota } from "./game/hint-quota";
 import { icon } from "./icons";
+import { GameAudio } from "./game/audio";
+import { PLAYTEST_CONFIG } from "./game/playtest.config";
 import { caseForLevel, portraitPath } from "./game/case-files";
 import {
   academyLesson,
@@ -47,10 +47,12 @@ const escape = (s: unknown) =>
       ]!,
   );
 const money = (n: number) => n.toLocaleString("en-IN");
-const duration = (seconds: number) =>
-  seconds < 60
-    ? `${Math.ceil(seconds)}s`
-    : `${Math.floor(seconds / 60)}m ${Math.ceil(seconds % 60)}s`;
+const duration = (seconds: number) => {
+  const n = Math.max(0, Math.ceil(seconds));
+  if (n < 60) return `${n}s`;
+  if (n < 3600) return `${Math.floor(n / 60)}m${n % 60 ? ` ${n % 60}s` : ""}`;
+  return `${Math.floor(n / 3600)}h${Math.ceil((n % 3600) / 60) ? ` ${Math.ceil((n % 3600) / 60)}m` : ""}`;
+};
 const button = (label: string, action: string, extra = "", css = "button") =>
   `<button type="button" class="${css}" data-action="${action}" ${extra}>${label}</button>`;
 const brand = `<span class="brand-icon">${icon("squad")}</span><span>PATROL<small>TACTICAL PURSUIT</small></span>`;
@@ -77,11 +79,10 @@ let moveFrame = 0,
   ended = false,
   award: number | null = null,
   guide = false;
-let worker: Worker | null = null,
-  hint: HintResult | null = null,
-  hintBusy = false,
-  hintGeneration = 0;
-const quota = new HintQuota();
+const audio = new GameAudio();
+let resultTimer: ReturnType<typeof setTimeout> | null = null;
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
+let resultBefore = { wallet: 0, paid: 0 };
 let moveLog: MissionAttempt["moves"] = [];
 let mapGeneration = 0;
 const mission = () => levels[levelNumber - 1];
@@ -89,9 +90,16 @@ const player = () => client.player;
 const toast = () =>
   `<div id="toast" class="toast${message ? " visible" : ""}" role="status">${escape(message)}${message ? button("×", "dismiss", 'aria-label="Dismiss message"', "dismiss") : ""}</div>`;
 function notice(text: string) {
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = null;
   message = text;
   const el = document.querySelector("#toast");
   if (el) el.outerHTML = toast();
+  if (text)
+    toastTimer = setTimeout(
+      () => notice(""),
+      PLAYTEST_CONFIG.interface.toastDurationMs,
+    );
 }
 function errorText(error: unknown) {
   const code =
@@ -99,7 +107,7 @@ function errorText(error: unknown) {
       ? String(error.code)
       : "";
   if (["unavailable", "deadline-exceeded"].includes(code))
-    return "Could not sync your save. Reconnect and reload to recover your pending changes.";
+    return "Connection interrupted. Keep this tab open and reconnect to sync.";
   if (
     code === "auth/popup-closed-by-user" ||
     code === "auth/cancelled-popup-request"
@@ -131,19 +139,37 @@ function stopMap() {
   mapGeneration++;
   cancelAnimationFrame(moveFrame);
   moveFrame = 0;
-  worker?.terminate();
-  worker = null;
-  hintBusy = false;
-  hintGeneration++;
+  if (resultTimer) clearTimeout(resultTimer);
+  resultTimer = null;
   map?.destroy();
   map = null;
 }
 function go(next: string) {
+  const fieldLocked =
+    (route === "play" && guide && game?.outcome.kind === "playing") ||
+    (route === "roster" && levelNumber === 1 && needsFieldLesson(player()));
+  if (fieldLocked && !["play", "roster"].includes(next)) {
+    notice("Follow the highlighted control to finish field training.");
+    location.hash = route;
+    return;
+  }
+  if (
+    next === "academy" &&
+    academyLesson(player()) &&
+    client.response.active &&
+    game?.outcome.kind !== "won"
+  ) {
+    client.backupForTutorial();
+    void client.abandon();
+    game = null;
+  }
   if (route === "play" && next !== "play" && game) void saveCurrent();
   route = next;
+  audio.scene(next === "play" ? "pursuit" : "base");
   location.hash = next;
   render();
 }
+
 function nav() {
   return `<nav class="bottom-nav" aria-label="Main navigation">${[
     ["home", "home", "Base"],
@@ -160,8 +186,19 @@ function nav() {
     )
     .join("")}</nav>`;
 }
+function soundButton(css = "audio-button") {
+  return button(
+    icon(audio.enabled ? "sound" : "mute"),
+    "toggle-audio",
+    `aria-label="${audio.enabled ? "Mute music and sound" : "Enable music and sound"}" aria-pressed="${audio.enabled}"`,
+    css,
+  );
+}
+function syncBadge() {
+  return `<span class="sync-badge ${client.syncStatus}" role="status" aria-label="${escape(client.syncMessage)}" title="${escape(client.syncMessage)}">${icon(client.syncStatus === "saved" ? "cloud" : client.syncStatus === "conflict" ? "info" : "clock")}</span>`;
+}
 function header() {
-  return `<header class="site-header"><a href="#home" class="brand" aria-label="Patrol home">${brand}</a><div class="header-actions"><span class="wallet" aria-label="${player().wallet} coins">${icon("coin")} ${money(player().wallet)}</span>${button(icon(client.signedIn ? "check" : "user"), "account", `aria-label="${client.signedIn ? "Account saved" : "Save progress"}"`, "account-button")}</div></header>`;
+  return `<header class="site-header"><a href="#home" class="brand" aria-label="Patrol home">${brand}</a><div class="header-actions">${soundButton()}<span class="wallet" aria-label="${player().wallet} coins">${icon("coin")} ${money(player().wallet)}${syncBadge()}</span>${button(icon(client.signedIn ? "check" : "user"), "account", `aria-label="${client.signedIn ? "Your account" : "Save progress"}"`, "account-button")}</div></header>`;
 }
 function shell(content: string) {
   root.innerHTML = `${header()}<main class="page" id="page-content">${content}</main>${nav()}<div id="coach-host"></div>${toast()}<div id="modal-host"></div>`;
@@ -258,7 +295,7 @@ function renderAcademy() {
             : null;
         const maxed = step === ECONOMY.upgradeCosts.length;
         return `<article class="squad-card ${id} ${locked ? "locked" : ""}" data-unit="${id}"><div class="squad-card-top"><span class="specialist-icon ${id}">${unitIcon(id)}</span><span class="badge">${locked ? `${icon("lock")} LEVEL ${c.unlock}` : unit ? `RANK ${step + 1}` : "NEW RECRUIT"}</span></div><h2>${c.name}</h2><div class="stat-line">${icon(id === "rapid" ? "speed" : id === "helicopter" ? "clock" : "marksman")}${statLabel(id, step)}</div><p>${id === "rapid" ? "Faster ground response" : id === "helicopter" ? "Any post · temporary guard" : "Stationary firing range"}</p><div class="upgrade-track" aria-label="${step} upgrades complete">${Array.from({ length: 5 }, (_, i) => `<span class="${i <= step && unit ? "filled" : ""}"></span>`).join("")}</div>
-    ${training ? `<div class="training-state" data-training="${id}">${icon("clock")}<span>Training · unavailable</span><strong data-deadline="${training.readyAt}">${duration((training.readyAt - client.now()) / 1000)}</strong></div><small class="upgrade-next">${statLabel(id, training.step)} when ready</small>` : unit ? (maxed ? `<div class="training-state">${icon("check")} Fully trained</div>` : `<div class="next-upgrade"><span>${statLabel(id, step)} ${icon("arrow")} <b>${statLabel(id, step + 1)}</b></span><small>${icon("clock")} ${duration(ECONOMY.trainingSeconds[step])}</small></div>${button(`${icon("academy")} Train ${icon("coin")} ${ECONOMY.upgradeCosts[step]}`, "train", `data-id="${id}" data-network ${p.wallet < ECONOMY.upgradeCosts[step] ? "disabled" : ""}`, "button secondary full")}`) : button(locked ? `${icon("lock")} Level ${c.unlock}` : `${icon("plus")} Recruit ${icon("coin")} ${c.price}`, "purchase", `data-id="${id}" data-network ${locked || p.wallet < c.price ? "disabled" : ""}`, "button primary full")}</article>`;
+    ${training ? `<div class="training-state" data-training="${id}">${icon("clock")}<span>Training · unavailable</span><strong data-deadline="${training.readyAt}">${duration((training.readyAt - client.now()) / 1000)}</strong></div><small class="upgrade-next">${statLabel(id, training.step)} when ready</small>` : unit ? (maxed ? `<div class="training-state">${icon("check")} Fully trained</div>` : `<div class="next-upgrade"><span>${statLabel(id, step)} ${icon("arrow")} <b>${statLabel(id, step + 1)}</b></span><small>${icon("clock")} ${duration(ECONOMY.trainingSeconds[id][step])}</small></div>${button(`${icon("academy")} Train ${icon("coin")} ${ECONOMY.upgradeCosts[step]}`, "train", `data-id="${id}" data-network ${p.wallet < ECONOMY.upgradeCosts[step] ? "disabled" : ""}`, "button secondary full")}`) : button(locked ? `${icon("lock")} Level ${c.unlock}` : `${icon("plus")} Recruit ${icon("coin")} ${c.price}`, "purchase", `data-id="${id}" data-network ${locked || p.wallet < c.price ? "disabled" : ""}`, "button primary full")}</article>`;
       })
       .join(
         "",
@@ -293,7 +330,7 @@ function renderRoster() {
 }
 function restoreGame() {
   const active = client.response.active;
-  if (!active) return;
+  if (!active) return false;
   levelNumber = active.level;
   moveLog = [...active.moves];
   game = new PatrolGame(board, active.setup, active.rules, navigation);
@@ -305,12 +342,30 @@ function restoreGame() {
       game.advanceHours(client.response.pendingHours);
     else game.resolveOrder();
   }
+  const requiredField = levelNumber === 1 && needsFieldLesson(player());
+  const validField =
+    active.selection.every((id, slot) => id === INITIAL_SQUADS[slot]) &&
+    !!guidedOrder(game);
+  if (
+    game.outcome.kind === "playing" &&
+    ((requiredField && !validField) ||
+      (levelNumber === 3 && academyLesson(player())))
+  ) {
+    client.backupForTutorial();
+    roster = requiredField
+      ? [null, null, null]
+      : player().selection.map((id) =>
+          id && readySquad(player(), id, client.now()) ? id : null,
+        );
+    guide = false;
+    game = null;
+    return false;
+  }
   selectedPost = null;
   selectedSquad = null;
   forecast = null;
   ended = false;
   award = null;
-  hint = null;
   guide =
     levelNumber === 1 &&
     needsFieldLesson(player()) &&
@@ -327,6 +382,7 @@ function restoreGame() {
     squad_count: game.squads.length,
     campaign_start_country: "india",
   });
+  return true;
 }
 async function renderPlay() {
   if (!game || !client.response.active) {
@@ -336,7 +392,7 @@ async function renderPlay() {
   }
   stopMap();
   const generation = mapGeneration;
-  root.innerHTML = `<main class="game-page"><div id="map" role="region" aria-label="India patrol map"></div><header class="game-top topbar">${button(icon("home"), "leave", 'aria-label="Return to base"', "game-back")}<button class="target-hud" data-action="briefing" data-level="${levelNumber}"><img src="/${portraitPath(targetFile())}" alt=""/><span><small>LEVEL ${levelNumber}</small><b>${escape(targetFile().shortName)}</b><small>${game.rules.runnerSpeedKmh} km/h</small></span></button>${button(icon("info"), "help", 'aria-label="How to play"', "help-button")}</header><div class="metrics"><strong id="moves-left">${ECONOMY.maxMoves - game.ordersUsed}</strong><span>MOVES</span></div><div class="game-tools map-toolbar">${button(icon("focus"), "find", 'aria-label="Find fugitive"', "map-tool")}${button(icon("fit"), "country-view", 'aria-label="Country view"', "map-tool")}${button(icon("hint"), "hint", 'aria-label="Hint"', "map-tool")}</div><div class="game-note" id="game-note"></div><section class="squad-dock" aria-label="Deployed squads"><div class="dock-heading"><span id="selected-label">Choose a squad</span>${button(icon("close"), "clear", 'aria-label="Clear selection"', "text-button")}</div><div id="game-squads" class="game-squads"></div><div class="journey" id="journey"></div><div id="deploy-control"></div></section><div id="coach-host"></div><section class="result-panel" id="result-panel" hidden></section>${toast()}<div id="modal-host"></div></main>`;
+  root.innerHTML = `<main class="game-page"><div id="map" role="region" aria-label="India patrol map"></div><header class="game-top topbar">${button(icon("home"), "leave", 'aria-label="Return to base"', "game-back")}<button class="target-hud" data-action="briefing" data-level="${levelNumber}"><img src="/${portraitPath(targetFile())}" alt=""/><span><small>LEVEL ${levelNumber}</small><b>${escape(targetFile().shortName)}</b><small>${game.rules.runnerSpeedKmh} km/h</small></span></button>${soundButton("audio-button game-sound")}</header><div class="metrics"><strong id="moves-left">${ECONOMY.maxMoves - game.ordersUsed}</strong><span>MOVES</span></div><div class="game-note" id="game-note"></div><section class="squad-dock" aria-label="Deployed squads"><div class="dock-heading"><span id="selected-label">Choose a squad or a free post</span>${button(icon("close"), "clear", 'aria-label="Clear selection"', "text-button")}</div><div id="game-squads" class="game-squads"></div><div class="journey" id="journey"></div><div id="deploy-control"></div></section><div id="coach-host"></div><section class="result-panel" id="result-panel" hidden></section>${toast()}<div id="modal-host"></div></main>`;
   const { PatrolMap: MapView } = await import("./map-view");
   if (generation !== mapGeneration || route !== "play" || !game) return;
   map = new MapView(
@@ -344,13 +400,15 @@ async function renderPlay() {
     (index) => selectPost(index),
     (fallback) => {
       if (fallback)
-        notice("Basemap unavailable. Gameplay borders remain visible.");
+        notice("Map detail is offline. The chase remains playable.");
+      else if (message === "Map detail is offline. The chase remains playable.")
+        notice("");
     },
   );
   map.setTarget(targetFile().name, `/${portraitPath(targetFile())}`);
   map.renderState(game, selectedPost);
-  map.startView(game);
   renderHUD();
+  map.startView(game);
   if (game.activeOrder) animate();
   else if (game.outcome.kind !== "playing") void finish();
 }
@@ -365,11 +423,13 @@ function renderHUD() {
   const order = guide ? guidedOrder(game) : null;
   document.querySelector("#selected-label")!.textContent = game.activeOrder
     ? "Pursuit in motion"
-    : selectedSquad === null
-      ? "1 · Choose a squad"
-      : selectedPost === null
-        ? "2 · Choose a free post"
-        : `Post ${selectedPost + 1} · ${borderName(board.borders[selectedPost])}`;
+    : selectedPost !== null
+      ? selectedSquad === null
+        ? `Post ${selectedPost + 1} selected · choose a squad`
+        : `Post ${selectedPost + 1} · ${borderName(board.borders[selectedPost])}`
+      : selectedSquad !== null
+        ? `Squad ${String.fromCharCode(65 + selectedSquad)} selected · choose a post`
+        : "Choose a squad or a free post";
   document.querySelector("#game-squads")!.innerHTML = ids.length
     ? ids
         .map((id, index) => {
@@ -400,12 +460,7 @@ function renderHUD() {
       ? `<div class="forecast-key"><span><i></i>Your squad</span><span><i></i>Fugitive</span><b>${forecast.outcome.kind === "lost" && forecast.outcome.reason === "escape" ? "ESCAPE RISK" : forecast.outcome.kind === "won" ? "CAPTURE" : "PREVIEW"}</b></div>${button(`${icon("arrow")} DEPLOY · 1 MOVE`, "deploy", "", "button primary full")}`
       : "";
   const note = document.querySelector("#game-note")!;
-  note.textContent =
-    hint?.kind === "winning"
-      ? `Hint: Squad ${String.fromCharCode(65 + hint.orders[0].squad)} → Post ${hint.orders[0].border + 1}`
-      : hint?.kind === "survival"
-        ? `Try Squad ${String.fromCharCode(65 + hint.order.squad)} → Post ${hint.order.border + 1}`
-        : "";
+  note.textContent = "";
   map.renderState(game, selectedPost, selectedSquad);
   map.setForecast(forecast);
   const ranges = game.squads.flatMap((s, index) =>
@@ -419,7 +474,10 @@ function renderHUD() {
       : [],
   );
   map.setRanges(ranges);
-  if (order && !game.activeOrder && selectedSquad === order.squad)
+  document
+    .querySelectorAll(".border-post.guided")
+    .forEach((el) => el.classList.remove("guided"));
+  if (order && !game.activeOrder)
     document
       .querySelector(`[data-border="${order.border}"]`)
       ?.classList.add("guided");
@@ -430,39 +488,40 @@ function selectSquad(index: number) {
   const order = guide ? guidedOrder(game) : null;
   if (order && order.squad !== index) {
     notice(
-      `Choose highlighted Squad ${String.fromCharCode(65 + order.squad)}, or skip the guide.`,
+      `Choose highlighted Squad ${String.fromCharCode(65 + order.squad)} to continue training.`,
     );
     return;
   }
+  audio.effect("select");
   selectedSquad = index;
-  selectedPost = null;
-  forecast = null;
-  hint = null;
+  forecast =
+    selectedPost === null ? null : forecastOrder(game, index, selectedPost);
   renderHUD();
-  if (order) map?.revealPost(order.border);
-  else map?.revealSquad(game.squads[index].actor.position);
+  if (forecast) map?.showForecast(forecast);
+  else if (selectedPost !== null)
+    notice("This squad cannot reach that post. Choose another squad or post.");
+  else if (order) map?.revealPost(order.border);
 }
 function selectPost(index: number) {
   if (!game || game.activeOrder || game.outcome.kind !== "playing") return;
-  if (selectedSquad === null) {
-    notice("Choose a squad below first.");
-    return;
-  }
+  audio.unlock();
   const order = guide ? guidedOrder(game) : null;
   if (order && index !== order.border) {
-    notice(`Choose highlighted Post ${order.border + 1}, or skip the guide.`);
+    notice(`Choose highlighted Post ${order.border + 1} to continue training.`);
     return;
   }
-  const preview = forecastOrder(game, selectedSquad, index);
-  if (!preview) {
+  if (game.securedBorders.has(index)) {
     notice("Choose an unguarded post.");
     return;
   }
+  audio.effect("target");
   selectedPost = index;
-  forecast = preview;
-  hint = null;
+  forecast =
+    selectedSquad === null ? null : forecastOrder(game, selectedSquad, index);
   renderHUD();
-  map?.showForecast(preview);
+  if (forecast) map?.showForecast(forecast);
+  else if (selectedSquad !== null)
+    notice("This squad cannot reach that post. Choose another squad or post.");
 }
 function issueMove() {
   if (
@@ -476,6 +535,7 @@ function issueMove() {
     return;
   const index = selectedSquad;
   if (!game.issueOrder(index, selectedPost)) return;
+  audio.effect("deploy");
   moveLog.push({ squad: index, border: selectedPost });
   const move = game.history.at(-1)!;
   track("move_issued", {
@@ -488,11 +548,8 @@ function issueMove() {
     track("helicopter_deploy", { squad: index, post: selectedPost });
   selectedPost = null;
   selectedSquad = null;
-  hint = null;
-  worker?.terminate();
-  worker = null;
-  hintBusy = false;
-  hintGeneration++;
+  if (resultTimer) clearTimeout(resultTimer);
+  resultTimer = null;
   renderHUD();
   if (game.outcome.kind !== "playing") void finish();
   else {
@@ -522,13 +579,17 @@ function animate() {
       forecast = null;
       renderHUD();
       if (game.outcome.kind !== "playing") void finish();
-      else void saveCurrent();
+      else {
+        audio.effect("arrive");
+        map?.revealSquad(game.runner.position);
+        void saveCurrent();
+      }
     }
   };
   moveFrame = requestAnimationFrame(frame);
 }
 async function saveCurrent() {
-  if (!game || !client.response.active || busy) return;
+  if (!game || !client.response.active) return;
   try {
     await client.save(moveLog, game.activeOrder?.elapsedHours ?? null);
   } catch (error) {
@@ -555,29 +616,62 @@ async function finish() {
     guide = false;
     track("guide_complete", { duration_ms: 0 });
   }
-  showResult(won);
+  resultBefore = {
+    wallet: player().wallet,
+    paid: player().results[String(levelNumber)]?.paid ?? 0,
+  };
   if (won) {
+    audio.effect("win");
     try {
       const response = await client.finish(moveLog);
       award = response.reward;
       track("reward_awarded", { amount: award, hunt_number: levelNumber });
-      showResult(true);
-      await maybePrompt();
+      map?.celebrateCapture(game);
+      const page = document.querySelector(".game-page");
+      if (page) {
+        page.classList.add("capture-moment");
+        const burst = document.createElement("div");
+        burst.className = "capture-celebration";
+        burst.innerHTML = `<div class="capture-word">${icon("trophy")} CAPTURED</div>${Array.from({ length: 18 }, (_, i) => `<i style="--x:${(i * 47) % 100}%;--drift:${(i % 2 ? 1 : -1) * (20 + i * 3)}px;--delay:${(i % 5) * 60}ms;--spin:${i * 43}deg"></i>`).join("")}`;
+        page.append(burst);
+      }
+      const delay = matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? 0
+        : PLAYTEST_CONFIG.celebration.resultDelayMs;
+      resultTimer = setTimeout(() => {
+        resultTimer = null;
+        showResult(true);
+        void maybePrompt();
+      }, delay);
     } catch (error) {
-      award = null;
-      showResult(true);
       notice(errorText(error));
+      showResult(false);
     }
-  } else await saveCurrent();
+  } else {
+    audio.effect("lose");
+    showResult(false);
+    await saveCurrent();
+  }
 }
 function showResult(won: boolean) {
   const panel = document.querySelector<HTMLElement>("#result-panel");
   if (!panel || !game) return;
   panel.hidden = false;
-  const previous = player().results[String(levelNumber)];
-  panel.innerHTML = `<img class="capture-portrait" src="/${portraitPath(targetFile())}" alt=""/><span class="eyebrow">${won ? "ASSIGNMENT COMPLETE" : "REGROUP AND RETRY"}</span><h1>${won ? `${escape(targetFile().shortName)} captured` : "They got away"}</h1><p>${won ? `Captured in ${game.ordersUsed} moves. ${previous ? `Your best: ${previous.bestMoves} moves.` : ""}` : game.outcome.kind === "lost" && game.outcome.reason === "budget" ? "Your moves are up. Train your specialists or try a different approach." : "The fugitive crossed a land exit. A faster response could make the difference."}</p>${won ? `<div class="reward-display">${award === null ? "Confirming reward…" : `+ ${icon("coin")} ${money(award)}`}</div><small>${award === 0 ? "No extra money: beat your best move count and reach a higher reward tier." : "This result is saved with your campaign."}</small>` : ""}<div class="result-actions">${won && award === null ? button("Retry saving result", "retry-award", "data-network", "button primary full") : won && levelNumber < ECONOMY.levelCount ? button("Next level →", "next", "", "button primary full") : button(won ? "India complete · View levels" : "Choose squads and retry", "retry", "", "button primary full")}${button(`${icon("academy")} Academy`, "academy", "", "text-button")}${button("Home", "home", "", "text-button")}</div>`;
+  panel.classList.toggle("victory", won);
+  const base = ECONOMY.baseReward + (levelNumber - 1) * ECONOMY.rewardStep,
+    multiplier = game.ordersUsed < 3 ? 3 : game.ordersUsed <= 5 ? 2 : 1,
+    gross = base * multiplier;
+  panel.innerHTML = `<div class="result-medal">${icon(won ? "trophy" : "reset")}</div><span class="eyebrow">${won ? "CASE CLOSED" : "REGROUP"}</span><h1>${won ? `${escape(targetFile().shortName)} captured` : "They got away"}</h1><p>${won ? `${game.ordersUsed} moves · ${game.ordersUsed < 3 ? "Lightning response" : game.ordersUsed <= 5 ? "Sharp tactics" : "Mission complete"}` : game.outcome.kind === "lost" && game.outcome.reason === "budget" ? "Moves exhausted. Train or try another approach." : "The fugitive reached a land exit."}</p>
+  ${won ? `<section class="reward-breakdown" aria-label="Reward calculation"><div class="reward-equation"><span><small>BASE</small>${icon("coin")} ${money(base)}</span><b>×</b><span><small>${game.ordersUsed} MOVES</small>${multiplier}</span><b>=</b><span><small>LEVEL TOTAL</small>${icon("coin")} ${money(gross)}</span></div>${resultBefore.paid ? `<p class="replay-reward">Best reward already collected: ${money(resultBefore.paid)}. Replays pay only the improvement.</p>` : ""}<div class="reward-earned"><span>NEW COINS</span><strong>+ ${money(award ?? 0)}</strong></div><div class="balance-equation">Your balance <b>${money(resultBefore.wallet)} + ${money(award ?? 0)} = ${money(player().wallet)}</b></div></section>` : ""}
+  <div class="result-actions">${won ? (levelNumber < ECONOMY.levelCount ? button(`NEXT LEVEL ${icon("arrow")}`, "next", "", "button primary full") : button(`${icon("levels")} INDIA COMPLETE`, "levels", "", "button primary full")) : button(`${icon("reset")} TRY AGAIN`, "retry", "", "button primary full")}${button(`${icon("home")} HOME`, "home", "", "button secondary full")}${!won ? button(`${icon("academy")} Academy`, "academy", "", "text-button") : ""}</div>`;
   renderCoach();
+  panel.setAttribute("aria-label", won ? "Capture reward" : "Retry mission");
+  if (!coachLesson)
+    panel
+      .querySelector<HTMLButtonElement>("button")
+      ?.focus({ preventScroll: true });
 }
+
 function renderCoach() {
   const host = document.querySelector<HTMLElement>("#coach-host");
   if (!host) return;
@@ -600,7 +694,7 @@ function renderCoach() {
       : '[data-action="start"]';
     title = missing ? `Select ${squadName(missing)}` : "Your squad is ready";
     body = missing
-      ? `${targetFile().shortName} runs at ${mission().runnerSpeed} km/h. Tap the highlighted squad to fill a slot.`
+      ? `${targetFile().shortName}: ${mission().runnerSpeed} km/h. Tap the glowing squad to fill a slot.`
       : "Three guards, fifteen moves. Start the pursuit.";
     step = "FIRST CAPTURE · SELECT YOUR SQUADS";
     coachLesson = "field";
@@ -616,11 +710,14 @@ function renderCoach() {
       selector = "#journey";
       title = "Watch both paths";
       body =
-        "Your old border opens on departure. The new border closes on arrival. Time pauses after the move.";
+        "Both move together. Your old border opens; the new one closes on arrival.";
     } else if (selectedSquad === null) {
       selector = `[data-action="select-squad"][data-squad="${order.squad}"]`;
       title = `Choose Squad ${String.fromCharCode(65 + order.squad)}`;
-      body = "Select a squad before choosing where it should go.";
+      body =
+        selectedPost === null
+          ? "Choose your squad. You can pick a post first, too."
+          : `Post ${selectedPost + 1} is selected. Choose this squad to preview the chase.`;
     } else if (selectedPost === null) {
       selector = `[data-border="${order.border}"]`;
       title = `Close Post ${order.border + 1}`;
@@ -629,8 +726,7 @@ function renderCoach() {
     } else {
       selector = '[data-action="deploy"]';
       title = "Read the chase, then deploy";
-      body =
-        "Blue is your squad; gold is the fugitive’s exact next path. Deploy uses one move. Faster squads give the fugitive less travel time.";
+      body = "Blue: your squad. Gold: the fugitive. Deploy spends one move.";
     }
     step = `FIRST CAPTURE · MOVE ${game.activeOrder ? game.ordersUsed : game.ordersUsed + 1} / ${game.setup.witness.length}`;
     coachLesson = "field";
@@ -639,10 +735,15 @@ function renderCoach() {
     coachLesson = "academy";
     step = "LEVEL 3 · RAPID ACTION";
     if (route !== "academy") {
-      selector = '[data-action="academy"]';
-      title = "A faster squad is unlocked";
+      selector =
+        route === "play" && game?.won
+          ? '[data-action="next"]'
+          : '[data-action="academy"]';
+      title = "Rapid Action unlocked!";
       body =
-        "Open the Academy. Your first two wins cover a Rapid Action recruit and its first upgrade.";
+        route === "play"
+          ? "Continue to Level 3. Your first specialist is ready to recruit."
+          : "Open the Academy. Your two wins cover a recruit and its first upgrade.";
     } else if (phase === "purchase") {
       selector = '[data-action="purchase"][data-id="rapid"]';
       title = "Recruit Rapid Action";
@@ -650,7 +751,7 @@ function renderCoach() {
     } else if (phase === "train") {
       selector = '[data-action="train"][data-id="rapid"]';
       title = "Start your first upgrade";
-      body = `${ECONOMY.upgradeCosts[0]} coins + ${ECONOMY.trainingSeconds[0]} seconds. Speed rises from ${ECONOMY.rapidSpeeds[0]} to ${ECONOMY.rapidSpeeds[1]} km/h.`;
+      body = `${ECONOMY.upgradeCosts[0]} coins + ${ECONOMY.trainingSeconds.rapid[0]} seconds. Speed rises from ${ECONOMY.rapidSpeeds[0]} to ${ECONOMY.rapidSpeeds[1]} km/h.`;
     } else {
       selector = '[data-unit="rapid"]';
       title =
@@ -659,7 +760,7 @@ function renderCoach() {
           ? "Training is underway"
           : "Upgrade ready";
       body =
-        "A training squad cannot deploy. The timer continues while away. When ready, select Rapid Action in your roster. Further upgrades unlock in order.";
+        "Training squads cannot deploy. The timer runs while away. Pick Rapid Action when it is ready.";
       done = true;
     }
   }
@@ -671,68 +772,76 @@ function renderCoach() {
   if (!target) return;
   target.classList.add("coach-target");
   target.setAttribute("aria-describedby", "coach-copy");
-  host.innerHTML = `<aside class="coach" aria-label="Tutorial" data-lesson="${coachLesson}" aria-live="polite"><div class="coach-top"><span>${icon("compass")} ${step}</span>${button("Skip", "skip-guide", "", "text-button")}</div><h2>${title}</h2><p id="coach-copy">${body}</p>${done ? button("Got it · ready to play", "lesson-done", "", "button primary full") : ""}</aside>`;
+  const phase = done
+    ? "timer"
+    : route === "roster"
+      ? "roster"
+      : route === "play" && game?.outcome.kind === "playing"
+        ? game.activeOrder
+          ? "moving"
+          : selectedSquad === null
+            ? "squad"
+            : selectedPost === null
+              ? "post"
+              : "deploy"
+        : route === "academy"
+          ? (academyLesson(player()) ?? "academy")
+          : "academy";
+  const stages =
+    coachLesson === "field"
+      ? [
+          ["squad", "SQUAD"],
+          ["focus", "POST"],
+          ["arrow", "DEPLOY"],
+          ["check", "CHASE"],
+        ]
+      : [
+          ["academy", "ACADEMY"],
+          ["rapid", "RECRUIT"],
+          ["clock", "TRAIN"],
+        ];
+  const progress =
+    coachLesson === "field"
+      ? phase === "roster"
+        ? 0
+        : phase === "squad"
+          ? 0
+          : phase === "post"
+            ? 1
+            : phase === "deploy"
+              ? 2
+              : 3
+      : phase === "purchase"
+        ? 1
+        : phase === "train" || phase === "timer"
+          ? 2
+          : 0;
+  host.dataset.phase = phase;
+  host.innerHTML = `<aside class="coach command-coach" aria-label="Tutorial" data-lesson="${coachLesson}" data-phase="${phase}" aria-live="polite"><div class="coach-top"><span class="commander-badge">${icon("commander")}</span><div><strong>FIELD COMMAND</strong><small>${step}</small></div><span class="radio-signal"><i></i><i></i><i></i></span></div><div class="coach-stage-track">${stages.map(([symbol, label], i) => `<span class="${i <= progress || (coachLesson === "field" && selectedPost !== null && i === 1) ? "lit" : ""} ${i === progress ? "current" : ""}">${icon(symbol)}<small>${label}</small></span>`).join("")}</div><h2>${title}</h2><p id="coach-copy">${body}</p>${done ? button(`UNDERSTOOD ${icon("arrow")}`, "lesson-done", "", "button primary full") : `<div class="coach-required">${icon("lock")} Follow the glowing control</div>`}</aside>`;
+
   const key = `${route}:${selector}:${title}`;
   if (key !== coachKey) {
     coachKey = key;
     if (target instanceof HTMLButtonElement)
       target.focus({ preventScroll: true });
-    if (route !== "play")
-      target.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (route !== "play") {
+      const bounds = target.getBoundingClientRect(),
+        card = host.querySelector(".coach")!.getBoundingClientRect();
+      const delta =
+        bounds.bottom > card.top - 18
+          ? bounds.bottom - card.top + 18
+          : bounds.top < 85
+            ? bounds.top - 85
+            : 0;
+      if (delta)
+        window.scrollBy({
+          top: delta,
+          behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
+            ? "instant"
+            : "smooth",
+        });
+    }
   }
-}
-async function hintAction() {
-  if (!game || game.activeOrder || game.outcome.kind !== "playing" || hintBusy)
-    return;
-  const availability = quota.status();
-  if (!availability.remaining) {
-    notice(`Hints refill in ${duration(availability.remainingMs / 1000)}.`);
-    return;
-  }
-  hintBusy = true;
-  const hintStarted = performance.now();
-  track("hint_request", { hints_remaining: availability.remaining });
-  notice("Checking the current position…");
-  const generation = ++hintGeneration;
-  worker?.terminate();
-  worker = new Worker(new URL("./hint.worker.ts", import.meta.url), {
-    type: "module",
-  });
-  worker.onmessage = (event) => {
-    if (generation !== hintGeneration) return;
-    hintBusy = false;
-    if (event.data.result) {
-      hint = event.data.result;
-      if (hint?.kind === "winning" || hint?.kind === "survival")
-        quota.consume();
-      track("hint_result", {
-        hint_kind: hint?.kind ?? "none",
-        duration_ms: Math.round(performance.now() - hintStarted),
-        hints_remaining: quota.status().remaining,
-      });
-      notice(
-        hint?.kind === "none"
-          ? "No verified recommendation found. Try training or a different roster."
-          : "Hint ready.",
-      );
-      renderHUD();
-    } else notice("A hint could not be calculated.");
-    worker?.terminate();
-    worker = null;
-  };
-  worker.onerror = () => {
-    hintBusy = false;
-    notice("A hint could not be calculated.");
-    worker?.terminate();
-    worker = null;
-  };
-  worker.postMessage({ kind: "board", board });
-  worker.postMessage({
-    kind: "search",
-    setup: game.setup,
-    rules: game.rules,
-    snapshot: game.snapshot(),
-  });
 }
 function modal(content: string) {
   const host = document.querySelector("#modal-host")!;
@@ -741,7 +850,7 @@ function modal(content: string) {
 }
 function accountModal() {
   modal(
-    `<span class="eyebrow">KEEP YOUR CAMPAIGN</span><h2>${client.signedIn ? "Progress saved." : "Your next move. On any device."}</h2><p>${client.signedIn ? "Your campaign, squads and training are saved to your account." : "Sign in with Google to continue your campaign on another device. You can keep playing as a guest."}</p>${button(client.signedIn ? "Sign out" : "Continue with Google", client.signedIn ? "sign-out" : "google", "data-network", "button primary full")}${button("Keep playing", "close-modal", "", "text-button full")}`,
+    `<span class="eyebrow">KEEP YOUR CAMPAIGN</span><h2>${client.signedIn ? "Your campaign." : "Keep your campaign."}</h2><p>${escape(client.syncMessage)}. ${client.signedIn ? "Your account keeps your campaign across devices." : "Link Google to continue on another device. Guest play is always available."}</p>${button(client.signedIn ? "Sign out" : "Continue with Google", client.signedIn ? "sign-out" : "google", "data-network", "button primary full")}${client.syncStatus === "conflict" ? button("Use newer cloud save", "reload-cloud", "data-network", "button secondary full") : ""}${button("Keep playing", "close-modal", "", "text-button full")}`,
   );
 }
 async function maybePrompt() {
@@ -758,12 +867,82 @@ async function maybePrompt() {
   });
 }
 
+root.addEventListener(
+  "click",
+  (event) => {
+    if (!coachLesson || document.querySelector("dialog[open]")) return;
+    const element = event.target as Element,
+      action = element.closest<HTMLElement>("[data-action]")?.dataset.action;
+    if (
+      action === "toggle-audio" ||
+      action === "dismiss" ||
+      action === "lesson-done" ||
+      (action === "home" && game?.won && coachLesson === "academy")
+    )
+      return;
+    if (guide && game?.outcome.kind === "playing") {
+      const order = guidedOrder(game),
+        post = element.closest<HTMLElement>("[data-border]"),
+        squad = element.closest<HTMLElement>('[data-action="select-squad"]');
+      if (
+        order &&
+        ((post && Number(post.dataset.border) === order.border) ||
+          (squad && Number(squad.dataset.squad) === order.squad))
+      )
+        return;
+    }
+    const target = document.querySelector(".coach-target");
+    if (target?.contains(element)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    audio.effect("error");
+  },
+  true,
+);
+document.addEventListener("keydown", (event) => {
+  if (
+    event.key !== "Tab" ||
+    !coachLesson ||
+    document.querySelector("dialog[open]")
+  )
+    return;
+  const controls = [
+    document.querySelector<HTMLElement>(".coach-target"),
+    document.querySelector<HTMLElement>('.coach [data-action="lesson-done"]'),
+    document.querySelector<HTMLElement>('[data-action="toggle-audio"]'),
+  ].filter(
+    (el): el is HTMLElement => !!el && el.matches("button:not(:disabled)"),
+  );
+  if (!controls.length) return;
+  event.preventDefault();
+  const i = controls.indexOf(document.activeElement as HTMLElement);
+  controls[
+    (i + (event.shiftKey ? -1 : 1) + controls.length) % controls.length
+  ].focus({ preventScroll: true });
+});
 root.addEventListener("click", (event) => {
   const target = (event.target as Element).closest<HTMLButtonElement>(
     "[data-action]",
   );
   if (!target || target.disabled) return;
   const action = target.dataset.action;
+  audio.unlock();
+  if (action === "toggle-audio") {
+    audio.toggle();
+    document
+      .querySelectorAll<HTMLElement>('[data-action="toggle-audio"]')
+      .forEach((el) => {
+        el.innerHTML = icon(audio.enabled ? "sound" : "mute");
+        el.setAttribute("aria-pressed", String(audio.enabled));
+        el.setAttribute(
+          "aria-label",
+          audio.enabled ? "Mute music and sound" : "Enable music and sound",
+        );
+      });
+    return;
+  }
+  if (!["deploy", "select-squad", "purchase", "train"].includes(action ?? ""))
+    audio.effect("select");
   if (["home", "levels", "academy"].includes(action!)) {
     go(action!);
     return;
@@ -791,12 +970,6 @@ root.addEventListener("click", (event) => {
   }
   if (action === "account") {
     accountModal();
-    return;
-  }
-  if (action === "help") {
-    modal(
-      `<span class="eyebrow">FIELD MANUAL</span><h2>Close every way out.</h2><p>Choose a squad, then a free post. Preview the paths and press Deploy. Its old border opens as it leaves; the new border is guarded on arrival. Gold shows the fugitive’s predicted path, including turns when borders close. The fugitive moves during each of your ${ECONOMY.maxMoves} moves. Thinking time is paused.</p><p>Rapid Action moves faster. Helicopters deploy from reserve and guard temporarily. Marksman fires only while stationed. Training makes squads unavailable, but you may play with empty slots.</p>${button("Got it", "close-modal", "", "button primary full")}`,
-    );
     return;
   }
   if (action === "choose" || action === "retry" || action === "next") {
@@ -835,7 +1008,9 @@ root.addEventListener("click", (event) => {
     if (levelNumber === 1 && needsFieldLesson(player())) {
       const expected = INITIAL_SQUADS.find((squad) => !roster.includes(squad));
       if (index < 0 && expected && id !== expected) {
-        notice(`Choose highlighted ${squadName(expected)}, or skip the guide.`);
+        notice(
+          `Choose highlighted ${squadName(expected)}, to continue training.`,
+        );
         return;
       }
     }
@@ -855,35 +1030,18 @@ root.addEventListener("click", (event) => {
     selectedPost = null;
     selectedSquad = null;
     forecast = null;
-    hint = null;
     renderHUD();
     return;
   }
-  if (action === "skip-guide" || action === "lesson-done") {
-    const lesson = coachLesson;
-    if (!lesson) return;
-    guide = false;
+  if (action === "lesson-done") {
+    if (coachLesson !== "academy" || academyLesson(player()) !== "timer")
+      return;
     void run(async () => {
-      await client.action({ kind: "tutorial", lesson });
-      track(
-        action === "skip-guide" ? "guide_skip" : "guide_complete",
-        action === "skip-guide" ? { reason: "manual" } : { duration_ms: 0 },
-      );
-      if (route === "play") renderHUD();
-      else render();
+      await client.action({ kind: "tutorial", lesson: "academy" });
+      audio.effect("ready");
+      track("guide_complete", { duration_ms: 0 });
+      render();
     });
-    return;
-  }
-  if (action === "find") {
-    if (game) map?.revealSquad(game.runner.position);
-    return;
-  }
-  if (action === "country-view") {
-    map?.fitCountry();
-    return;
-  }
-  if (action === "hint") {
-    void hintAction();
     return;
   }
   if (action === "leave") {
@@ -905,6 +1063,7 @@ root.addEventListener("click", (event) => {
         squad_type: target.dataset.id!,
         amount: spent,
       });
+      audio.effect(action === "purchase" ? "purchase" : "train");
       renderAcademy();
       await maybePrompt();
     } else if (action === "start") {
@@ -914,18 +1073,22 @@ root.addEventListener("click", (event) => {
         INITIAL_SQUADS.some((id) => !roster.includes(id))
       ) {
         notice(
-          "Choose all three Patrol squads to follow the guide, or skip guidance.",
+          "Choose all three Patrol squads to follow the guide, to begin your first capture.",
         );
         return;
       }
+      if (levelNumber === 3 && academyLesson(player())) {
+        go("academy");
+        return;
+      }
       await client.start(levelNumber, roster);
-      restoreGame();
-      go("play");
+      const restored = restoreGame();
+      go(restored ? "play" : "roster");
       track("level_start", { entry: "roster", level_name: mission().id });
     } else if (action === "resume") {
       await client.load();
-      restoreGame();
-      go("play");
+      const restored = restoreGame();
+      go(restored ? "play" : "roster");
       track("game_resume", { source: "home" });
     } else if (action === "google") {
       await client.google();
@@ -937,15 +1100,14 @@ root.addEventListener("click", (event) => {
       await client.signOut();
       game = null;
       go("home");
-    } else if (action === "retry-award") {
-      const response = await client.finish(moveLog);
-      award = response.reward;
-      showResult(true);
-      await maybePrompt();
     } else if (action === "abandon") {
       await client.abandon();
       game = null;
       render();
+    } else if (action === "reload-cloud") {
+      await client.reloadCloud();
+      game = null;
+      go("home");
     } else if (action === "reload") {
       await initialize();
     }
@@ -957,6 +1119,7 @@ window.addEventListener("hashchange", () => {
 });
 document.addEventListener("visibilitychange", () => {
   lastFrame = 0;
+  audio.visibility();
   if (document.hidden) void saveCurrent();
   else if (route === "academy") renderAcademy();
 });
@@ -964,8 +1127,14 @@ window.addEventListener("pagehide", () => {
   if (game && client.response.active)
     client.checkpoint(moveLog, game.activeOrder?.elapsedHours ?? null);
 });
+window.addEventListener("patrol:sync-change", () => {
+  document
+    .querySelectorAll(".sync-badge")
+    .forEach((el) => (el.outerHTML = syncBadge()));
+  if (client?.syncStatus === "conflict") notice(client.syncMessage);
+});
 window.addEventListener("online", () => {
-  notice("Connection restored. Reload to recover pending changes.");
+  client?.retry();
 });
 setInterval(() => {
   let completed = false;
@@ -974,7 +1143,10 @@ setInterval(() => {
     el.textContent = seconds <= 0 ? "Ready" : duration(seconds);
     if (seconds <= 0) completed = true;
   });
-  if (completed && route === "academy" && !busy) renderAcademy();
+  if (completed && route === "academy" && !busy) {
+    audio.effect("ready");
+    renderAcademy();
+  }
 }, 1000);
 async function initialize() {
   showLoading("Loading the India map…");
@@ -994,13 +1166,15 @@ async function initialize() {
     showLoading("Calling your squads. Restoring your campaign…");
     await client.load();
     if (location.hash === "#play" && client.response.active) {
-      restoreGame();
-      route = "play";
+      route = restoreGame() ? "play" : "roster";
+      if (route === "roster") location.hash = "roster";
     } else
       route = ["levels", "academy"].includes(location.hash.slice(1))
         ? location.hash.slice(1)
         : "home";
+    audio.scene(route === "play" ? "pursuit" : "base");
     render();
+    if (client.recoveryMessage) notice(client.recoveryMessage);
     performance.mark("patrol-ready");
     track("campaign_entry", { source: "india_v2" });
     track("country_load_success", {

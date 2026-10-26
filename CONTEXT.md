@@ -22,7 +22,7 @@ The country in which the campaign begins, currently India for every player.
 The numbered sequence of levels within each country, followed by the next country in the campaign. Every player follows the same progression beginning in India, regardless of location.
 
 **Guided level**:
-Level 1, beginning immediately after Play: select three squads, choose a squad and a destination, preview movement, deploy, and continue through the first capture. Level 2 has no guide. Level 3 has a separate Academy lesson for recruiting Rapid Action and starting its first upgrade, with enough earned money for both. The timer explains unavailability and sequential upgrades; tutorials end there. Players may skip either lesson; completion is saved with campaign progress.
+Level 1, beginning immediately after Play: select three squads, choose a squad and a destination, preview movement, deploy, and continue through the first capture. Level 2 has no guide. Level 3 has a separate Academy lesson for recruiting Rapid Action and starting its first upgrade, with enough earned money for both. The timer explains unavailability and sequential upgrades; tutorials end there. Both lessons are mandatory. Completing the first capture ends field training; recruiting and starting the first Rapid upgrade enables the Academy lesson’s completion action. Completion is saved with campaign progress.
 
 **Campaign progress**:
 The player's campaign position, level results, money, squad collection, training progress, last-used squad selection, and current chase state. Signed-in players can continue their saved progress on another device.
@@ -81,7 +81,7 @@ A selected Helicopter Squad's state while waiting to deploy, either before its f
 The ordered sequence of upgrades for an individual squad, with each upgrade becoming available only after the preceding upgrade is completed. Every upgrade requires money and training time, with costs and training durations increasing through the track.
 
 **Training**:
-The real-world waiting period required to complete a purchased squad upgrade. The squad is unavailable for level selection while training, and gains the upgrade when training finishes.
+The real-world waiting period required to complete a purchased squad upgrade. The squad is unavailable for level selection while training, and gains the upgrade when training finishes. Each specialist's first upgrade takes longer than the preceding specialist's final upgrade, in the order Rapid Action, Helicopter, Marksman. Existing training keeps its promised completion time.
 
 **Deployment slot**:
 One optional place for a selected squad in a level; players may start with slots empty, including while owned squads are training. Players begin with three slots; a fourth and fifth become available to purchase through progression at levels 15 and 25 respectively.
@@ -105,9 +105,6 @@ _Avoid_: Order budget in player-facing copy
 
 **Score**:
 The move budget minus the number of orders used to win. Winning on the final allowed order gives a score of zero.
-
-**Hint**:
-An optional recommendation of a squad relocation from the current position. Four hints are available per browser; using the last starts a thirty-minute wait before all four refill. Hints cost no orders or points and never issue a move on the player's behalf.
 
 **Border**:
 A designated, non-closed boundary segment inside the patrol zone or along its outer land boundary that a squad can guard. Borders may follow portions of real administrative boundaries.
@@ -143,4 +140,10 @@ Engine identifiers such as `runner`, `order`, and `secured` remain internal alia
 The fugitive's simulated kilometres per hour, independently tunable for each level in the campaign opponent configuration. It is a game value rather than a claim about the historical person. Longer squad journeys allow more fugitive travel; thinking time is paused. Playback uses one uniform accelerated clock across orders, so long journeys never silently increase the displayed running speed.
 
 **Movement preview**:
-A detached simulation of the selected squad's proposed order, showing its blue route, the fugitive's gold route and endpoint, travel distance and arrival time, including turns at border closures. Deploy commits the previewed order and costs one move. The faint gold escape route remains visible before selecting a destination.
+A detached simulation of the selected squad's proposed order, showing its blue route, the fugitive's gold route and endpoint, travel distance and arrival time, including turns at border closures. A squad and destination can be selected in either order; changing the squad keeps the chosen post and updates the preview. Deploy commits the previewed order and costs one move. The faint gold escape route remains visible before selecting a destination.
+
+**Background save**:
+A campaign update that becomes playable immediately while its cloud copy catches up. Unsynced progress remains on the current device and retries after reconnecting. A newer save from another device is kept separate so one campaign cannot silently overwrite the other.
+
+**Capture celebration**:
+Visual feedback at the fugitive's actual capture location, accompanied by a sound cue when sound is enabled. The victory screen then shows base reward, move bonus, replay improvement and the resulting coin balance, with Next Level and Home actions.

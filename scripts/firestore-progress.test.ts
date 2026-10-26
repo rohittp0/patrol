@@ -233,3 +233,44 @@ test("browser progression saves directly, deduplicates retries, restores moves a
     await s.close();
   }
 });
+
+test("optimistic snapshots persist their exact attempt IDs, clocks and receipts", async () => {
+  const s = await session();
+  try {
+    const before = await s.store.load(s.uid);
+    const actionId = crypto.randomUUID();
+    const { advanceProgress } = await import("../src/game/player-progress");
+    const next = advanceProgress(
+      before,
+      {
+        actionId,
+        revision: before.player.revision,
+        op: "start",
+        level: 1,
+        selection: ["patrol-1", "patrol-2", "patrol-3"],
+      },
+      board,
+      levels,
+      1000,
+      navigation,
+    );
+    const entry = {
+      actionId,
+      revision: before.player.revision,
+      progress: next,
+    };
+    const saved = await s.store.commit(s.uid, entry);
+    assert.equal(saved.active!.id, next.active!.id);
+    const retry = await s.store.commit(s.uid, entry);
+    assert.deepEqual(retry, saved);
+    const receipt = await s.store.loadWithReceipt(s.uid);
+    assert.equal(receipt.lastMutationId, actionId);
+    assert.deepEqual(receipt.progress, next);
+    await assert.rejects(
+      s.store.commit(s.uid, { ...entry, actionId: crypto.randomUUID() }),
+      ProgressConflict,
+    );
+  } finally {
+    await s.close();
+  }
+});
