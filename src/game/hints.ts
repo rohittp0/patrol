@@ -15,6 +15,7 @@ interface HintTuning { searchTimeMs: number; maxSimulations: number; maxEnclosur
  * real simulation. A shortest-win claim requires an exact lower bound; hitting
  * a search limit never becomes a claim that a position is unwinnable. */
 export function findHint(game: PatrolGame, tuning: HintTuning = CONFIG.hints): HintResult {
+  if (game.rules.units) return abilityHint(game, tuning);
   const remaining = game.rules.maxOrders - game.ordersUsed;
   if (game.activeOrder || game.outcome.kind !== "playing" || remaining <= 0) return { kind: "none", reason: "unavailable" };
   const deadline = performance.now() + tuning.searchTimeMs;
@@ -155,4 +156,36 @@ export function findHint(game: PatrolGame, tuning: HintTuning = CONFIG.hints): H
     if (safest) return { kind: "survival", order: safest.order };
     return { kind: "none", reason: "search-limit" };
   }
+}
+
+/** Ability-aware bounded search. No enclosure-only pruning: firing can win
+ * without containment and helicopters can start in reserve. */
+function abilityHint(game: PatrolGame, tuning: HintTuning): HintResult {
+  if (game.activeOrder || game.outcome.kind !== "playing") return { kind: "none", reason: "unavailable" };
+  const deadline = performance.now() + tuning.searchTimeMs;
+  let simulations = 0;
+  const suffix = game.setup.witness.slice(game.ordersUsed);
+  if (suffix.length && game.history.every((m,i)=>game.setup.witness[i]?.squad===m.squad&&game.setup.witness[i]?.border===m.to)) {
+    const branch=game.fork(); const orders:HintOrder[]=[];
+    for(const move of suffix){if(!branch.issueOrder(move.squad,move.border))break;branch.resolveOrder();orders.push(move);if(branch.won)return{kind:"winning",orders,shortest:false};}
+  }
+  let beam:{game:PatrolGame;orders:HintOrder[];distance:number}[]=[{game,orders:[],distance:0}];
+  let safest:{order:HintOrder;distance:number}|null=null;
+  for(let depth=0;depth<Math.min(4,game.rules.maxOrders-game.ordersUsed);depth++){
+    const next:typeof beam=[];
+    for(const state of beam){
+      const destinations=state.game.board.borders.map((b,index)=>({index,distance:distanceKm(b.post,state.game.runner.position)})).sort((a,b)=>a.distance-b.distance).map(x=>x.index);
+      for(const border of destinations)for(let squad=0;squad<game.squads.length;squad++){
+        if(performance.now()>deadline||simulations++>=tuning.maxSimulations)return safest?{kind:"survival",order:safest.order}:{kind:"none",reason:"search-limit"};
+        const branch=state.game.fork();if(!branch.issueOrder(squad,border))continue;branch.resolveOrder();
+        const orders=[...state.orders,{squad,border}];if(branch.won)return{kind:"winning",orders,shortest:false};
+        if(branch.outcome.kind!=="playing")continue;
+        const distance=branch.runnerEscapeDistanceKm;
+        if(depth===0&&(!safest||distance>safest.distance))safest={order:orders[0],distance};
+        next.push({game:branch,orders,distance});
+      }
+    }
+    beam=next.sort((a,b)=>b.distance-a.distance).slice(0,6);if(!beam.length)break;
+  }
+  return safest?{kind:"survival",order:safest.order}:{kind:"none",reason:"no-safe-order"};
 }

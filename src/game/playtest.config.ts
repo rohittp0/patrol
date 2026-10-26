@@ -37,15 +37,49 @@
  * playtesting. See docs/level-design.md for sources and geometry limitations.
  */
 export const PLAYTEST_CONFIG = {
+  progressionV2: {
+    /** AGREED: India first for everybody; at least 15 consecutive levels. */
+    version: 2, country: "india", levelCount: 15, maxMoves: 15, slots: 3,
+    /** AGREED: extra slot purchases are future content, not enabled by this build. */
+    futureSlots: [15, 25],
+    /** STARTER: integer game-money amounts, never real currency. */
+    baseReward: 30, rewardStep: 15,
+    /** AGREED: real seconds per sequential upgrade; later entries are STARTER. */
+    trainingSeconds: [30, 60, 180, 600],
+    /** STARTER: game money charged for upgrade steps 1–4. */
+    upgradeCosts: [20, 30, 50, 70],
+    /** STARTER: unlock levels and prices; Rapid at Level 3 is AGREED. */
+    catalog: {
+      rapid: { name: "Rapid Action Squad", unlock: 3, price: 25, symbol: "↯", description: "Reach distant posts before the fugitive. Train for faster movement." },
+      helicopter: { name: "Helicopter Squad", unlock: 6, price: 60, symbol: "✣", description: "Deploy to any free post. Temporary guarding; reusable throughout a level." },
+      marksman: { name: "Marksman Squad", unlock: 10, price: 100, symbol: "◎", description: "A firing radius while stationed. Train to extend its reach." },
+    },
+    /** STARTER: km/h at upgrade steps 0–4; positive, strictly increasing. */
+    rapidSpeeds: [180, 240, 320, 430, 580],
+    /** STARTER: simulated hours and guarded subsequent moves at steps 0–4.
+     * Alternate endurance and deployment-time improvements on one fixed track. */
+    helicopterHours: [3, 3, 1.8, 1.8, 0.9],
+    helicopterGuardMoves: [2, 3, 3, 4, 4],
+    /** STARTER: firing radius in geographic km, positive and increasing. */
+    marksmanRadiusKm: [25, 45, 70, 100, 140],
+    /** STARTER: base ground speed, fugitive speed and per-level speed increment, km/h. */
+    patrolSpeedKmh: 120, runnerSpeedKmh: 60, runnerSpeedStepKmh: 4,
+    /** STARTER: runner minimum per move as fraction of sqrt(India land area). */
+    travelFloorFraction: 0.008,
+    /** STARTER: accelerated simulated seconds per real second; maximum move animation seconds. */
+    playbackScale: 6000, maximumPlaybackSeconds: 4,
+    /** STARTER: worker search bounds; not a proof of impossibility. */
+    searchBeam: 24, searchDepth: 15,
+  },
   hosting: {
     /** AGREED: production origin, without a path or trailing slash. */
-    productionOrigin: "https://rohittp.com",
+    productionOrigin: "https://patrol.rohittp.com",
 
     /**
      * AGREED: public asset base, including both slashes.
-     * The Vite build and public asset URLs must use this for /patrol/ hosting.
+     * The Vite build and public asset URLs use the custom domain root.
      */
-    basePath: "/patrol/",
+    basePath: "/",
 
     /**
      * AGREED: development port; the style allows http://localhost:3000.

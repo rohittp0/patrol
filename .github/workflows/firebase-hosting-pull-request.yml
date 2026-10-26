@@ -1,0 +1,24 @@
+name: Validate Patrol pull request
+on: pull_request
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm ci --prefix functions
+      - run: npm test
+      - run: npm run build
+      - run: npm run build:functions
+      - run: npx tsc --noEmit -p tsconfig.functions.json
+      - run: npx --yes firebase-tools@13.29.1 emulators:exec --only auth,firestore,functions --project patrol-daac9 "npm run test:backend && npm run test:rules"

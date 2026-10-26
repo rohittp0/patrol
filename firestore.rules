@@ -1,0 +1,13 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /players/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      // Economy and snapshots are written only by validated callable operations.
+      allow list, create, update, delete: if false;
+      match /{document=**} { allow read, write: if false; }
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

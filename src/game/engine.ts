@@ -10,6 +10,15 @@ export interface GameRules {
   runnerSpeedKmh: number;
   squadSpeedKmh: number;
   minimumRunnerTravelFraction?: number;
+  units?: UnitStats[];
+}
+
+export interface UnitStats {
+  kind: "patrol" | "rapid" | "helicopter" | "marksman";
+  speed: number;
+  deploymentHours: number;
+  guardMoves: number;
+  radiusKm: number;
 }
 
 /** Squad allocation belongs to the hunt. The first configured count is only
@@ -38,6 +47,8 @@ export interface Actor {
 export interface Squad {
   border: number | null;
   actor: Actor;
+  guardLeft?: number;
+  deployedAt?: number;
 }
 
 export interface ActiveOrder {
@@ -50,6 +61,7 @@ export interface ActiveOrder {
   runnerTravelledKm: number;
   elapsedHours: number;
   path: Position[];
+  flight?: boolean;
 }
 
 export type Outcome = { kind: "playing" } | { kind: "won"; score: number } | { kind: "lost"; reason: "escape" | "budget" };
@@ -76,12 +88,14 @@ export class PatrolGame {
   outcome: Outcome = { kind: "playing" };
 
   constructor(readonly board: CountryBoard, readonly setup: StartingSetup, readonly rules = rulesForLevel(board.id, setup.squadBorders.length), navigation?: Navigation) {
-    if (setup.squadBorders.length !== rules.squadCount || new Set(setup.squadBorders).size !== rules.squadCount) throw new Error("Starting setup does not match the squad allocation");
+    const posts = setup.squadBorders.filter((border) => border >= 0);
+    if (setup.squadBorders.length !== rules.squadCount || new Set(posts).size !== posts.length) throw new Error("Starting setup does not match the squad allocation");
     if (board.nodes[setup.runnerNode]?.kind !== "land") throw new Error("Runner must start on playable land");
     this.navigation = navigation ?? new Navigation(board);
     this.minimumRunnerTravelKm = countryScaleKm(board.land) * (rules.minimumRunnerTravelFraction ?? 0);
     this.runner = this.actorAt(setup.runnerNode);
-    this.squads = setup.squadBorders.map((border) => {
+    this.squads = setup.squadBorders.map((border, index) => {
+      if (this.rules.units?.[index]?.kind === "helicopter") return { border: null, actor: this.actorAt(setup.runnerNode), guardLeft: 0 };
       if (!board.borders[border]) throw new Error("Invalid squad border");
       return { border, actor: this.actorAt(board.borders[border].node) };
     });
@@ -143,11 +157,42 @@ export class PatrolGame {
     this.runner.segment = null;
     this.runner.route = route?.points ?? [];
     if (!route) this.outcome = { kind: "won", score: this.rules.maxOrders - this.ordersUsed };
+    this.checkFiring();
+  }
+
+  private checkFiring() {
+    if (this.outcome.kind !== "playing" || this.ordersUsed === 0) return;
+    if (this.firingEntry(this.runner.position, this.runner.position) === 0) {
+      this.outcome = { kind: "won", score: this.rules.maxOrders - this.ordersUsed };
+    }
+  }
+
+  /** Earliest circle entry along a straight runner segment, in local km.
+   * Split at the entry event, so a large animation step cannot skip a shot. */
+  private firingEntry(start: Position, end: Position): number | null {
+    let earliest: number | null = null;
+    this.squads.forEach((squad, index) => {
+      const stats = this.rules.units?.[index];
+      if (squad.border === null || stats?.kind !== "marksman" || stats.radiusKm <= 0) return;
+      const k = 111.1950802335, cos = Math.cos(squad.actor.position[1] * Math.PI / 180);
+      const x = (start[0] - squad.actor.position[0]) * k * cos, y = (start[1] - squad.actor.position[1]) * k;
+      const dx = (end[0] - start[0]) * k * cos, dy = (end[1] - start[1]) * k;
+      const a = dx * dx + dy * dy, c = x * x + y * y - stats.radiusKm ** 2;
+      if (c <= 0) { earliest = 0; return; }
+      if (a === 0) return;
+      const b = 2 * (x * dx + y * dy), discriminant = b * b - 4 * a * c;
+      if (discriminant < 0) return;
+      const fraction = (-b - Math.sqrt(discriminant)) / (2 * a);
+      if (fraction >= 0 && fraction <= 1 && (earliest === null || fraction < earliest)) earliest = fraction;
+    });
+    return earliest;
   }
 
   previewOrder(squadIndex: number, destination: number): { nodes: number[]; points: Position[]; distanceKm: number } | null {
     const squad = this.squads[squadIndex];
-    if (this.activeOrder || this.outcome.kind !== "playing" || !squad || squad.border === null || !this.board.borders[destination] || this.securedBorders.has(destination)) return null;
+    if (this.activeOrder || this.outcome.kind !== "playing" || !squad || !this.board.borders[destination] || this.securedBorders.has(destination)) return null;
+    if (this.rules.units?.[squadIndex]?.kind === "helicopter") return { nodes: [], points: [[...squad.actor.position], [...this.board.borders[destination].post]], distanceKm: distanceKm(squad.actor.position, this.board.borders[destination].post) };
+    if (squad.border === null) return null;
     return this.navigation.betweenPosts(squad.border, destination);
   }
 
@@ -159,19 +204,23 @@ export class PatrolGame {
       return false;
     }
     const squad = this.squads[squadIndex];
-    const from = squad.border!;
+    const from = squad.border ?? -1;
     squad.border = null;
     squad.actor.route = path.points.map((position) => ({ node: null, position }));
     this.ordersUsed++;
-    const squadArrivalHours = path.distanceKm / this.rules.squadSpeedKmh;
+    const stats = this.rules.units?.[squadIndex];
+    const flight = stats?.kind === "helicopter";
+    const squadArrivalHours = flight ? stats.deploymentHours : path.distanceKm / (stats?.speed ?? this.rules.squadSpeedKmh);
     this.activeOrder = {
       squad: squadIndex, from, to: destination, distanceKm: path.distanceKm,
       durationHours: Math.max(squadArrivalHours, this.minimumRunnerTravelKm / this.rules.runnerSpeedKmh),
       squadArrivalHours, runnerTravelledKm: 0, elapsedHours: 0,
       path: path.points,
+      ...(flight ? { flight: true } : {}),
     };
     this.history.push(this.activeOrder);
     this.replanRunner();
+    if (this.won) this.activeOrder = null;
     return true;
   }
 
@@ -183,6 +232,16 @@ export class PatrolGame {
       if (!actor.segment || actor.segment.target !== target) actor.segment = { start: [...actor.position], target, length: distanceKm(actor.position, position), travelled: 0 };
       const segment = actor.segment;
       const length = segment.length - segment.travelled;
+      if (canEscape) {
+        const fraction = this.firingEntry(actor.position, position);
+        const shotDistance = fraction === null ? Infinity : fraction * length;
+        if (shotDistance <= remaining + 1e-9) {
+          actor.position = [actor.position[0] + (position[0] - actor.position[0]) * (fraction ?? 0), actor.position[1] + (position[1] - actor.position[1]) * (fraction ?? 0)];
+          segment.travelled += shotDistance;
+          this.outcome = { kind: "won", score: this.rules.maxOrders - this.ordersUsed };
+          return { travelled: distance - remaining + shotDistance, escaped: false };
+        }
+      }
       if (canEscape && target.landNode !== undefined && Math.min(length, remaining) > 0) actor.lastLandNode = target.landNode;
       if (length <= remaining + CONFIG.movement.arrivalToleranceKm) {
         remaining = Math.max(0, remaining - length);
@@ -218,20 +277,29 @@ export class PatrolGame {
       const eventTime = travelling ? order.squadArrivalHours : order.durationHours;
       const elapsed = Math.min(remaining, Math.max(0, eventTime - order.elapsedHours));
       const runnerMove = this.moveActor(this.runner, elapsed * this.rules.runnerSpeedKmh, true);
-      const actualElapsed = runnerMove.escaped ? runnerMove.travelled / this.rules.runnerSpeedKmh : elapsed;
-      if (travelling) this.moveActor(squad.actor, actualElapsed * this.rules.squadSpeedKmh, false);
+      const actualElapsed = runnerMove.escaped || this.won ? runnerMove.travelled / this.rules.runnerSpeedKmh : elapsed;
+      const speed = order.flight ? order.distanceKm / order.squadArrivalHours : this.rules.units?.[order.squad]?.speed ?? this.rules.squadSpeedKmh;
+      if (travelling) this.moveActor(squad.actor, actualElapsed * speed, false);
       order.elapsedHours += actualElapsed;
       order.runnerTravelledKm += runnerMove.travelled;
       remaining = Math.max(0, remaining - actualElapsed);
+      if (this.won) { this.activeOrder = null; return; }
       if (runnerMove.escaped) { this.outcome = { kind: "lost", reason: "escape" }; return; }
       if (travelling && order.squadArrivalHours - order.elapsedHours <= tolerance) {
         squad.border = order.to;
         squad.actor = this.actorAt(this.board.borders[order.to].node);
+        if (order.flight) { squad.guardLeft = this.rules.units![order.squad].guardMoves; squad.deployedAt = this.ordersUsed; }
         this.replanRunner();
         if (this.won) { this.activeOrder = null; return; }
       }
       if (order.durationHours - order.elapsedHours <= tolerance) {
         this.activeOrder = null;
+        let expired = false;
+        this.squads.forEach((unit) => {
+          if (unit.guardLeft && unit.deployedAt !== undefined && unit.deployedAt < this.ordersUsed && --unit.guardLeft === 0) { unit.border = null; expired = true; }
+        });
+        if (expired) this.replanRunner();
+        if (this.won) return;
         if (this.ordersUsed >= this.rules.maxOrders) this.outcome = { kind: "lost", reason: "budget" };
         return;
       }

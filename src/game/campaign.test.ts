@@ -60,7 +60,7 @@ for (const level of CONFIG.levels) {
       const copy = newspaperCopy(report, "  Officer   Ada  ");
       assert(copy.byline.includes("Officer Ada")); assert(copy.lead.includes(report.region));
       assert(copy.lead.includes(`${report.squads}-squad`)); assert(copy.lead.includes(`${game.ordersUsed} moves`));
-      assert(copy.archive.includes(report.file.ending)); assert(copy.share.includes("https://rohittp.com/patrol"));
+      assert(copy.archive.includes(report.file.ending)); assert(copy.share.includes(CONFIG.hosting.productionOrigin));
     }
   });
 }

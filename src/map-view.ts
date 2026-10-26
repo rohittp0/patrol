@@ -1,4 +1,5 @@
 import { Map, Marker, NavigationControl, setWorkerUrl } from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 import { track } from "./telemetry";
 import { borderName } from "./game/presentation";
 import { distanceKm } from "./game/navigation";
@@ -30,6 +31,8 @@ export class PatrolMap {
   private focusedSquad: number | null = null;
   private ready = false;
   private usedFallback = false;
+  private cleanup = () => {};
+  private ranges: { position: Position; radius: number }[] = [];
 
   constructor(private board: CountryBoard, onPost: (border: number) => void, onMapStatus: (fallback: boolean) => void) {
     this.map = new Map({ container: "map", style: CONFIG.map.styleUrl, attributionControl: { compact: true }, dragRotate: false, pitchWithRotate: false, maxPitch: 0 });
@@ -52,6 +55,7 @@ export class PatrolMap {
       this.addLayers();
       this.refreshGeometry();
       if (this.game) this.renderState(this.game, this.selected, this.focusedSquad);
+      this.setRanges(this.ranges);
       onMapStatus(this.usedFallback);
     });
     const runnerElement = document.createElement("div");
@@ -85,8 +89,10 @@ export class PatrolMap {
         else if (document.querySelector('.hunt-guide:not([hidden])[data-phase="moving"]')) this.showGuidedMovement(this.game);
       });
     };
-    new ResizeObserver(resize).observe(document.getElementById("map")!);
+    const observer = new ResizeObserver(resize);
+    observer.observe(document.getElementById("map")!);
     window.addEventListener("patrol:viewport-change", resize);
+    this.cleanup = () => { observer.disconnect(); window.removeEventListener("patrol:viewport-change", resize); cancelAnimationFrame(resizeFrame); };
   }
 
   private onPost: (border: number) => void;
@@ -136,7 +142,9 @@ export class PatrolMap {
 
   private addLayers() {
     const empty = collection([]);
-    for (const name of ["land", "outside", "coast", "frontiers", "borders", "route"]) this.map.addSource(`patrol-${name}`, { type: "geojson", data: empty });
+    for (const name of ["land", "outside", "coast", "frontiers", "borders", "route", "ranges"]) this.map.addSource(`patrol-${name}`, { type: "geojson", data: empty });
+    this.map.addLayer({ id: "patrol-range-fill", type: "fill", source: "patrol-ranges", paint: { "fill-color": "#c46f47", "fill-opacity": 0.18 } });
+    this.map.addLayer({ id: "patrol-range-line", type: "line", source: "patrol-ranges", paint: { "line-color": "#e7a688", "line-width": 1.5, "line-dasharray": [3, 3] } });
     this.map.addLayer({ id: "patrol-outside", type: "fill", source: "patrol-outside", paint: { "fill-color": "#081519", "fill-opacity": 0.42 } });
     this.map.addLayer({ id: "patrol-land", type: "fill", source: "patrol-land", paint: { "fill-color": "#617b49", "fill-opacity": 0.045 } });
     this.map.addLayer({ id: "patrol-coast", type: "line", source: "patrol-coast", paint: { "line-color": "#2c8994", "line-opacity": 0.65, "line-width": 1.5 } });
@@ -151,6 +159,19 @@ export class PatrolMap {
   private setData(name: string, data: GeoJSON.FeatureCollection) {
     (this.map.getSource(`patrol-${name}`) as GeoJSONSource | undefined)?.setData(data);
   }
+
+  setRanges(ranges: { position: Position; radius: number }[]) {
+    this.ranges = ranges;
+    if (!this.ready) return;
+    this.setData("ranges", collection(ranges.map(({ position: [lon, lat], radius }) => ({
+      type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [Array.from({ length: 65 }, (_, i) => {
+        const a = i / 64 * Math.PI * 2;
+        return [lon + Math.cos(a) * radius / (111.1950802335 * Math.cos(lat * Math.PI / 180)), lat + Math.sin(a) * radius / 111.1950802335];
+      })] },
+    }))));
+  }
+
+  destroy() { this.cleanup(); this.map.remove(); }
 
   private refreshGeometry() {
     if (!this.ready) return;

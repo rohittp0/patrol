@@ -7,6 +7,6 @@
 - Use the vocabulary in `CONTEXT.md`; update it when domain terms are resolved.
 - Keep playtest tuning values in `src/game/playtest.config.ts`, with units,
   constraints, and a clear distinction between agreed and starter values.
-- Target static hosting on GitHub Pages at `https://rohittp.com/patrol/`.
+- Target Firebase Hosting in project `patrol-daac9` at `https://patrol.rohittp.com/`.
 - Use the owner-controlled style URL documented in the configuration without
   copying its embedded MapTiler key into source.

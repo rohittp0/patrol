@@ -1,0 +1,47 @@
+name: Validate and deploy Patrol to Firebase
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: firebase-live
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm ci --prefix functions
+      - run: npm test
+      - run: npm run build
+      - run: npm run build:functions
+      - run: npx tsc --noEmit -p tsconfig.functions.json
+      - name: Test private saves and trusted progression
+        run: npx --yes firebase-tools@13.29.1 emulators:exec --only auth,firestore,functions --project patrol-daac9 "npm run test:backend && npm run test:rules"
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm ci --prefix functions
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: "${{ secrets.FIREBASE_SERVICE_ACCOUNT_PATROL_DAAC9 }}"
+      - name: Deploy rules, backend and game together
+        run: npx --yes firebase-tools@13.29.1 deploy --only firestore,functions,hosting --project patrol-daac9 --non-interactive

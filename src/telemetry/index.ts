@@ -57,7 +57,7 @@ export function initTelemetry() {
       if (!instance) return;
       setProfile = () => {
         const profile = playerProfile();
-        instance.identify(profile.id, { name: profile.name || null, profile_name_set: profile.name ? "yes" : "no", profile_photo_set: profile.photo ? "yes" : "no" });
+        instance.identify(profile.id);
       };
       setProfile();
       instance.startSessionRecording();

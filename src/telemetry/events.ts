@@ -5,6 +5,8 @@
  * The persistent random profile ID is sent only through PostHog's identify API.
  * All events receive COMMON_PARAMETERS when a hunt is active. */
 export const PARAMETERS = {
+  squad_type: "Configured specialist type: rapid, helicopter or marksman.",
+  amount: "Integer game money spent or awarded; never a real currency amount.",
   country: "Configured country ID: usa, india, hungary.",
   case_id: "Historical case ID; never the player's name.",
   challenge_id: "Verified starting setup ID, e.g. US-001.",
@@ -64,6 +66,12 @@ export type Parameter = keyof typeof PARAMETERS;
 export const COMMON_PARAMETERS = ["country", "case_id", "challenge_id", "hunt_number", "attempt_id", "moves_used", "moves_left", "squad_count", "campaign_start_country"] as const;
 const event = <P extends readonly Parameter[]>(description: string, usedIn: string, parameters: P) => ({ description, usedIn, parameters });
 export const EVENTS = {
+  squad_purchase: event("A specialist purchase was confirmed.", "main.ts", ["squad_type", "amount"]),
+  squad_training: event("Sequential upgrade training started.", "main.ts", ["squad_type", "amount"]),
+  helicopter_deploy: event("A helicopter deployment consumed a move.", "main.ts", ["squad", "post"]),
+  reward_awarded: event("Verified reward difference credited to the wallet.", "main.ts", ["amount"]),
+  sign_in_prompt: event("Optional save-progress prompt was displayed.", "main.ts", ["source"]),
+  sign_in_complete: event("Google account link or sign-in completed without recording account details.", "main.ts", ["source"]),
   campaign_entry: event("New timezone/default start or remembered/legacy campaign restored; no raw timezone collected.", "main.ts", ["source"]),
   guide_begin: event("In-game opening hunt guidance becomes visible.", "hunt-guide.ts", ["entry"]),
   guide_step_view: event("A guided click or travel explanation is shown; no per-frame events.", "hunt-guide.ts", ["guide_step", "guide_move"]),

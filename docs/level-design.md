@@ -1,5 +1,33 @@
 # Level geometry and validation
 
+## Agreed rewrite scope
+
+The progression rewrite begins in India for every player, regardless of their
+country or timezone. Only India is enabled in this release; USA and other
+countries remain disabled and form future sequential campaign progression
+after India. Their redesign and release are outside the current scope. The India level
+design and difficulty progression require a complete redesign and rebalance for
+the new squad collection, upgrades, rewards, and 15-move budget; existing setups
+and their proofs do not establish balance or correctness under the new rules.
+
+India must contain at least 15 consecutive levels with increasing difficulty.
+Without the suitable squad upgrade, a level should require more moves and may
+eventually be impossible within the 15-move budget. Later levels must therefore
+make upgrades necessary, rather than merely improving rewards. Initial squad
+purchases must be cheap to make the first specialist accessible early, with
+Rapid Action Squad available at Level 3. The campaign needs an achievable earning
+and spending path through its required upgrades; replay rewards remain limited
+to the positive improvement over the reward already earned for a level.
+
+Training is allowed even when fewer than three squads remain available. Players
+may start levels with empty deployment slots. Cheap early purchases are the
+agreed approach to accessibility; resale or refund mechanics are not agreed.
+
+The remaining sections describe the existing prototype and its validation, not
+the completed rewrite.
+
+## Existing prototype
+
 The prototype compiles three country boards from pinned Natural Earth data.
 Mainland USA has 126 guardable borders (109 internal), India has 79 (57 internal),
 and Hungary has 50 (36 internal).

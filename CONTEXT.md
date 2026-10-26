@@ -9,28 +9,35 @@ The geographic area under the player's patrol authority, currently one non-islan
 _Avoid_: Authoritative zone
 
 **Level**:
-A country stage defined by its patrol zone and move budget, containing ordered challenges whose squad allocations can vary. Difficulty rises within each country and returns to introductory hunts when another country begins.
+A numbered, playable mission with its own starting setup, patrol zone, move budget, reward, and best move count.
+_Avoid_: Challenge, hunt in player-facing copy
+
+**Campaign**:
+The ordered progression through levels and then successive countries, beginning with India for every player. Only India is enabled in the current release scope; other countries form future sequential progression.
 
 **Opening country**:
-The country that starts a new player's campaign, chosen from a supported home-country match with USA as the fallback.
+The country in which the campaign begins, currently India for every player.
 
 **Campaign order**:
-The player's remembered country sequence: opening country first, then the remaining countries in their authored relative order. Hunt numbers, Next hunt, and Previous hunt follow this sequence.
+The numbered sequence of levels within each country, followed by the next country in the campaign. Every player follows the same progression beginning in India, regardless of location.
 
-**Challenge**:
-A verified starting setup in the campaign. The first two challenges of each country introduce the chase with a two-move solution. Later challenges require at least three moves. Every challenge in a country starts in a different state or province. Difficulty restarts at the introductory tier when entering a new country.
-
-**Guided hunt**:
-The opening campaign challenge, taught by highlighting the border post and squad for each move through the capture. Players follow those moves or skip guidance to take command freely.
+**Guided level**:
+The opening campaign level, taught by highlighting the border post and squad for each move through the capture. Players follow those moves or skip guidance to take command freely.
 
 **Campaign progress**:
-The current challenge and chase state, remembered on this browser so refreshing continues the same hunt. Previous hunt replays the preceding campaign challenge, including across country boundaries.
+The player's campaign position, level results, money, squad collection, training progress, last-used squad selection, and current chase state. Signed-in players can continue their saved progress on another device.
+
+**Level reward**:
+The level's base money award multiplied by the winning move-count multiplier: three times for fewer than three moves, twice for three through five moves, and once for six or more moves. Base awards increase with progression.
+
+**Improvement reward**:
+The positive difference between a replay's level reward and the highest reward already earned for that level, payable only when the player wins in fewer moves than their previous best. A better move count within the same multiplier tier improves the record without awarding more money.
 
 **Case file**:
-The historical fugitive and story assigned to one challenge. Each challenge introduces a different case. The chase is imagined; its epilogue recounts how the real manhunt ended, whether by arrest, surrender, or death.
+The historical fugitive and story assigned to one level. Each level introduces a different case; the chase is imagined, while its epilogue recounts how the real manhunt ended, whether by arrest, surrender, or death.
 
 **Starting setup**:
-The fugitive's initial position and the squads' initial assignments to border posts. The number of assignments is the hunt's squad allocation, chosen from its country's supported counts in the tuning configuration. Every starting setup must be verified as winnable within its level's move budget.
+The fugitive's initial position and the initial border posts associated with a level's deployment slots. Selected ground squads deploy automatically at their slots' posts, while Helicopter Squads begin in reserve; each level has a verified winning sequence with a stated roster.
 
 **Fugitive**:
 The always-visible, computer-controlled opponent trying to escape the patrol zone by land. It chooses a land escape route, anticipating whether a travelling squad will close a border before it can cross. A destination remains unguarded until squad arrival, so the fugitive can race across before it closes. It takes direct visible paths within each land region and recalculates from its actual position whenever an order changes the border network.
@@ -46,15 +53,51 @@ A portion of the patrol zone's outer boundary that the fugitive could cross by l
 A player-controlled unit that guards a border while stationed at its border post. During relocation, it guards neither its origin nor its destination.
 _Avoid_: Patrol team, guard, guards
 
+**Patrol Squad**:
+A standard squad with ordinary movement and border guarding, without a special ability. Players begin with three Patrol Squads.
+
+**Rapid Action Squad**:
+A squad with faster movement than a Patrol Squad. Training upgrades its movement speed.
+_Avoid_: Rapid action force
+
+**Helicopter Squad**:
+A squad manually deployed to a player-chosen border post to guard its border temporarily, returning to reserve when that duration expires so it can deploy again in the same level. Training can extend its guarding duration, measured in moves, and shorten its deployment time.
+_Avoid_: Helicopter crew
+
+**Deployment time**:
+The time a Helicopter Squad takes to reach its chosen border post, fixed for its training level and independent of distance. Deployment consumes one move, and guarding begins on arrival.
+
+**Marksman Squad**:
+A squad that instantly kills a fugitive entering its firing radius while it is stationed at a border post; the ability is inactive during relocation and resumes on arrival. Training upgrades its firing radius.
+_Avoid_: Firing squad
+
+**Squad collection**:
+The player's three starting Patrol Squads and at most one purchased squad of each specialist type, from which they select squads before a level. Squads undergoing training are unavailable for selection.
+
+**Reserve**:
+A selected Helicopter Squad's state while waiting to deploy, either before its first deployment or after its guarding duration expires. A squad in reserve guards no border; each deployment consumes a move and takes its deployment time.
+
+**Upgrade track**:
+The ordered sequence of upgrades for an individual squad, with each upgrade becoming available only after the preceding upgrade is completed. Every upgrade requires money and training time, with costs and training durations increasing through the track.
+
+**Training**:
+The real-world waiting period required to complete a purchased squad upgrade. The squad is unavailable for level selection while training, and gains the upgrade when training finishes.
+
+**Deployment slot**:
+One optional place for a selected squad in a level; players may start with slots empty, including while owned squads are training. Players begin with three slots; a fourth and fifth become available to purchase through progression at levels 15 and 25 respectively.
+
+**Unlock requirement**:
+A campaign progression requirement that must be met before a squad or additional deployment slot becomes available to purchase. Unlocking a purchase does not grant it for free.
+
 **Move**:
-A single squad relocation from one border post to another, resolved before the next order. A short relocation can finish before the fugitive completes its minimum travel for that order. The squad guards its destination on arrival; game time stays paused between completed orders.
+A single squad relocation or Helicopter Squad deployment, resolved before the next move while the fugitive travels. Guarding begins on arrival, and game time stays paused between completed moves; a short relocation can finish before the fugitive completes its minimum travel for that move.
 _Avoid_: Order in player-facing copy
 
 **Fugitive travel floor**:
 The minimum land distance the fugitive travels during an order, scaled to the patrol zone's land area. Escape or containment can end the order sooner. Longer squad journeys can give the fugitive more travel time.
 
 **Land movement**:
-Movement freely across land at a constant speed, without being restricted to roads. Squads and the fugitive must take land-only routes around ocean water.
+Movement freely across land at a constant speed, without being restricted to roads. Ground squads and the fugitive must take land-only routes around ocean water; Helicopter Squad deployment uses air travel.
 
 **Move budget**:
 The maximum number of orders allowed in a level. Exceeding it causes the player to lose.
@@ -92,15 +135,6 @@ The implicit, impassable boundary between land and ocean. It can complete an enc
 _Avoid_: Ocean border
 
 **Containment**:
-A closed enclosure around the fugitive formed by guarded borders alone or by guarded borders together with coastline, sealing every land escape route. Achieving containment is the player's win condition.
-
-**Capture report**:
-The actual in-game capture location, moves, squads, score, and case file used to create the newspaper. Its game capture is fictional; its historical column is sourced.
-
-**Front-page clipping**:
-A shareable newspaper cutting celebrating the player's imagined capture, with a separate sourced historical ending. The second challenge's capture in each country opens the editor once per browser; the opening/tutorial hunt and later captures offer Make headlines on the ordinary result card. Skip advances to the next challenge. India uses its own arrest illustration and default officer; USA and Hungary share the existing artwork.
-
-**Player profile**:
-A saved name, final circular head crop, and random anonymous ID. Original uploads and crop coordinates are discarded when the newspaper editor closes. The name identifies the player's play sessions; photos stay in the browser unless the player shares or downloads their newspaper.
+A closed enclosure around the fugitive formed by guarded borders alone or by guarded borders together with coastline, sealing every land escape route. Achieving containment wins the level, as does a stationed Marksman Squad killing the fugitive within its firing radius.
 
 Engine identifiers such as `runner`, `order`, and `secured` remain internal aliases; player-facing copy uses fugitive, move, and guarded.
