@@ -123,3 +123,21 @@ These are separate single samples with browser cache disabled/enabled, not
 controlled server-cache or phone comparisons. Firestore's browser SDK increases
 the entry bundle; MapLibre remains deferred until gameplay. No statistical
 performance improvement is claimed.
+
+### Live acceptance of the simplified release
+
+Implementation commit `d50e6eb` was pushed to `main`. The local Firebase CLI
+successfully deployed Firestore rules/indexes and Hosting without Functions or
+a billing upgrade. GitHub run `40372596206` passed validation and automatic
+Hosting deployment. The 41 browser checks also passed at
+`https://patrol.rohittp.com/`, with PostHog/Meta requests blocked during testing;
+production rewards, purchases, training and refresh recovery were exercised in
+an isolated anonymous account.
+
+The basemap still uses its fallback on the new domain. A loaded-map check found
+that `https://dashboard.lascadian.com/maps/default.json` returns HTTP 200 but no
+`Access-Control-Allow-Origin` for `https://patrol.rohittp.com`; the same request
+with `https://rohittp.com` or `http://localhost:3000` returns the matching header.
+The style host must allow the new origin. The fallback's authoritative geometry,
+borders and gameplay remain functional; full basemap acceptance is pending that
+upstream configuration change. No embedded map key was copied into source.
