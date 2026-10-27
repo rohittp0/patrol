@@ -460,3 +460,14 @@ interaction was 66/74 ms, the first move 1,188/1,190 ms, median frame interval
 these single-load differences do not establish a startup improvement. The entry
 bundle grew from 128.99 to 129.71 KB gzip; replay loads an additional extension.
 Physical-phone replay appearance, frame cost and dashboard playback remain unverified.
+
+
+Live release acceptance: `0a0d6ac3d91b4729a4ed3a11de739d54ec132136` was
+pushed and deployed with the Firebase CLI (Hosting, rules and indexes).
+[CI run 40473553445](https://github.com/rohittp0/patrol/actions/runs/40473553445)
+passed validation and deployment. The deployed game passed all 11 provider checks,
+with four non-empty intercepted replay packets, one GameStart, one GameCompleted,
+one GameWon and one field TutorialCompleted. The live Meta SDK also emitted
+PageViews around screen transitions; PageViews are not counted as game attempts.
+Blocking both providers still left the tutorial playable. All browser contexts
+were closed after acceptance.

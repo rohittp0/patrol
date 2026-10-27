@@ -1,7 +1,7 @@
 // Real SDKs and public project config; analytics/replay/Meta uploads intercepted.
 async basePage => {
   const origin=new URL(basePage.url()).origin, contexts=[], checks=[];
-  const check=(ok,label)=>{if(!ok)throw new Error(label);checks.push(label);};
+  const check=(ok,label,details)=>{if(!ok)throw new Error(label+(details?": "+JSON.stringify(details):""));checks.push(label);};
   const make=async blocked=>{
     const context=await basePage.context().browser().newContext({viewport:{width:390,height:844},userAgent:'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'});
     contexts.push(context);
@@ -63,7 +63,7 @@ async basePage => {
     const snapshots=packets.filter(p=>p.event==='$snapshot');
     check(snapshots.length>0 && snapshots.some(p=>p.properties.$snapshot_data?.length>0),'Actual non-empty session replay snapshots reach transport');
     check(snapshots.every(p=>p.properties.$session_id && p.properties.$window_id),'Replay retains session and window metadata');
-    check(meta.filter(p=>p.ev==='PageView').length===1,'Actual Meta PageView is delivered once');
+    check(meta.some(p=>p.ev==='PageView'),'Actual Meta PageView events reach transport');
     check(meta.filter(p=>p.ev==='GameStart').length===1,'Meta receives level start');
     check(meta.filter(p=>p.ev==='GameCompleted').length===1 && meta.filter(p=>p.ev==='GameWon').length===1,'Capture sends completion and win once');
     check(meta.some(p=>p.ev==='TutorialCompleted' && p['cd[lesson]']==='field'),'Meta tutorial event identifies the field lesson');

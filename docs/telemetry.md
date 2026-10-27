@@ -76,12 +76,14 @@ properties on `app_open` as well.
   `app_open` trigger see app entry. Gameplay and Meta never wait for this gate;
   if replay cannot load, event delivery continues after the bounded wait.
 - Meta Pixel `1412945137121409` is enabled independently of PostHog. It sends one
-  `PageView` on initialization, plus bounded custom `GameStart`, `GameResume`,
+  explicit `PageView` on initialization, plus bounded custom `GameStart`, `GameResume`,
   `GameCompleted`, `GameWon`, `TutorialCompleted`, `SquadPurchased` and
   `SquadTrainingStarted` events. Tutorial payloads distinguish the field and
   Academy lessons. Meta excludes email, name, UID and attempt IDs; account
   properties are attached only to PostHog gameplay/timing events. Automatic
-  Meta configuration and advanced matching remain off.
+  Meta configuration and advanced matching remain off. The live Meta SDK also
+  emits PageViews around screen transitions; use `GameStart` to count attempts
+  and `GameWon` to count captures, rather than treating PageViews as attempts.
 - Existing server-side event/person history is not deleted by this client change.
   Local gameplay saves and Google/Firebase save identity continue independently.
 
