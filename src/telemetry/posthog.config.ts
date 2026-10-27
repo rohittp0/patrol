@@ -1,5 +1,5 @@
 import type { CaptureResult, PostHogConfig } from "posthog-js";
-import { COLLECTED_EVENTS, COMMON_PARAMETERS, EVENTS, PERFORMANCE_TRACES, type EventName } from "./events";
+import { ACCOUNT_PARAMETERS, COLLECTED_EVENTS, COMMON_PARAMETERS, EVENTS, PERFORMANCE_TRACES, type EventName } from "./events";
 
 /** Public project token supplied by the owner; not an administrative key. */
 export const POSTHOG_TOKEN = "phc_qvnmtmJK9HVoMtGsY6HHS66U6dcbfqBpR3ZBhkgCW54G";
@@ -37,12 +37,15 @@ export const POSTHOG_CONFIG = {
     const parameters: readonly string[] = isTiming
       ? ["duration_ms", "country"]
       : [...COMMON_PARAMETERS, ...EVENTS[event.event as EventName].parameters];
-    const allowed = new Set([...parameters, ...SDK_PROPERTIES]);
+    const allowed = new Set([...parameters, ...ACCOUNT_PARAMETERS, ...SDK_PROPERTIES]);
     // An allow-list also strips automatic URLs, device IDs, attribution, person
-    // updates, account details, attempt IDs and arbitrary SDK/remote additions.
+    // updates, unapproved account details, attempt IDs and arbitrary SDK/remote additions.
     for (const [key, value] of Object.entries(event.properties)) {
       if (!allowed.has(key) || !["string", "number", "boolean"].includes(typeof value))
         delete event.properties[key];
+    }
+    if (event.properties.signed_in !== true) {
+      for (const key of ACCOUNT_PARAMETERS) if (key !== "signed_in") delete event.properties[key];
     }
     delete event.$set;
     delete event.$set_once;

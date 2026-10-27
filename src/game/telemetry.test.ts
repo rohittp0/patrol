@@ -14,7 +14,7 @@ test("analytics catalog keeps bounded names and documents every allowed paramete
   }
 });
 
-test("all outbound events are personless and strip identity and SDK metadata", () => {
+test("personless guest events strip unapproved identity and SDK metadata", () => {
   for (const event of [...COLLECTED_EVENTS, "country_prepare"]) {
     const sent = POSTHOG_CONFIG.before_send({
       uuid: crypto.randomUUID(), event,

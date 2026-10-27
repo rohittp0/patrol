@@ -387,3 +387,31 @@ idle Academy sample, taken before installing the test clock, recorded median/p95
 frame intervals of 16.70/16.73 ms, browser task CPU 31.9 ms and JS heap 38.1 MiB.
 Analytics uploads were intercepted. This is a representative smoke measurement,
 not a matched baseline comparison, gameplay frame benchmark or physical-phone result.
+
+
+## Signed-in account event properties (2026-10-27)
+
+The owner subsequently requested email/name as event properties. Current funnel
+and custom timing events now snapshot `signed_in`, and, for signed-in accounts,
+`email`, `name`, `email_verified` and `auth_provider` from Firebase Auth. Names
+fall back to the linked provider when the primary Firebase profile has no name.
+Guest events omit personal fields; sign-out/account switches read the current
+Auth user rather than retaining earlier properties. Queued events/timings keep
+their original account snapshot. `app_open` waits for the existing Auth restore
+so returning signed-in users have their details on entry.
+
+Person processing/identify, replay, Meta and noisy events remain disabled. Events
+with email/name are now personal data despite PostHog's personless flags. UIDs,
+credentials, photos and attempt IDs remain excluded. The current contract is in
+`docs/telemetry.md`; the earlier anonymous release above describes its historical
+behavior, not the current signed-in properties.
+
+Validation: 128 unit tests passed; all nine focused telemetry/account checks and
+the production build passed after the linked-name fallback. Ten real-browser
+checks with Firebase Auth/Firestore emulators intercepted 12 actual SDK packets,
+covering guest entry, linked account fields, provider/verification values, queued
+event/timing snapshots, sign-out, another account and refresh restoration. No
+fixture account details were uploaded to PostHog. Full personal Google login and
+dashboard ingestion were not automated. The entry bundle changed from 128.71 KB
+to 128.99 KB gzip (+0.28 KB); matched runtime performance and physical-device
+checks were not repeated for this event-property addition.

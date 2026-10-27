@@ -75,6 +75,7 @@ let forecast: OrderForecast | null = null;
 let coachLesson: "field" | "academy" | null = null;
 let coachKey = "";
 let analyticsScreen = "";
+let appEntryTracked = false;
 const lessonStarted = new Map<"field" | "academy", number>();
 function updateAnalyticsContext() {
   gameContext({
@@ -1205,6 +1206,10 @@ async function initialize() {
     }
     showLoading("Calling your squads. Restoring your campaign…");
     await client.load();
+    if (!appEntryTracked) {
+      appEntryTracked = true;
+      track("app_open", { width_px: innerWidth, height_px: innerHeight, app_version: "2.0.0" });
+    }
     if (location.hash === "#play" && client.response.active) {
       route = restoreGame() ? "play" : "roster";
       if (route === "roster") location.hash = "roster";
@@ -1230,9 +1235,4 @@ async function initialize() {
   }
 }
 initTelemetry();
-track("app_open", {
-  width_px: innerWidth,
-  height_px: innerHeight,
-  app_version: "2.0.0",
-});
 void initialize();

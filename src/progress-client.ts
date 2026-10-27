@@ -9,6 +9,7 @@ import {
   signOut,
 } from "firebase/auth";
 import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
+import { setTelemetryAccount } from "./telemetry";
 import { FIREBASE_CONFIG } from "./firebase.config";
 import {
   settleTraining,
@@ -107,6 +108,7 @@ export class ProgressClient {
       connectFirestoreEmulator(this.db, "127.0.0.1", 8080);
     }
     this.store = new ProgressStore(this.db, board, levels, navigation);
+    setTelemetryAccount(() => this.auth.currentUser);
   }
   get player() {
     return settleTraining(this.response.player, this.now());

@@ -1,6 +1,6 @@
 # Patrol telemetry contract
 
-The India campaign sends a small, explicit, anonymous PostHog funnel. The public
+The India campaign sends a small, explicit PostHog funnel with signed-in account properties. The public
 project token and privacy controls live in `src/telemetry/posthog.config.ts`.
 `COLLECTED_EVENTS` in `src/telemetry/events.ts` is the runtime collection allow-list.
 Legacy event definitions remain for unused modules, but are blocked before queueing
@@ -18,7 +18,7 @@ and again before transport.
 | `guide_begin`, `guide_complete` | Mandatory `field` lesson at Level 1 and `academy` lesson at Level 3. Begin is emitted once per lesson per page load; completion measures time since that begin, including time spent on the lesson. |
 | `squad_purchase`, `squad_training` | Successful local recruitment/training. Training includes target rank, game coins spent and configured seconds, excluding deadlines. |
 | `reward_awarded` | Verified reward difference, including zero on an equal replay. |
-| `sign_in_prompt`, `sign_in_complete` | Optional save-progress funnel without account details or identification. |
+| `sign_in_prompt`, `sign_in_complete` | Optional save-progress funnel; current signed-in account fields are attached, without calling identify. |
 | `map_fallback` | Basemap source failure; no provider URLs or errors. |
 
 Game context uses authored level/case identifiers and numeric gameplay facts.
@@ -32,17 +32,35 @@ Map pan/zoom, post/squad selections, individual moves, per-frame work, timer tic
 guide steps, obsolete hints, old skippable tutorials and newspaper edits are not
 collected. Only screen transitions and meaningful funnel milestones are emitted.
 
-## Anonymous identity boundary
+## Account properties and personless processing
 
-- No `identify`, alias, groups, person updates, Firebase UID, player/profile ID,
-  attempt/save ID, name, email, photo, filename, raw error or URL enters analytics.
-- `person_profiles: 'never'` and outbound `$process_person_profile: false` keep
-  every collected event unidentified. The filter rejects all identity events,
-  person updates and unapproved SDK events/properties.
-- PostHog uses an in-memory anonymous ID for the current page load. Refresh
-  creates a new anonymous ID and does not reuse formerly identified cookies or
-  local storage. The SDK's page/session IDs support a funnel within that page;
-  cross-refresh, cross-device and signed-in user attribution is intentionally lost.
+At the owner's request, every gameplay and custom timing event snapshots the
+current Firebase Auth account when that event occurs:
+
+| Property | Value |
+| --- | --- |
+| `signed_in` | `true` for an authenticated account; `false` for anonymous/guest play. |
+| `email` | Signed-in account email, when available; at most 254 characters. |
+| `name` | Signed-in Firebase display name (primary profile or linked provider), when available; at most 100 characters. |
+| `email_verified` | Firebase's email verification status, for signed-in accounts. |
+| `auth_provider` | Sign-in provider, e.g. `google.com`, when available. |
+
+Guest events omit account details. The getter reads current Auth state on every
+event, so sign-out or an account switch cannot retain the prior account's fields.
+Queued events and timing samples retain their original account snapshot even if
+sign-in/out happens before the SDK loads. App entry is recorded once, after the
+existing Auth/campaign restoration, so returning signed-in players have account
+properties on `app_open` as well.
+
+- Email and name are explicit event properties. Such events now contain personal
+  data; the technical PostHog personless flags do not make those properties anonymous.
+- `person_profiles: 'never'` and outbound `$process_person_profile: false` remain.
+  No `identify`, alias, groups or person updates are sent. The filter rejects
+  unapproved account fields, Firebase UIDs, credentials, save/attempt IDs,
+  photos, filenames, raw errors and URLs.
+- PostHog still uses an in-memory random ID per page load and does not reuse
+  formerly identified persistence. Refresh rotates that ID. Email can now be used
+  as an event-property filter across page loads without creating a person profile.
 - IP collection and GeoIP enrichment are disabled. Analytics still makes network
   requests to PostHog; these controls are not a claim that network intermediaries
   cannot observe an IP address.
@@ -69,8 +87,8 @@ interrupt the game.
 Ten percent of page loads sample the existing custom `country_prepare` and
 `poster_prepare` timing events when those operations are measured; debug mode
 opts in. They retain actual work timestamps without observers in the frame loop.
-No per-frame performance events are collected. These traces also pass the same
-anonymous transport boundary.
+No per-frame performance events are collected. These traces also carry an account snapshot and pass the same
+transport allow-list.
 
 Unit coverage checks the complete collected-event allow-list, identity and
 metadata scrubbing, rejection of retired/noisy/SDK events, and lesson/economy/roster
@@ -78,3 +96,9 @@ parameters. `scripts/check-anonymous-analytics.js` verifies the real SDK's outbo
 requests, a seeded formerly identified browser, the actual current flow, and
 refresh anonymity. Uploads are intercepted so these checks do not create synthetic
 production events. Intercepted payloads prove client behavior, not dashboard ingestion.
+
+
+`scripts/check-account-analytics.js` uses local Firebase emulators and intercepted
+real SDK uploads to cover guest entry, account linking, verification/provider
+properties, sign-out, another account, restored Auth on refresh, and queued
+event/timing snapshots. No fixture emails or names are uploaded to PostHog.

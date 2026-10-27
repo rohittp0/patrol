@@ -1,9 +1,15 @@
 /** Canonical Analytics contract. Add every event/parameter here BEFORE use.
  * `usedIn` names the emitting module; descriptions explain the research question.
- * Identity, account IDs, attempt IDs, photos, URLs and raw errors are excluded.
+ * Explicit signed-in email/name properties are allowed. Account IDs, attempt
+ * IDs, photos, URLs and raw errors are excluded.
  * COLLECTED_EVENTS is the current funnel. Legacy module definitions below remain
  * type-compatible but are blocked at both collection and transport boundaries. */
 export const PARAMETERS = {
+  email: "Signed-in Firebase account email, when available.",
+  name: "Signed-in Firebase display name, when available.",
+  signed_in: "Whether the event occurred while signed in, rather than as a guest.",
+  email_verified: "Whether Firebase reports the signed-in email as verified.",
+  auth_provider: "Firebase sign-in provider, e.g. google.com; never credentials.",
   screen: "Current screen: home, levels, academy, roster or play.",
   lesson: "Mandatory tutorial: field or academy.",
   upgrade_rank: "Target squad rank; rank 1 is the initial recruit.",
@@ -70,6 +76,7 @@ export const PARAMETERS = {
   success: "Level outcome: 1 for capture, 0 for loss.",
 } as const;
 export type Parameter = keyof typeof PARAMETERS;
+export const ACCOUNT_PARAMETERS = ["email", "name", "signed_in", "email_verified", "auth_provider"] as const;
 export const COMMON_PARAMETERS = ["country", "case_id", "challenge_id", "hunt_number", "moves_used", "moves_left", "squad_count", "campaign_start_country"] as const;
 const event = <P extends readonly Parameter[]>(description: string, usedIn: string, parameters: P) => ({ description, usedIn, parameters });
 export const EVENTS = {
