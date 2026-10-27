@@ -43,19 +43,20 @@ test("personless guest events strip unapproved identity and SDK metadata", () =>
   }
 });
 
-test("anonymous configuration cannot reuse identified storage or load replay/survey extensions", () => {
+test("personless configuration enables masked replay while keeping surveys disabled", () => {
   assert.equal(POSTHOG_CONFIG.person_profiles, "never");
   assert.equal(POSTHOG_CONFIG.persistence, "memory");
   assert.equal(POSTHOG_CONFIG.ip, false);
-  assert.equal(POSTHOG_CONFIG.disable_session_recording, true);
+  assert.equal(POSTHOG_CONFIG.disable_session_recording, false);
+  assert.equal(POSTHOG_CONFIG.session_recording.maskAllInputs, true);
   assert.equal(POSTHOG_CONFIG.disable_surveys, true);
-  assert.equal(POSTHOG_CONFIG.disable_external_dependency_loading, true);
+  assert.equal(POSTHOG_CONFIG.disable_external_dependency_loading, false);
 });
 
-test("transport rejects noisy and retired flows plus SDK identity/replay events", () => {
+test("transport rejects noisy and retired flows plus SDK identity events", () => {
   for (const event of ["map_gesture", "move_issued", "helicopter_deploy", "post_select",
     "squad_select", "guide_step_view", "hint_request", "poster_crop_adjust",
-    "$identify", "$create_alias", "$groupidentify", "$snapshot", "survey sent", "$autocapture"]) {
+    "$identify", "$create_alias", "$groupidentify", "survey sent", "$autocapture"]) {
     assert(!COLLECTED_EVENTS.has(event));
     assert.equal(POSTHOG_CONFIG.before_send({ uuid: crypto.randomUUID(), event, properties: {} }), null);
   }
@@ -87,4 +88,14 @@ test("local profile migrates to name plus finished crop and discards original/cr
     assert.equal(JSON.parse(value).id, profile.id);
     assert(savePlayerProfile({ photo: null })); assert.equal(JSON.parse(value).photo, null);
   } finally { if (previous) Object.defineProperty(globalThis, "localStorage", previous); else Reflect.deleteProperty(globalThis, "localStorage"); }
+});
+
+
+test("session replay keeps its structured snapshots through the send filter", () => {
+  const data = [{ type: 2, data: { node: { type: 0, childNodes: [] } } }];
+  const sent = POSTHOG_CONFIG.before_send({ uuid: crypto.randomUUID(), event: "$snapshot", properties: { token: POSTHOG_TOKEN, $snapshot_data: data, $session_id: "session", $window_id: "window" } });
+  assert(sent);
+  assert.equal(sent.properties.$snapshot_data, data);
+  assert.equal(sent.properties.$session_id, "session");
+  assert.equal(sent.properties.$process_person_profile, false);
 });

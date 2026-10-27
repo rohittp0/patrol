@@ -9,6 +9,7 @@ async basePage => {
   const check=(ok,label)=>{if(!ok)throw new Error(label);checks.push(label);};
   page.on('pageerror',error=>errors.push(error.message));
   await context.route('**/node_modules/.vite/deps/posthog-js.js*',async route=>{await gate;await route.continue();});
+  await context.route('https://www.facebook.com/**',route=>route.fulfill({status:200,body:''}));
   await context.route('**/*posthog.com/**',async route=>{
     const request=route.request();
     if(request.method()==='POST' && new URL(request.url()).pathname.includes('/e/')) {

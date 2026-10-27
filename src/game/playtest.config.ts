@@ -495,6 +495,11 @@ export const PLAYTEST_CONFIG = {
     performanceSampleRate: 0.1,
     /** STARTER: defer SDK loading until idle, with this millisecond fallback. */
     idleTimeoutMs: 3000,
+    /** STARTER: max milliseconds to await the recorder before delivering queued
+     * analytics. Only analytics waits; gameplay never waits for this timer. */
+    replayReadyTimeoutMs: 8000,
+    /** STARTER: recorder readiness poll interval in milliseconds, positive. */
+    replayReadyPollMs: 100,
     /** STARTER: bounded early-event queue and local debug history. */
     maxQueuedEvents: 200,
   },

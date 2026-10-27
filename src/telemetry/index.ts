@@ -1,5 +1,6 @@
 import { PLAYTEST_CONFIG as CONFIG } from "../game/playtest.config";
 import { COLLECTED_EVENTS, COMMON_PARAMETERS, EVENTS, PERFORMANCE_TRACES, type AnalyticsParams, type EventName } from "./events";
+import { initMetaPixel } from "./meta-pixel";
 import { accountProperties, type EventAccount } from "./account";
 import { POSTHOG_CONFIG, POSTHOG_TOKEN } from "./posthog.config";
 
@@ -14,6 +15,7 @@ function accountSnapshot(): AnalyticsParams {
   catch { return { signed_in: false }; }
 }
 let send: ((packet: Packet) => void) | null = null;
+let sendMeta: ReturnType<typeof initMetaPixel> | null = null;
 let recordTrace: ((name: keyof typeof PERFORMANCE_TRACES, start: number, duration: number, account: AnalyticsParams, country?: string) => void) | null = null;
 let traceQueue: { name: keyof typeof PERFORMANCE_TRACES; start: number; duration: number; account: AnalyticsParams; country?: string }[] = [];
 let initialized = false;
@@ -32,6 +34,7 @@ export function gameContext(next: AnalyticsParams) { context = sanitizeEvent("le
 export function track(name: EventName, params: AnalyticsParams = {}) {
   if (!CONFIG.telemetry.enabled || !COLLECTED_EVENTS.has(name)) return;
   const packet = { name, params: { ...sanitizeEvent(name, { ...context, ...params }), ...accountSnapshot() } };
+  try { sendMeta?.(name, packet.params); } catch { /* Meta failure cannot interrupt gameplay or PostHog. */ }
   recent.push(packet); if (recent.length > CONFIG.telemetry.maxQueuedEvents) recent.shift();
   if (send) { try { send(packet); } catch { /* Collection cannot interrupt play. */ } }
   else { queued.push(packet); if (queued.length > CONFIG.telemetry.maxQueuedEvents) queued.shift(); }
@@ -48,14 +51,33 @@ export function measure(name: keyof typeof PERFORMANCE_TRACES, start: number, co
 export function initTelemetry() {
   if (initialized) return; initialized = true;
   debug = new URLSearchParams(location.search).get("telemetry_debug") === "1";
-  if (import.meta.env.DEV || debug) Object.defineProperty(window, "__PATROL_TELEMETRY__", { get: () => ({ recent: structuredClone(recent), ready: !!send, metaReady: false, performanceReady: !!recordTrace, tracesRecorded }) });
+  if (import.meta.env.DEV || debug) Object.defineProperty(window, "__PATROL_TELEMETRY__", { get: () => ({ recent: structuredClone(recent), ready: !!send, metaReady: !!sendMeta, performanceReady: !!recordTrace, tracesRecorded }) });
   const allowed = CONFIG.telemetry.enabled && (debug || CONFIG.telemetry.enableInDevelopment || !import.meta.env.DEV && location.origin === CONFIG.hosting.productionOrigin);
   if (!allowed) { traceQueue = []; return; }
+  try { sendMeta = initMetaPixel(window, document); } catch { /* PostHog remains independent. */ }
   const load = async () => {
     try {
       const { default: posthog } = await import("posthog-js");
       const instance = posthog.init(POSTHOG_TOKEN, POSTHOG_CONFIG);
       if (!instance) return;
+      // The project's app_open trigger must reach the lazy recorder after its
+      // listeners attach. Queue analytics briefly; gameplay and Meta continue.
+      try {
+        instance.startSessionRecording();
+        const deadline = performance.now() + CONFIG.telemetry.replayReadyTimeoutMs;
+        await new Promise<void>((resolve) => {
+          const check = () => {
+            try {
+              if (instance.sessionRecordingStarted() || performance.now() >= deadline) {
+                resolve();
+                return;
+              }
+            } catch { resolve(); return; }
+            setTimeout(check, CONFIG.telemetry.replayReadyPollMs);
+          };
+          check();
+        });
+      } catch { /* Event delivery still works if replay is unavailable. */ }
       send = ({ name, params }) => { instance.capture(name, { ...params, ...(debug ? { debug_mode: true } : {}) }); };
       for (const packet of queued.splice(0)) send(packet);
       if (Math.random() < CONFIG.telemetry.performanceSampleRate || debug) {

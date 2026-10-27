@@ -64,11 +64,24 @@ properties on `app_open` as well.
 - IP collection and GeoIP enrichment are disabled. Analytics still makes network
   requests to PostHog; these controls are not a claim that network intermediaries
   cannot observe an IP address.
-- Automatic capture, pageviews/pageleaves, exceptions, heatmaps, recording,
-  surveys, conversations, feature flags and external extensions are disabled.
-- Meta Pixel is no longer initialized or sent events because it can correlate
-  browser activity with an advertising identity. Existing legacy Pixel files and
-  tests are historical utilities, not part of the active application bundle.
+- Automatic event capture, automatic pageviews/pageleaves, exceptions, heatmaps,
+  surveys, conversations and feature flags remain disabled.
+- Session replay is enabled and started after SDK initialization, respecting the
+  project's recording settings. Recorder extensions may load. All inputs are
+  masked, and `#player-photo`, `#crop-editor` and `#newspaper` remain blocked.
+  Structured `$snapshot` data bypasses the gameplay property allow-list so replay
+  payloads remain usable; gameplay event filtering still blocks noisy events.
+  Before flushing queued analytics, initialization waits up to 8 seconds for the
+  recorder's listeners, polling every 100 ms. This lets the project's existing
+  `app_open` trigger see app entry. Gameplay and Meta never wait for this gate;
+  if replay cannot load, event delivery continues after the bounded wait.
+- Meta Pixel `1412945137121409` is enabled independently of PostHog. It sends one
+  `PageView` on initialization, plus bounded custom `GameStart`, `GameResume`,
+  `GameCompleted`, `GameWon`, `TutorialCompleted`, `SquadPurchased` and
+  `SquadTrainingStarted` events. Tutorial payloads distinguish the field and
+  Academy lessons. Meta excludes email, name, UID and attempt IDs; account
+  properties are attached only to PostHog gameplay/timing events. Automatic
+  Meta configuration and advanced matching remain off.
 - Existing server-side event/person history is not deleted by this client change.
   Local gameplay saves and Google/Firebase save identity continue independently.
 
@@ -87,15 +100,19 @@ interrupt the game.
 Ten percent of page loads sample the existing custom `country_prepare` and
 `poster_prepare` timing events when those operations are measured; debug mode
 opts in. They retain actual work timestamps without observers in the frame loop.
-No per-frame performance events are collected. These traces also carry an account snapshot and pass the same
-transport allow-list.
+No per-frame gameplay/performance events are collected. Replay independently
+records DOM/canvas activity according to the project configuration. Timing traces
+carry an account snapshot and pass the event transport allow-list.
 
 Unit coverage checks the complete collected-event allow-list, identity and
 metadata scrubbing, rejection of retired/noisy/SDK events, and lesson/economy/roster
-parameters. `scripts/check-anonymous-analytics.js` verifies the real SDK's outbound
-requests, a seeded formerly identified browser, the actual current flow, and
-refresh anonymity. Uploads are intercepted so these checks do not create synthetic
-production events. Intercepted payloads prove client behavior, not dashboard ingestion.
+parameters. `scripts/check-replay-and-meta.js` verifies real recorder snapshots,
+Meta PageView/gameplay conversions, production/debug gating and provider-failure
+isolation. Uploads are intercepted so checks do not create synthetic production
+conversions. Intercepted payloads prove client behavior, not dashboard ingestion.
+The public PostHog project configuration currently enables recording, including
+its existing canvas settings and an `app_open` trigger.
+See [session replay installation](https://posthog.com/docs/session-replay/installation).
 
 
 `scripts/check-account-analytics.js` uses local Firebase emulators and intercepted

@@ -14,12 +14,14 @@ declare global { interface Window extends PixelWindow {} }
 const clients = new WeakMap<PixelWindow, (name: EventName, params: AnalyticsParams) => void>();
 
 // Deliberately smaller than PostHog's contract: no identity or profile fields.
-const PARAMETERS = ["country", "case_id", "challenge_id", "hunt_number", "campaign_start_country", "moves_used", "moves_left", "squad_count", "success", "score", "reason", "elapsed_seconds", "hints_used", "entry", "method"] as const;
+const PARAMETERS = ["country", "case_id", "challenge_id", "hunt_number", "campaign_start_country", "moves_used", "moves_left", "squad_count", "success", "score", "reason", "elapsed_seconds", "hints_used", "entry", "method", "lesson", "squad_type", "amount", "upgrade_rank", "training_seconds"] as const;
 const EVENTS: Partial<Record<EventName, string>> = {
   level_start: "GameStart",
   game_resume: "GameResume",
   level_end: "GameCompleted",
   guide_complete: "TutorialCompleted",
+  squad_purchase: "SquadPurchased",
+  squad_training: "SquadTrainingStarted",
   poster_download: "NewspaperDownloaded",
 };
 

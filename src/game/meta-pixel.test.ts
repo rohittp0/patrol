@@ -35,6 +35,8 @@ test("Meta distinguishes loss, resume, guided completion and successful sharing"
   assert.equal(metaEvents("game_resume", {})[0].name, "GameResume");
   assert.equal(metaEvents("guide_complete", {})[0].name, "TutorialCompleted");
   assert.equal(metaEvents("poster_download", {})[0].name, "NewspaperDownloaded");
+  assert.equal(metaEvents("squad_purchase", {})[0].name, "SquadPurchased");
+  assert.equal(metaEvents("squad_training", {})[0].name, "SquadTrainingStarted");
   assert.equal(metaEvents("poster_share_result", { reason: "success" })[0].name, "NewspaperShared");
   for (const reason of ["cancelled", "failed", "downloaded"]) assert.deepEqual(metaEvents("poster_share_result", { reason }), []);
   for (const name of ["app_open", "move_issued", "poster_profile_edit", "poster_photo_select", "map_gesture", "level_abandon"] as const) assert.deepEqual(metaEvents(name, {}), []);
@@ -43,7 +45,7 @@ test("Meta distinguishes loss, resume, guided completion and successful sharing"
 test("Meta gameplay properties exclude identity, free-form data and non-finite values", () => {
   const dirty = {
     country: "india", success: 1, score: 6, elapsed_seconds: NaN,
-    attempt_id: "private-id", name: "Officer Ada", photo: "private-photo",
+    attempt_id: "private-id", name: "Officer Ada", email: "private@example.test", photo: "private-photo",
     url: "https://private.example", has_name: true, capture_region: "private region",
   };
   assert.deepEqual(metaEvents("level_end", dirty)[0].properties, { country: "india", success: 1, score: 6 });

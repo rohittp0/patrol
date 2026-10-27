@@ -18,7 +18,11 @@ export const POSTHOG_CONFIG = {
   autocapture: false,
   capture_pageview: false,
   capture_pageleave: false,
-  disable_session_recording: true,
+  disable_session_recording: false,
+  session_recording: {
+    maskAllInputs: true,
+    blockSelector: "#player-photo, #crop-editor, #newspaper",
+  },
   capture_performance: false,
   capture_exceptions: false,
   capture_heatmaps: false,
@@ -27,11 +31,21 @@ export const POSTHOG_CONFIG = {
   disable_surveys: true,
   disable_conversations: true,
   advanced_disable_feature_flags: true,
-  disable_external_dependency_loading: true,
+  disable_external_dependency_loading: false,
   save_referrer: false,
   save_campaign_params: false,
   disable_capture_url_hashes: true,
   before_send(event: CaptureResult) {
+    // Replay has its own structured rrweb payload. The gameplay property filter
+    // must not strip snapshots or the recorder produces empty recordings.
+    if (event.event === "$snapshot") {
+      delete event.$set;
+      delete event.$set_once;
+      event.properties.$process_person_profile = false;
+      event.properties.$is_identified = false;
+      event.properties.$geoip_disable = true;
+      return event;
+    }
     const isTiming = Object.hasOwn(PERFORMANCE_TRACES, event.event);
     if (!COLLECTED_EVENTS.has(event.event) && !isTiming) return null;
     const parameters: readonly string[] = isTiming

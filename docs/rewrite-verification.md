@@ -423,3 +423,40 @@ from `https://patrol.rohittp.com/` matched the verified local build byte-for-byt
 (399,450 bytes) and contained the account-property mapping.
 [Release CI](https://github.com/rohittp0/patrol/actions/runs/40470126507) passed
 validation and deployment.
+
+
+## Meta Pixel and session replay restored (2026-10-27)
+
+At the owner's request, Meta Pixel and PostHog replay are enabled again. Meta
+initializes independently and sends PageView plus the current level/result,
+lesson, recruitment and training milestones. Its smaller allow-list excludes
+account and save identifiers. PostHog retains signed-in event properties,
+personless processing and the low-volume gameplay funnel.
+
+Replay extensions load, all inputs remain masked and the existing uploaded
+photo/crop/newspaper exclusions remain. The event filter now preserves structured
+`$snapshot` payloads. The project's public configuration enables recording with
+its existing `app_open` trigger and canvas settings. Since that entry event can
+precede lazy recorder listeners, SDK initialization waits for recorder readiness
+before flushing queued analytics, bounded to 8 seconds with 100 ms polls. Gameplay
+and Meta continue immediately; blocked replay cannot prevent event delivery.
+Project trigger/sampling settings are retained, with no forced recording override.
+
+Validation: 129 unit tests passed; the final 13 telemetry/account/Meta checks
+and production build passed. Twelve real-browser checks used the real Meta SDK,
+recorder extension and public project configuration with uploads intercepted.
+Three non-empty replay packets retained their session/window metadata. Meta sent
+one PageView conversion and one each of GameStart, GameCompleted, GameWon and
+field TutorialCompleted. Attribution-registration requests were counted separately
+from conversions. No noisy map/move events returned. Normal development made no
+provider requests, and blocking both providers left tutorial gameplay usable.
+These are outbound-payload checks, not dashboard-ingestion acceptance.
+
+One paired desktop Chromium touch-emulation sample (390×844, Vite/local save,
+real SDKs/config with uploads intercepted) compared providers off/on. Preview
+interaction was 66/74 ms, the first move 1,188/1,190 ms, median frame interval
+16.7/16.7 ms, p95 16.7/16.8 ms, browser task CPU 218.7/303.7 ms and ending heap
+33.5/38.6 MiB. Cold readiness was 141.8/126.4 ms and warm readiness 106.0/90.5 ms;
+these single-load differences do not establish a startup improvement. The entry
+bundle grew from 128.99 to 129.71 KB gzip; replay loads an additional extension.
+Physical-phone replay appearance, frame cost and dashboard playback remain unverified.
