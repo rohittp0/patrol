@@ -415,3 +415,11 @@ fixture account details were uploaded to PostHog. Full personal Google login and
 dashboard ingestion were not automated. The entry bundle changed from 128.71 KB
 to 128.99 KB gzip (+0.28 KB); matched runtime performance and physical-device
 checks were not repeated for this event-property addition.
+
+
+Release `bb40d6e9f6d946eb755f03618e67d341a2ece7b2` was pushed and deployed
+with the Firebase CLI (Hosting, rules and indexes). The main JavaScript served
+from `https://patrol.rohittp.com/` matched the verified local build byte-for-byte
+(399,450 bytes) and contained the account-property mapping.
+[Release CI](https://github.com/rohittp0/patrol/actions/runs/40470126507) passed
+validation and deployment.
