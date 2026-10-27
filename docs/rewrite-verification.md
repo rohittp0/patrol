@@ -497,3 +497,13 @@ No Meta ad-account connector is available here, and no ad-set optimization
 settings were changed. Once real traffic delivers the new event, the purchase
 campaign needs to select `FirstSquadPurchased` or a custom conversion based on
 it in Ads Manager. The separate level-focused campaign can retain `GameWon`.
+
+
+Live acceptance: application commit `6771ef09a2eb248a29336f831a7ed82ebdc31382`
+was pushed and deployed with the Firebase CLI (Hosting, rules and indexes).
+[CI run 40519727834](https://github.com/rohittp0/patrol/actions/runs/40519727834)
+passed validation and deployment. All seven live UI/Meta SDK checks passed on
+`https://patrol.rohittp.com/`: one intercepted FirstSquadPurchased, two GameWon
+and two GameCompleted events, no conversion on a rejected purchase, and no
+activation repeat after training/refresh. Test uploads were intercepted; actual
+Meta event availability and ad-set selection remain owner-side setup.
