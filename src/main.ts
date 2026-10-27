@@ -74,6 +74,27 @@ let roster: (SquadId | null)[] = [...INITIAL_SQUADS],
 let forecast: OrderForecast | null = null;
 let coachLesson: "field" | "academy" | null = null;
 let coachKey = "";
+let analyticsScreen = "";
+const lessonStarted = new Map<"field" | "academy", number>();
+function updateAnalyticsContext() {
+  gameContext({
+    country: "india",
+    hunt_number: route === "play" || route === "roster" ? levelNumber : player().unlocked,
+    ...(route === "play" && game ? {
+      challenge_id: mission().id,
+      moves_used: game.ordersUsed,
+      moves_left: ECONOMY.maxMoves - game.ordersUsed,
+      squad_count: game.squads.length,
+    } : {}),
+  });
+}
+function completeLesson(lesson: "field" | "academy") {
+  track("guide_complete", {
+    lesson,
+    hunt_number: lesson === "field" ? 1 : 3,
+    duration_ms: Math.round(performance.now() - (lessonStarted.get(lesson) ?? performance.now())),
+  });
+}
 let moveFrame = 0,
   lastFrame = 0,
   ended = false,
@@ -205,6 +226,11 @@ function shell(content: string) {
 }
 function render() {
   if (!client) return;
+  updateAnalyticsContext();
+  if (analyticsScreen !== route) {
+    analyticsScreen = route;
+    track("page_view", { screen: route });
+  }
   if (route !== "play") stopMap();
   if (route === "home") renderHome();
   else if (route === "levels") renderLevels();
@@ -259,6 +285,7 @@ function briefing(level: number) {
   const l = levels[level - 1];
   if (!l) return;
   const locked = level > player().unlocked;
+  track("level_briefing", { hunt_number: level, level_name: l.id, locked });
   modal(
     `${caseContent(l, true)}<div class="mission-summary"><span>${ECONOMY.maxMoves} moves</span><span>${icon("coin")} ${(ECONOMY.baseReward + (level - 1) * ECONOMY.rewardStep) * 3} max</span></div>${locked ? `<div class="locked-notice">${icon("lock")} Complete Level ${level - 1} to play</div>` : button(`${icon("squad")} Choose squads`, "choose", `data-level="${level}"`, "button primary full")}`,
   );
@@ -372,16 +399,6 @@ function restoreGame() {
     active.selection.every((id, slot) => id === INITIAL_SQUADS[slot]) &&
     game.outcome.kind === "playing" &&
     !!guidedOrder(game);
-  gameContext({
-    country: "india",
-    challenge_id: mission().id,
-    hunt_number: levelNumber,
-    attempt_id: active.id,
-    moves_used: game.ordersUsed,
-    moves_left: ECONOMY.maxMoves - game.ordersUsed,
-    squad_count: game.squads.length,
-    campaign_start_country: "india",
-  });
   return true;
 }
 async function renderPlay() {
@@ -395,13 +412,16 @@ async function renderPlay() {
   root.innerHTML = `<main class="game-page"><div id="map" role="region" aria-label="India patrol map"></div><header class="game-top topbar">${button(icon("home"), "leave", 'aria-label="Return to base"', "game-back")}<button class="target-hud" data-action="briefing" data-level="${levelNumber}"><img src="/${portraitPath(targetFile())}" alt=""/><span><small>LEVEL ${levelNumber}</small><b>${escape(targetFile().shortName)}</b><small>${game.rules.runnerSpeedKmh} km/h</small></span></button>${soundButton("audio-button game-sound")}</header><div class="metrics"><strong id="moves-left">${ECONOMY.maxMoves - game.ordersUsed}</strong><span>MOVES</span></div><div class="game-note" id="game-note"></div><section class="squad-dock" aria-label="Deployed squads"><div class="dock-heading"><span id="selected-label">Choose a squad or a free post</span>${button(icon("close"), "clear", 'aria-label="Clear selection"', "text-button")}</div><div id="game-squads" class="game-squads"></div><div class="journey" id="journey"></div><div id="deploy-control"></div></section><div id="coach-host"></div><section class="result-panel" id="result-panel" hidden></section>${toast()}<div id="modal-host"></div></main>`;
   const { PatrolMap: MapView } = await import("./map-view");
   if (generation !== mapGeneration || route !== "play" || !game) return;
+  let fallbackReported = false;
   map = new MapView(
     board,
     (index) => selectPost(index),
     (fallback) => {
-      if (fallback)
+      if (fallback) {
+        if (!fallbackReported) track("map_fallback");
+        fallbackReported = true;
         notice("Map detail is offline. The chase remains playable.");
-      else if (message === "Map detail is offline. The chase remains playable.")
+      } else if (message === "Map detail is offline. The chase remains playable.")
         notice("");
     },
   );
@@ -537,15 +557,6 @@ function issueMove() {
   if (!game.issueOrder(index, selectedPost)) return;
   audio.effect("deploy");
   moveLog.push({ squad: index, border: selectedPost });
-  const move = game.history.at(-1)!;
-  track("move_issued", {
-    squad: index,
-    post: selectedPost,
-    from_post: move.from,
-    distance_km: Math.round(move.distanceKm),
-  });
-  if (move.flight)
-    track("helicopter_deploy", { squad: index, post: selectedPost });
   selectedPost = null;
   selectedSquad = null;
   if (resultTimer) clearTimeout(resultTimer);
@@ -600,6 +611,7 @@ async function finish() {
   if (!game || ended) return;
   ended = true;
   const won = game.won;
+  updateAnalyticsContext();
   track("level_end", {
     reason: won
       ? "capture"
@@ -614,7 +626,7 @@ async function finish() {
   });
   if (guide && won) {
     guide = false;
-    track("guide_complete", { duration_ms: 0 });
+    completeLesson("field");
   }
   resultBefore = {
     wallet: player().wallet,
@@ -770,6 +782,14 @@ function renderCoach() {
   }
   const target = document.querySelector<HTMLElement>(selector);
   if (!target) return;
+  if (!lessonStarted.has(coachLesson)) {
+    lessonStarted.set(coachLesson, performance.now());
+    track("guide_begin", {
+      lesson: coachLesson,
+      hunt_number: coachLesson === "field" ? 1 : 3,
+      entry: route,
+    });
+  }
   target.classList.add("coach-target");
   target.setAttribute("aria-describedby", "coach-copy");
   const phase = done
@@ -1039,7 +1059,7 @@ root.addEventListener("click", (event) => {
     void run(async () => {
       await client.action({ kind: "tutorial", lesson: "academy" });
       audio.effect("ready");
-      track("guide_complete", { duration_ms: 0 });
+      completeLesson("academy");
       render();
     });
     return;
@@ -1062,6 +1082,10 @@ root.addEventListener("click", (event) => {
       track(action === "purchase" ? "squad_purchase" : "squad_training", {
         squad_type: target.dataset.id!,
         amount: spent,
+        ...(action === "train" ? {
+          upgrade_rank: player().squads[squad]!.training!.step + 1,
+          training_seconds: ECONOMY.trainingSeconds[squad][player().squads[squad]!.training!.step - 1],
+        } : {}),
       });
       audio.effect(action === "purchase" ? "purchase" : "train");
       renderAcademy();
@@ -1081,15 +1105,28 @@ root.addEventListener("click", (event) => {
         go("academy");
         return;
       }
+      const replacedLevel = !game || game.outcome.kind === "playing"
+        ? client.response.active?.level : undefined;
       await client.start(levelNumber, roster);
+      if (replacedLevel) track("level_abandon", { hunt_number: replacedLevel, reason: "replaced" });
       const restored = restoreGame();
       go(restored ? "play" : "roster");
-      track("level_start", { entry: "roster", level_name: mission().id });
+      if (restored) {
+        const rank = (id: Specialist) => {
+          const slot = client.response.active!.selection.filter(Boolean).indexOf(id);
+          return slot < 0 ? 0 : client.response.active!.steps[slot] + 1;
+        };
+        track("level_start", {
+          entry: "roster", level_name: mission().id,
+          empty_slots: roster.filter((id) => id === null).length,
+          rapid_rank: rank("rapid"), helicopter_rank: rank("helicopter"), marksman_rank: rank("marksman"),
+        });
+      }
     } else if (action === "resume") {
       await client.load();
       const restored = restoreGame();
       go(restored ? "play" : "roster");
-      track("game_resume", { source: "home" });
+      if (restored) track("game_resume", { source: "home" });
     } else if (action === "google") {
       await client.google();
       document.querySelector<HTMLDialogElement>("dialog")?.close();
@@ -1101,7 +1138,10 @@ root.addEventListener("click", (event) => {
       game = null;
       go("home");
     } else if (action === "abandon") {
+      const abandonedLevel = !game || game.outcome.kind === "playing"
+        ? client.response.active?.level : undefined;
       await client.abandon();
+      if (abandonedLevel) track("level_abandon", { hunt_number: abandonedLevel, reason: "explicit" });
       game = null;
       render();
     } else if (action === "reload-cloud") {
@@ -1174,6 +1214,7 @@ async function initialize() {
         : "home";
     audio.scene(route === "play" ? "pursuit" : "base");
     render();
+    if (route === "play") track("game_resume", { source: "refresh" });
     if (client.recoveryMessage) notice(client.recoveryMessage);
     performance.mark("patrol-ready");
     track("campaign_entry", { source: "india_v2" });
@@ -1184,6 +1225,7 @@ async function initialize() {
       border_count: board.borders.length,
     });
   } catch (error) {
+    track("country_load_error", { reason: "initialization_failed" });
     root.innerHTML = `<main class="loading-screen"><div class="brand">${brand}</div><h1>Let’s reconnect.</h1><p>${escape(errorText(error))}</p>${button("Retry", "reload", "data-network", "button primary")}</main>`;
   }
 }

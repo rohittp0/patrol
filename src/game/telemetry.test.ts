@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { COMMON_PARAMETERS, EVENTS, PARAMETERS } from "../telemetry/events";
+import { COLLECTED_EVENTS, COMMON_PARAMETERS, EVENTS, PARAMETERS } from "../telemetry/events";
 import { sanitizeEvent } from "../telemetry";
 import { playerProfile, savePlayerProfile } from "../player-profile";
-import { POSTHOG_CONFIG } from "../telemetry/posthog.config";
+import { POSTHOG_CONFIG, POSTHOG_TOKEN } from "../telemetry/posthog.config";
 
 test("analytics catalog keeps bounded names and documents every allowed parameter", () => {
   for (const [name, event] of Object.entries(EVENTS)) {
@@ -14,45 +14,64 @@ test("analytics catalog keeps bounded names and documents every allowed paramete
   }
 });
 
-test("PostHog's automatic URL and attribution properties are removed from events and person updates", () => {
-  const privateUrl = "https://example.com/patrol/?name=Ada#private";
-  const initial = { $initial_current_url: privateUrl, $initial_referrer: privateUrl, utm_source: privateUrl, gclid: privateUrl, name: "Ada", profile_name_set: "yes" };
-  const sent = POSTHOG_CONFIG.before_send({
-    uuid: crypto.randomUUID(), event: "$identify",
-    properties: { distinct_id: "random-profile-id", $current_url: privateUrl, $session_entry_url: privateUrl, $session_entry_utm_source: privateUrl, utm_source: privateUrl, $referrer: privateUrl, $set: { ...initial }, $set_once: { ...initial } },
-    $set: { ...initial }, $set_once: { ...initial },
-  });
-  assert(!JSON.stringify(sent).includes(privateUrl));
-  assert.equal(sent.properties.distinct_id, "random-profile-id");
-  for (const properties of [sent.$set, sent.$set_once, sent.properties.$set, sent.properties.$set_once]) assert.deepEqual(properties, { name: "Ada", profile_name_set: "yes" });
-});
-
-test("event allow-list drops names, images, filenames, errors, and unrelated fields", () => {
-  const dirty = { country: "usa", has_photo: true, name: "Officer Ada", photo: "data:image/png;base64,private", filename: "private.jpg", error: "personal error", distance_km: 12, duration_ms: NaN };
-  assert.deepEqual(sanitizeEvent("poster_open", dirty), { country: "usa", has_photo: true });
-  assert.deepEqual(sanitizeEvent("move_issued", dirty), { country: "usa", distance_km: 12 });
-});
-
-test("SDK survey lifecycle payloads and exact interaction flags survive the privacy filter", () => {
-  const surveyId = "01a1468e-96f5-0000-eba8-078f7982be33";
-  for (const event of ["survey shown", "survey sent", "survey dismissed", "survey abandoned"]) {
-    for (const iteration of [undefined, 1]) {
-      const responded = `$survey_responded/${surveyId}${iteration ? `/${iteration}` : ""}`;
-      const dismissed = `$survey_dismissed/${surveyId}${iteration ? `/${iteration}` : ""}`;
-      const markers = { [responded]: true, [dismissed]: true, "$survey_responded/unrelated": true, $initial_current_url: "https://example.com/private" };
-      const payload = { $survey_id: surveyId, $survey_iteration: iteration, $survey_submission_id: "submission", $survey_completed: false, $survey_response_question: 4 };
-      const sent = POSTHOG_CONFIG.before_send({
-        uuid: crypto.randomUUID(), event,
-        properties: { ...payload, $current_url: "https://example.com/private", $set: { ...markers } },
-        $set: { ...markers },
-      });
-      for (const [key, value] of Object.entries(payload)) assert.equal(sent.properties[key], value);
-      const expected = event === "survey sent" ? { [responded]: true } : event === "survey dismissed" ? { [dismissed]: true } : {};
-      assert.deepEqual(sent.properties.$set, expected);
-      assert.deepEqual(sent.$set, expected);
-      assert(!JSON.stringify(sent).includes("https://example.com/private"));
-    }
+test("all outbound events are personless and strip identity and SDK metadata", () => {
+  for (const event of [...COLLECTED_EVENTS, "country_prepare"]) {
+    const sent = POSTHOG_CONFIG.before_send({
+      uuid: crypto.randomUUID(), event,
+      properties: {
+        token: POSTHOG_TOKEN, distinct_id: "fresh-page-anonymous-id", country: "india",
+        $process_person_profile: true, $is_identified: true,
+        $device_id: "old-browser-id", $user_id: "firebase-uid", attempt_id: "saved-attempt",
+        $current_url: "https://private.example/?email=private", $referrer: "private",
+        $initial_current_url: "private", $session_entry_url: "private", utm_source: "private",
+        email: "private", name: "private", photo: "private", $set: { name: "private" },
+        $set_once: { name: "private" }, $groups: { account: "private" },
+      },
+      $set: { name: "private" }, $set_once: { name: "private" },
+    });
+    assert(sent);
+    assert(!JSON.stringify(sent).includes("private"));
+    assert(!JSON.stringify(sent).includes("saved-attempt"));
+    assert(!JSON.stringify(sent).includes("old-browser-id"));
+    assert.equal(sent.properties.token, POSTHOG_TOKEN);
+    assert.equal(sent.properties.distinct_id, "fresh-page-anonymous-id");
+    assert.equal(sent.properties.$process_person_profile, false);
+    assert.equal(sent.properties.$is_identified, false);
+    assert.equal(sent.properties.$geoip_disable, true);
+    assert.equal(sent.$set, undefined);
+    assert.equal(sent.$set_once, undefined);
   }
+});
+
+test("anonymous configuration cannot reuse identified storage or load replay/survey extensions", () => {
+  assert.equal(POSTHOG_CONFIG.person_profiles, "never");
+  assert.equal(POSTHOG_CONFIG.persistence, "memory");
+  assert.equal(POSTHOG_CONFIG.ip, false);
+  assert.equal(POSTHOG_CONFIG.disable_session_recording, true);
+  assert.equal(POSTHOG_CONFIG.disable_surveys, true);
+  assert.equal(POSTHOG_CONFIG.disable_external_dependency_loading, true);
+});
+
+test("transport rejects noisy and retired flows plus SDK identity/replay events", () => {
+  for (const event of ["map_gesture", "move_issued", "helicopter_deploy", "post_select",
+    "squad_select", "guide_step_view", "hint_request", "poster_crop_adjust",
+    "$identify", "$create_alias", "$groupidentify", "$snapshot", "survey sent", "$autocapture"]) {
+    assert(!COLLECTED_EVENTS.has(event));
+    assert.equal(POSTHOG_CONFIG.before_send({ uuid: crypto.randomUUID(), event, properties: {} }), null);
+  }
+});
+
+test("funnel retains level, roster, economy and tutorial dimensions without save IDs", () => {
+  assert.deepEqual(sanitizeEvent("level_start", {
+    country: "india", hunt_number: 3, empty_slots: 1, rapid_rank: 2,
+    ...{ attempt_id: "secret", uid: "secret", email: "secret" },
+  }), { country: "india", hunt_number: 3, empty_slots: 1, rapid_rank: 2 });
+  assert.deepEqual(sanitizeEvent("squad_training", {
+    squad_type: "rapid", upgrade_rank: 2, training_seconds: 30, amount: 80,
+  }), { squad_type: "rapid", upgrade_rank: 2, training_seconds: 30, amount: 80 });
+  assert.deepEqual(sanitizeEvent("guide_complete", {
+    lesson: "academy", duration_ms: 15000,
+  }), { lesson: "academy", duration_ms: 15000 });
 });
 
 test("local profile migrates to name plus finished crop and discards original/crop settings", () => {

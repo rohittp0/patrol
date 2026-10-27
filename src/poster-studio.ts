@@ -4,7 +4,7 @@ import { portraitPath } from "./game/case-files";
 import { playerProfile, savePlayerProfile } from "./player-profile";
 import { newspaperCopy } from "./poster-content";
 import { drawNewspaper, newspaperArtwork, prepareNewspaperAssets, type NewspaperAssets } from "./poster-renderer";
-import { measure, profileChanged, track } from "./telemetry";
+import { measure, track } from "./telemetry";
 import type { AnalyticsParams, EventName } from "./telemetry/events";
 import "./poster-responsive.css";
 
@@ -105,7 +105,7 @@ export class PosterStudio {
   private get<T extends HTMLElement = HTMLElement>(id: string) { return this.dialog.querySelector<T>(`#${id}`)!; }
   private message(value: string) { this.get("poster-message").textContent = value; }
   private store(update: Parameters<typeof savePlayerProfile>[0]) {
-    const saved = savePlayerProfile(update); profileChanged();
+    const saved = savePlayerProfile(update);
     if (!saved) { this.message("This browser couldn't save your profile. You can still download your newspaper."); this.log("poster_error", { reason: "storage" }); }
   }
   private saveName(log: boolean) {

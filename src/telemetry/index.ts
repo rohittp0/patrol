@@ -1,15 +1,11 @@
 import { PLAYTEST_CONFIG as CONFIG } from "../game/playtest.config";
-import { playerProfile } from "../player-profile";
-import { COMMON_PARAMETERS, EVENTS, PERFORMANCE_TRACES, type AnalyticsParams, type EventName } from "./events";
+import { COLLECTED_EVENTS, COMMON_PARAMETERS, EVENTS, PERFORMANCE_TRACES, type AnalyticsParams, type EventName } from "./events";
 import { POSTHOG_CONFIG, POSTHOG_TOKEN } from "./posthog.config";
-import { initMetaPixel } from "./meta-pixel";
 
 type Packet = { name: EventName; params: AnalyticsParams };
 const queued: Packet[] = [], recent: Packet[] = [];
 let context: AnalyticsParams = {};
 let send: ((packet: Packet) => void) | null = null;
-let sendMeta: ReturnType<typeof initMetaPixel> | null = null;
-let setProfile: (() => void) | null = null;
 let recordTrace: ((name: keyof typeof PERFORMANCE_TRACES, start: number, duration: number, country?: string) => void) | null = null;
 let traceQueue: { name: keyof typeof PERFORMANCE_TRACES; start: number; duration: number; country?: string }[] = [];
 let initialized = false;
@@ -25,15 +21,12 @@ export function sanitizeEvent(name: EventName, params: AnalyticsParams): Analyti
 
 export function gameContext(next: AnalyticsParams) { context = sanitizeEvent("level_start", next); }
 export function track(name: EventName, params: AnalyticsParams = {}) {
-  if (!CONFIG.telemetry.enabled) return;
+  if (!CONFIG.telemetry.enabled || !COLLECTED_EVENTS.has(name)) return;
   const packet = { name, params: sanitizeEvent(name, { ...context, ...params }) };
-  try { sendMeta?.(name, packet.params); } catch { /* A blocked pixel cannot interrupt play or PostHog. */ }
   recent.push(packet); if (recent.length > CONFIG.telemetry.maxQueuedEvents) recent.shift();
   if (send) { try { send(packet); } catch { /* Collection cannot interrupt play. */ } }
   else { queued.push(packet); if (queued.length > CONFIG.telemetry.maxQueuedEvents) queued.shift(); }
 }
-
-export function profileChanged() { try { setProfile?.(); } catch { /* Profile collection is optional. */ } }
 
 /** Captures actual work duration even if the SDK loads after the work finishes.
  * No performance observer or timer runs in the frame loop. */
@@ -46,21 +39,14 @@ export function measure(name: keyof typeof PERFORMANCE_TRACES, start: number, co
 export function initTelemetry() {
   if (initialized) return; initialized = true;
   debug = new URLSearchParams(location.search).get("telemetry_debug") === "1";
-  if (import.meta.env.DEV || debug) Object.defineProperty(window, "__PATROL_TELEMETRY__", { get: () => ({ recent: structuredClone(recent), ready: !!send, metaReady: !!sendMeta, performanceReady: !!recordTrace, tracesRecorded }) });
+  if (import.meta.env.DEV || debug) Object.defineProperty(window, "__PATROL_TELEMETRY__", { get: () => ({ recent: structuredClone(recent), ready: !!send, metaReady: false, performanceReady: !!recordTrace, tracesRecorded }) });
   const allowed = CONFIG.telemetry.enabled && (debug || CONFIG.telemetry.enableInDevelopment || !import.meta.env.DEV && location.origin === CONFIG.hosting.productionOrigin);
   if (!allowed) { traceQueue = []; return; }
-  try { sendMeta = initMetaPixel(window, document); } catch { /* Meta is optional; PostHog still loads. */ }
   const load = async () => {
     try {
       const { default: posthog } = await import("posthog-js");
       const instance = posthog.init(POSTHOG_TOKEN, POSTHOG_CONFIG);
       if (!instance) return;
-      setProfile = () => {
-        const profile = playerProfile();
-        instance.identify(profile.id);
-      };
-      setProfile();
-      instance.startSessionRecording();
       send = ({ name, params }) => { instance.capture(name, { ...params, ...(debug ? { debug_mode: true } : {}) }); };
       for (const packet of queued.splice(0)) send(packet);
       if (Math.random() < CONFIG.telemetry.performanceSampleRate || debug) {

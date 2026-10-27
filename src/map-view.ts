@@ -1,6 +1,5 @@
 import { Map, Marker, setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { track } from "./telemetry";
 import { borderName } from "./game/presentation";
 import { distanceKm } from "./game/navigation";
 import mapWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
@@ -43,8 +42,6 @@ export class PatrolMap {
     this.map.touchZoomRotate.disableRotation();
     this.map.touchPitch.disable();
     this.map.getContainer().dataset.basemap = "loading";
-    this.map.on("dragend", (event) => { if (event.originalEvent) track("map_gesture", { action: "pan", zoom: Math.round(this.map.getZoom() * 10) / 10 }); });
-    this.map.on("zoomend", (event) => { if (event.originalEvent) track("map_gesture", { action: "zoom", zoom: Math.round(this.map.getZoom() * 10) / 10 }); });
     this.map.on("error", event => {
       if(this.basemap.sourceError((event as {sourceId?:string}).sourceId)) {
         this.map.getContainer().dataset.basemap="fallback";

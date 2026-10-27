@@ -1,10 +1,18 @@
 /** Canonical Analytics contract. Add every event/parameter here BEFORE use.
  * `usedIn` names the emitting module; descriptions explain the research question.
- * Names are person properties only; photos, filenames, URLs and raw errors are
- * never gameplay parameters.
- * The persistent random profile ID is sent only through PostHog's identify API.
- * All events receive COMMON_PARAMETERS when a hunt is active. */
+ * Identity, account IDs, attempt IDs, photos, URLs and raw errors are excluded.
+ * COLLECTED_EVENTS is the current funnel. Legacy module definitions below remain
+ * type-compatible but are blocked at both collection and transport boundaries. */
 export const PARAMETERS = {
+  screen: "Current screen: home, levels, academy, roster or play.",
+  lesson: "Mandatory tutorial: field or academy.",
+  upgrade_rank: "Target squad rank; rank 1 is the initial recruit.",
+  training_seconds: "Configured duration of the new training, in seconds; no deadline timestamps.",
+  locked: "Whether the inspected level is locked.",
+  empty_slots: "Number of empty deployment slots, in [0, 3].",
+  rapid_rank: "Deployed Rapid rank, or zero when absent.",
+  helicopter_rank: "Deployed Helicopter rank, or zero when absent.",
+  marksman_rank: "Deployed Marksman rank, or zero when absent.",
   squad_type: "Configured specialist type: rapid, helicopter or marksman.",
   amount: "Integer game money spent or awarded; never a real currency amount.",
   country: "Configured country ID: usa, india, hungary.",
@@ -12,7 +20,6 @@ export const PARAMETERS = {
   challenge_id: "Verified starting setup ID, e.g. US-001.",
   hunt_number: "One-based position in this player's remembered campaign order.",
   campaign_start_country: "Opening country in the player's remembered sequence.",
-  attempt_id: "Random UUID for one attempt, refreshed on restart.",
   moves_used: "Moves issued in the current attempt.",
   moves_left: "Remaining move budget.",
   squad_count: "Allocated squads in this hunt.",
@@ -63,22 +70,24 @@ export const PARAMETERS = {
   success: "Level outcome: 1 for capture, 0 for loss.",
 } as const;
 export type Parameter = keyof typeof PARAMETERS;
-export const COMMON_PARAMETERS = ["country", "case_id", "challenge_id", "hunt_number", "attempt_id", "moves_used", "moves_left", "squad_count", "campaign_start_country"] as const;
+export const COMMON_PARAMETERS = ["country", "case_id", "challenge_id", "hunt_number", "moves_used", "moves_left", "squad_count", "campaign_start_country"] as const;
 const event = <P extends readonly Parameter[]>(description: string, usedIn: string, parameters: P) => ({ description, usedIn, parameters });
 export const EVENTS = {
+  page_view: event("A screen becomes visible; rerenders and timer ticks do not repeat it.", "main.ts", ["screen"]),
+  level_briefing: event("Inspect a case, including a locked-level preview.", "main.ts", ["locked", "level_name"]),
   squad_purchase: event("A specialist purchase was confirmed.", "main.ts", ["squad_type", "amount"]),
-  squad_training: event("Sequential upgrade training started.", "main.ts", ["squad_type", "amount"]),
+  squad_training: event("Sequential upgrade training started.", "main.ts", ["squad_type", "amount", "upgrade_rank", "training_seconds"]),
   helicopter_deploy: event("A helicopter deployment consumed a move.", "main.ts", ["squad", "post"]),
   reward_awarded: event("Verified reward difference credited to the wallet.", "main.ts", ["amount"]),
   sign_in_prompt: event("Optional save-progress prompt was displayed.", "main.ts", ["source"]),
   sign_in_complete: event("Google account link or sign-in completed without recording account details.", "main.ts", ["source"]),
   campaign_entry: event("New timezone/default start or remembered/legacy campaign restored; no raw timezone collected.", "main.ts", ["source"]),
-  guide_begin: event("In-game opening hunt guidance becomes visible.", "hunt-guide.ts", ["entry"]),
+  guide_begin: event("Mandatory field or Academy lesson first becomes visible on this page.", "main.ts", ["entry", "lesson"]),
   guide_step_view: event("A guided click or travel explanation is shown; no per-frame events.", "hunt-guide.ts", ["guide_step", "guide_move"]),
   guide_skip: event("Player takes command freely without resetting their hunt.", "hunt-guide.ts", ["guide_step", "guide_move", "reason", "duration_ms"]),
-  guide_complete: event("Player completes the guided hunt's verified capture.", "hunt-guide.ts", ["duration_ms"]),
+  guide_complete: event("Mandatory field capture or Academy recruit/train lesson completed.", "main.ts", ["duration_ms", "lesson"]),
   challenge_previous: event("Replay the preceding hunt, including the previous country's final hunt.", "main.ts: previousChallenge", ["source"]),
-  game_resume: event("A saved chase resumes after refresh; retains its attempt ID and simulated state.", "main.ts: startSetup", ["reason", "source"]),
+  game_resume: event("A saved chase resumes from home or refresh without sending its save identity.", "main.ts: startSetup", ["reason", "source"]),
   progress_restore_failed: event("A saved hunt is restarted because its rules/setup changed or its state is invalid.", "main.ts: startSetup", ["reason"]),
   app_open: event("Entry into the app; measure landing-to-play funnel.", "main.ts", ["width_px", "height_px", "has_name", "has_photo", "app_version"]),
   app_visibility: event("Tab hidden/visible; interpret pauses and abandonment.", "main.ts", ["action"]),
@@ -91,7 +100,7 @@ export const EVENTS = {
   country_load_start: event("Country data preparation begins.", "main.ts", []),
   country_load_success: event("Verified country is playable.", "main.ts", ["duration_ms", "setup_count", "border_count"]),
   country_load_error: event("Country preparation failed; categorical reason only.", "main.ts", ["duration_ms", "reason"]),
-  level_start: event("A new attempt begins; game funnel entry event.", "main.ts", ["entry", "level_name"]),
+  level_start: event("A new attempt begins; game funnel entry event.", "main.ts", ["entry", "level_name", "empty_slots", "rapid_rank", "helicopter_rank", "marksman_rank"]),
   level_end: event("Capture, escape, or budget loss, emitted once per attempt.", "main.ts", ["reason", "score", "elapsed_seconds", "hints_used", "capture_region", "level_name", "success"]),
   level_abandon: event("Restart/skip/country change before an outcome.", "main.ts", ["reason", "elapsed_seconds", "hints_used"]),
   level_restart: event("Replay/retry this same hunt.", "main.ts", ["source"]),
@@ -134,11 +143,14 @@ export const EVENTS = {
 export type EventName = keyof typeof EVENTS;
 export type AnalyticsParams = Partial<Record<Parameter, string | number | boolean>>;
 
-export const USER_PROPERTIES = {
-  name: "Saved player name, attached with identify; null when cleared.",
-  profile_name_set: "yes/no name presence.",
-  profile_photo_set: "yes/no saved portrait presence; no photo contents.",
-} as const;
+/** Deliberately small funnel. No map gestures, selections, individual moves,
+ * per-step guide events, profile/crop edits or retired hint/tutorial flows. */
+export const COLLECTED_EVENTS = new Set<string>([
+  "app_open", "page_view", "campaign_entry", "country_load_success", "country_load_error",
+  "level_briefing", "level_start", "game_resume", "level_end", "level_abandon",
+  "guide_begin", "guide_complete", "squad_purchase", "squad_training",
+  "reward_awarded", "sign_in_prompt", "sign_in_complete", "map_fallback",
+]);
 export const PERFORMANCE_TRACES = {
   country_prepare: "Country fetch, graph construction and setup verification; sampled once per load.",
   poster_prepare: "First export-ready newspaper render, excluding user editing time; sampled once per opening.",

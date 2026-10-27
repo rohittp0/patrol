@@ -345,3 +345,30 @@ Live release acceptance (2026-10-27):
 - Browser checks wait for real cloud catch-up and allow training to finish on
   its original deadline during that wait. Toast clock checks use margins around
   the 20-second boundary to avoid assertion overhead crossing a 1 ms window.
+
+
+## Anonymous campaign analytics (2026-10-27)
+
+The active analytics allow-list now follows screen transitions, case previews,
+new/resumed attempts, outcomes, the two mandatory lessons, recruitment/training,
+rewards and optional sign-in. It excludes map gestures, selections, individual
+moves and legacy hint/slide/crop events. Roster rerenders do not repeat views.
+Outcome context refreshes final move counts; training includes its target rank
+and configured duration, while level starts record deployed ranks and empty slots.
+
+PostHog no longer identifies the player. Person processing is disabled, its
+identity exists only in page memory, and refresh creates a fresh anonymous ID.
+Account/profile/save identifiers and SDK identity updates are blocked at the
+transport boundary. Replay, surveys, external extensions and Meta initialization
+are disabled. This applies to future client events; existing provider history
+was not removed. See `docs/telemetry.md` for the current contract.
+
+Validation: 125 unit/regression tests and production build passed; the final
+privacy-focused suite passed all six checks. Real-browser acceptance intercepted
+the actual SDK uploads and passed 16 checks over two captures, a mid-attempt
+refresh, both lessons, Rapid purchase/training, an upgraded roster with an empty
+slot, and a seeded formerly identified browser. All 35 observed packets were
+unidentified, with no identity/person updates, URLs, map/move events, or Meta,
+replay and survey requests. These checks prove outbound payloads, not dashboard
+ingestion. No controlled before/after performance comparison or physical-device
+performance acceptance was performed for this analytics change.
