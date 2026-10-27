@@ -372,3 +372,18 @@ unidentified, with no identity/person updates, URLs, map/move events, or Meta,
 replay and survey requests. These checks prove outbound payloads, not dashboard
 ingestion. No controlled before/after performance comparison or physical-device
 performance acceptance was performed for this analytics change.
+
+
+Live acceptance: application commit `cbda5437d46b11e30ea92f1a3068646556413a6f`
+was deployed with the Firebase CLI (Hosting, rules and indexes).
+[CI run 40424265767](https://github.com/rohittp0/patrol/actions/runs/40424265767)
+passed validation and deployment. All 16 anonymous-funnel checks passed at
+`https://patrol.rohittp.com/`, observing 35 intercepted packets. Blocking analytics
+requests also left the live tutorial and gameplay start usable without page errors.
+
+A desktop Chromium sample using a 390×844 viewport and real Firebase saves
+recorded app readiness at 4,757.9 ms cold / 1,072.4 ms after refresh. A one-second
+idle Academy sample, taken before installing the test clock, recorded median/p95
+frame intervals of 16.70/16.73 ms, browser task CPU 31.9 ms and JS heap 38.1 MiB.
+Analytics uploads were intercepted. This is a representative smoke measurement,
+not a matched baseline comparison, gameplay frame benchmark or physical-phone result.
