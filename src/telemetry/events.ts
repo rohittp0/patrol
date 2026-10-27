@@ -82,6 +82,7 @@ const event = <P extends readonly Parameter[]>(description: string, usedIn: stri
 export const EVENTS = {
   page_view: event("A screen becomes visible; rerenders and timer ticks do not repeat it.", "main.ts", ["screen"]),
   level_briefing: event("Inspect a case, including a locked-level preview.", "main.ts", ["locked", "level_name"]),
+  first_squad_purchase: event("First successful specialist recruitment in this saved campaign; the purchase activation milestone.", "main.ts", ["squad_type", "amount"]),
   squad_purchase: event("A specialist purchase was confirmed.", "main.ts", ["squad_type", "amount"]),
   squad_training: event("Sequential upgrade training started.", "main.ts", ["squad_type", "amount", "upgrade_rank", "training_seconds"]),
   helicopter_deploy: event("A helicopter deployment consumed a move.", "main.ts", ["squad", "post"]),
@@ -155,7 +156,7 @@ export type AnalyticsParams = Partial<Record<Parameter, string | number | boolea
 export const COLLECTED_EVENTS = new Set<string>([
   "app_open", "page_view", "campaign_entry", "country_load_success", "country_load_error",
   "level_briefing", "level_start", "game_resume", "level_end", "level_abandon",
-  "guide_begin", "guide_complete", "squad_purchase", "squad_training",
+  "guide_begin", "guide_complete", "first_squad_purchase", "squad_purchase", "squad_training",
   "reward_awarded", "sign_in_prompt", "sign_in_complete", "map_fallback",
 ]);
 export const PERFORMANCE_TRACES = {

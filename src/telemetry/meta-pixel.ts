@@ -20,6 +20,7 @@ const EVENTS: Partial<Record<EventName, string>> = {
   game_resume: "GameResume",
   level_end: "GameCompleted",
   guide_complete: "TutorialCompleted",
+  first_squad_purchase: "FirstSquadPurchased",
   squad_purchase: "SquadPurchased",
   squad_training: "SquadTrainingStarted",
   poster_download: "NewspaperDownloaded",

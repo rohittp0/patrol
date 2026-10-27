@@ -16,6 +16,7 @@ and again before transport.
 | `level_start`, `game_resume` | New attempts versus home/refresh continuation. Start includes squad count, empty slots and deployed specialist ranks. |
 | `level_end`, `level_abandon` | Capture/loss and explicit abandonment/replacement. Outcomes include final moves, success and bounded reason; no per-move stream. |
 | `guide_begin`, `guide_complete` | Mandatory `field` lesson at Level 1 and `academy` lesson at Level 3. Begin is emitted once per lesson per page load; completion measures time since that begin, including time spent on the lesson. |
+| `first_squad_purchase` | First successful specialist recruitment in a saved campaign: the new activation/aha milestone. Rejected purchases, training, refresh and later recruits do not emit it. |
 | `squad_purchase`, `squad_training` | Successful local recruitment/training. Training includes target rank, game coins spent and configured seconds, excluding deadlines. |
 | `reward_awarded` | Verified reward difference, including zero on an equal replay. |
 | `sign_in_prompt`, `sign_in_complete` | Optional save-progress funnel; current signed-in account fields are attached, without calling identify. |
@@ -78,7 +79,7 @@ properties on `app_open` as well.
 - Meta Pixel `1412945137121409` is enabled independently of PostHog. It sends one
   explicit `PageView` on initialization, plus bounded custom `GameStart`, `GameResume`,
   `GameCompleted`, `GameWon`, `TutorialCompleted`, `SquadPurchased` and
-  `SquadTrainingStarted` events. Tutorial payloads distinguish the field and
+  `SquadTrainingStarted` events, plus `FirstSquadPurchased` for first recruitment. Tutorial payloads distinguish the field and
   Academy lessons. Meta excludes email, name, UID and attempt IDs; account
   properties are attached only to PostHog gameplay/timing events. Automatic
   Meta configuration and advanced matching remain off. The live Meta SDK also
@@ -121,3 +122,29 @@ See [session replay installation](https://posthog.com/docs/session-replay/instal
 real SDK uploads to cover guest entry, account linking, verification/provider
 properties, sign-out, another account, restored Auth on refresh, and queued
 event/timing snapshots. No fixture emails or names are uploaded to PostHog.
+
+
+## Campaign optimization milestones
+
+- **First specialist activation:** Meta `FirstSquadPurchased` (PostHog
+  `first_squad_purchase`) fires only after the first validated local recruit.
+  It uses the campaign's existing durable `firstPurchase` flag and also excludes
+  campaigns already owning a specialist, including legacy saves. It carries the
+  squad type, game-coin cost and level context.
+- **Level-completion campaigns:** Meta `GameWon` remains unchanged for each
+  successful level attempt, including replays; `hunt_number` supports level
+  breakdowns. `GameCompleted` remains an attempt-end signal and includes losses
+  (`success: 0`), so use `GameWon` when optimizing successful completions.
+- `SquadPurchased` still reports every specialist recruit, and training has its
+  separate `SquadTrainingStarted` signal. The new milestone is not a standard
+  money `Purchase` event: these are game coins, with no currency/revenue value.
+
+After real traffic delivers `FirstSquadPurchased`, confirm it in Meta Events
+Manager and select it, or a custom conversion based on it, in the purchase-focused
+ad set. Level-focused ad sets can continue using `GameWon`. Adding a pixel event
+does not change an existing ad set's optimization choice. No ad-account settings
+are changed by the repository deployment.
+
+`check-first-squad-conversion.js` verifies both existing level conversions, a
+rejected purchase, first recruit, training/refresh deduplication and later
+recruitment using intercepted real Meta SDK uploads.

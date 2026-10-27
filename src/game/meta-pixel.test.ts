@@ -50,3 +50,11 @@ test("Meta gameplay properties exclude identity, free-form data and non-finite v
   };
   assert.deepEqual(metaEvents("level_end", dirty)[0].properties, { country: "india", success: 1, score: 6 });
 });
+
+
+test("first squad conversion is separate from recurring purchases and level completions", () => {
+  assert.deepEqual(metaEvents("first_squad_purchase", { country: "india", hunt_number: 3, squad_type: "rapid", amount: 100 }), [{ name: "FirstSquadPurchased", properties: { country: "india", hunt_number: 3, squad_type: "rapid", amount: 100 } }]);
+  assert.deepEqual(metaEvents("squad_purchase", { squad_type: "helicopter" }).map(e => e.name), ["SquadPurchased"]);
+  assert.deepEqual(metaEvents("level_end", { success: 1, hunt_number: 4 }).map(e => e.name), ["GameCompleted", "GameWon"]);
+  assert.deepEqual(metaEvents("level_end", { success: 0 }).map(e => e.name), ["GameCompleted"]);
+});

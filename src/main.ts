@@ -1072,6 +1072,8 @@ root.addEventListener("click", (event) => {
   void run(async () => {
     if (action === "purchase" || action === "train") {
       const squad = target.dataset.id as Specialist;
+      const firstPurchase = action === "purchase" && !player().firstPurchase &&
+        !Object.keys(player().squads).some(isSpecialist);
       const spent =
         action === "purchase"
           ? ECONOMY.catalog[squad].price
@@ -1087,6 +1089,10 @@ root.addEventListener("click", (event) => {
           upgrade_rank: player().squads[squad]!.training!.step + 1,
           training_seconds: ECONOMY.trainingSeconds[squad][player().squads[squad]!.training!.step - 1],
         } : {}),
+      });
+      if (firstPurchase) track("first_squad_purchase", {
+        squad_type: squad,
+        amount: spent,
       });
       audio.effect(action === "purchase" ? "purchase" : "train");
       renderAcademy();

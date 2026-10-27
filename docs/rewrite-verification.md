@@ -471,3 +471,29 @@ one GameWon and one field TutorialCompleted. The live Meta SDK also emitted
 PageViews around screen transitions; PageViews are not counted as game attempts.
 Blocking both providers still left the tutorial playable. All browser contexts
 were closed after acceptance.
+
+
+## First specialist activation conversion (2026-10-27)
+
+`first_squad_purchase` / Meta `FirstSquadPurchased` is the dedicated activation
+milestone, emitted after a successful first specialist recruit. The existing
+`firstPurchase` flag and owned-specialist check exclude later purchases and legacy
+owned-squad saves with an unset flag. Failed purchases do not emit it, and render,
+training, refresh and outbox retries do not call this UI event path. Existing
+`SquadPurchased`, `GameCompleted` and `GameWon` events are retained unchanged.
+Use `GameWon` for successful-level campaigns: `GameCompleted` includes losses.
+Existing wins still include replays; this change does not redefine that metric.
+
+130 unit tests, 14 focused telemetry/Meta/account tests and the production build
+passed. Eight real UI/Meta SDK checks intercepted conversions across two wins,
+a rejected locked purchase, first Rapid recruitment at the current configured
+price, training/refresh and a later Helicopter recruit in a local legacy-save
+fixture. There was exactly one FirstSquadPurchased and two GameWon events.
+The entry bundle changed from 129.71 to 129.82 KB gzip (+0.11 KB); no frame-loop
+work, storage schema or save-network waits were introduced. Runtime/device
+performance was not re-benchmarked for this single milestone event.
+
+No Meta ad-account connector is available here, and no ad-set optimization
+settings were changed. Once real traffic delivers the new event, the purchase
+campaign needs to select `FirstSquadPurchased` or a custom conversion based on
+it in Ads Manager. The separate level-focused campaign can retain `GameWon`.
