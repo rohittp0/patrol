@@ -10,7 +10,7 @@ import {
   type PlayerProgress,
   type ProgressMutation,
 } from "./game/player-progress";
-import type { CountryBoard } from "./game/types";
+import type { BoardSource } from "./game/campaign-world";
 import type { Mission } from "./game/missions";
 import type { Navigation } from "./game/navigation";
 import type { PendingProgress, ProgressReceipt } from "./game/progress-outbox";
@@ -45,7 +45,7 @@ function readProgress(value: Record<string, unknown>): PlayerProgress {
 export class ProgressStore {
   constructor(
     private db: Firestore,
-    private board: CountryBoard,
+    private board: BoardSource,
     private levels: Mission[],
     private navigation?: Navigation,
     private now: () => number = Date.now,

@@ -1,9 +1,9 @@
 # Patrol
 
 A mobile-first pursuit strategy game on the real map. Every player begins with
-15 consecutive India levels and three Patrol Squads. Complete levels to earn
-money, recruit specialists and train their abilities. Other countries are future
-sequential campaign content.
+15 consecutive India levels and three Patrol Squads, then continues through
+USA Levels 16–25. Complete levels to earn money, recruit specialists and train
+their abilities. Buy a fourth deployment slot at Level 15; the fifth is deferred.
 
 ## Play locally
 
@@ -27,7 +27,7 @@ browser-local gameplay sandbox; its progress is not uploaded. Production builds 
 ## Campaign and squads
 
 - The opening HTML plays a tiny squad/fugitive chase while files and saved progress
-  load, with a static scene for reduced-motion users and early map preloading.
+  load, with a static scene for reduced-motion users. Country maps load on demand.
 - Every level has a distinct illustrated case, starting with Veerappan. Inspect
   any locked case to preview its running speed; play unlocks remain sequential.
 - Level 1 guides roster selection through the first win. Level 2 is unguided;
@@ -115,8 +115,9 @@ npm run test:rules
 npm run prepare:campaign
 ```
 
-The public campaign manifest contains 15 distinct spawns and replayed winning
-witnesses with recommended rosters. Geometry and economy hashes are checked by
+The two public campaign manifests contain 25 distinct spawns and replayed winning
+witnesses with recommended rosters. `npm run prepare:usa` preserves the existing
+India levels while regenerating USA; `prepare:campaign` regenerates both chapters. Geometry and economy hashes are checked by
 tests. Basic/less-trained same-route comparisons are recorded separately: a
 failed witness is not proof that every possible weaker-roster strategy fails.
 The campaign's prices and progression remain playtest tuning, not a claim of

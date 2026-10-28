@@ -3,6 +3,8 @@ import "./viewport";
 import { ProgressClient } from "./progress-client";
 import {
   ECONOMY,
+  chapterForLevel,
+  slotCount,
   INITIAL_SQUADS,
   isSpecialist,
   readySquad,
@@ -16,6 +18,7 @@ import { advancePlayback } from "./game/playback";
 import { Navigation } from "./game/navigation";
 import type { CountryBoard } from "./game/types";
 import type { Mission, MissionAttempt } from "./game/missions";
+import type { LevelWorld } from "./game/campaign-world";
 import type { PatrolMap } from "./map-view";
 import { borderName } from "./game/presentation";
 import { initTelemetry, track, gameContext } from "./telemetry";
@@ -62,6 +65,32 @@ let board: CountryBoard,
   levels: Mission[],
   client: ProgressClient,
   navigation: Navigation;
+const worlds = new Map<string, LevelWorld>();
+const worldLoads = new Map<string, Promise<LevelWorld>>();
+async function prepareWorld(level: number): Promise<LevelWorld> {
+  const chapter = chapterForLevel(level);
+  const cached = worlds.get(chapter.country);
+  if (cached) return cached;
+  const pending = worldLoads.get(chapter.country);
+  if (pending) return pending;
+  const started = performance.now();
+  const load = (async () => {
+    const response = await fetch(`/data/${chapter.country}.json`);
+    if (!response.ok) throw new Error(`${chapter.name} map could not be loaded. Please retry.`);
+    const countryBoard: CountryBoard = await response.json();
+    const world = { board: countryBoard, navigation: new Navigation(countryBoard) };
+    worlds.set(chapter.country, world);
+    track("country_load_success", { country: chapter.country, duration_ms: Math.round(performance.now() - started), setup_count: chapter.last - chapter.first + 1, border_count: countryBoard.borders.length });
+    return world;
+  })();
+  worldLoads.set(chapter.country, load);
+  try { return await load; } finally { worldLoads.delete(chapter.country); }
+}
+function currentWorld(level: number): LevelWorld {
+  const world = worlds.get(chapterForLevel(level).country);
+  if (!world) throw new Error("The patrol map is still loading");
+  return world;
+}
 let route = "home",
   levelNumber = 1,
   busy = false,
@@ -79,7 +108,7 @@ let appEntryTracked = false;
 const lessonStarted = new Map<"field" | "academy", number>();
 function updateAnalyticsContext() {
   gameContext({
-    country: "india",
+    country: chapterForLevel(route === "play" || route === "roster" ? levelNumber : player().unlocked).country,
     hunt_number: route === "play" || route === "roster" ? levelNumber : player().unlocked,
     ...(route === "play" && game ? {
       challenge_id: mission().id,
@@ -254,7 +283,7 @@ function renderHome() {
   const training = Object.values(p.squads).filter(
     (s) => s?.training && s.training.readyAt > client.now(),
   ).length;
-  shell(`<section class="base-screen"><div class="campaign-heading"><span class="eyebrow">INDIA CAMPAIGN</span><span>${done} / ${ECONOMY.levelCount} ${icon("trophy")}</span></div>
+  shell(`<section class="base-screen"><div class="campaign-heading"><span class="eyebrow">${chapterForLevel(next).name.toUpperCase()} CAMPAIGN</span><span>${done} / ${ECONOMY.levelCount} ${icon("trophy")}</span></div>
     <article class="wanted-card"><span class="case-stamp">CASE ${String(next).padStart(2, "0")}</span><div class="target-art"><div class="radar-ring"></div><img src="/${portraitPath(file)}" alt="Illustration of ${escape(file.name)}"/><span class="wanted-tag">WANTED</span></div>
     <h1>${escape(file.shortName)}</h1><div class="target-stats"><span>${icon("speed")} ${l.runnerSpeed} <small>km/h</small></span><span>${ECONOMY.maxMoves} <small>moves</small></span></div>
     ${button(`${icon("play")} ${client.response.active ? "RESUME" : `PLAY LEVEL ${next}`}`, client.response.active ? "resume" : "choose", `data-level="${next}"`, "button primary play-button")}
@@ -266,21 +295,21 @@ function renderHome() {
 function renderLevels() {
   const p = player();
   shell(
-    `<div class="page-heading"><span class="eyebrow">INDIA CAMPAIGN</span><h1>The wanted list</h1><p>Tap any case for a preview.</p></div><section class="level-grid" aria-label="India levels">${levels
+    `<div class="page-heading"><span class="eyebrow">WORLD CAMPAIGN</span><h1>The wanted list</h1><p>Tap any case for a preview.</p></div><section class="level-grid" aria-label="Campaign levels">${levels
       .map((l) => {
         const file = caseForLevel(l.number),
           result = p.results[String(l.number)],
           locked = l.number > p.unlocked;
-        return `<button type="button" class="level-card ${locked ? "locked" : result ? "completed" : "current"}" data-action="briefing" data-level="${l.number}" aria-label="Level ${l.number}: ${escape(file.name)}${locked ? ", locked preview" : ""}"><span class="level-number">${String(l.number).padStart(2, "0")}</span><img src="/${portraitPath(file)}" alt="" loading="lazy"/><span class="level-status">${icon(locked ? "lock" : result ? "check" : "play")}</span><h2>${escape(file.shortName)}</h2><span class="level-speed">${icon("speed")} ${l.runnerSpeed} km/h</span><small>${result ? `${result.bestMoves} moves · captured` : locked ? `After Level ${l.number - 1}` : "Ready to pursue"}</small></button>`;
+        return `${l.number === 1 || l.number === 16 ? `<div class="chapter-heading"><span>${chapterForLevel(l.number).name}</span><small>LEVELS ${chapterForLevel(l.number).first}–${chapterForLevel(l.number).last}</small></div>` : ""}<button type="button" class="level-card ${locked ? "locked" : result ? "completed" : "current"}" data-action="briefing" data-level="${l.number}" aria-label="Level ${l.number}: ${escape(file.name)}${locked ? ", locked preview" : ""}"><span class="level-number">${String(l.number).padStart(2, "0")}</span><img src="/${portraitPath(file)}" alt="" loading="lazy"/><span class="level-status">${icon(locked ? "lock" : result ? "check" : "play")}</span><h2>${escape(file.shortName)}</h2><span class="level-speed">${icon("speed")} ${l.runnerSpeed} km/h</span><small>${result ? `${result.bestMoves} moves · captured` : locked ? `After Level ${l.number - 1}` : "Ready to pursue"}</small></button>`;
       })
       .join(
         "",
-      )}</section><div class="future-country">${icon("lock")}<span>Next country · after India</span></div>`,
+      )}</section><div class="future-country">${icon("lock")}<span>More countries coming after the USA</span></div>`,
   );
 }
 function caseContent(l: Mission, expanded = false) {
   const file = caseForLevel(l.number);
-  return `<div class="case-profile"><img src="/${portraitPath(file)}" alt="Illustration of ${escape(file.name)}"/><div><span class="eyebrow">CASE ${String(l.number).padStart(2, "0")} · INDIA</span><h1>${escape(file.shortName)}</h1><div class="speed-badge">${icon("speed")} <b>${l.runnerSpeed}</b> km/h <small>running speed</small></div></div></div>${expanded ? `<p>${escape(file.intro)}</p><p class="fiction-note">Fictional India pursuit. Speed is a game value.</p><a class="source-link" href="${escape(file.source.url)}" target="_blank" rel="noopener noreferrer">Historical case · ${escape(file.source.label)} ${icon("arrow")}</a>` : ""}`;
+  return `<div class="case-profile"><img src="/${portraitPath(file)}" alt="Illustration of ${escape(file.name)}"/><div><span class="eyebrow">CASE ${String(l.number).padStart(2, "0")} · ${chapterForLevel(l.number).name.toUpperCase()}</span><h1>${escape(file.shortName)}</h1><div class="speed-badge">${icon("speed")} <b>${l.runnerSpeed}</b> km/h <small>running speed</small></div></div></div>${expanded ? `<p>${escape(file.intro)}</p><p class="fiction-note">Fictional ${chapterForLevel(l.number).name} pursuit. Speed is a game value.</p><a class="source-link" href="${escape(file.source.url)}" target="_blank" rel="noopener noreferrer">Historical case · ${escape(file.source.label)} ${icon("arrow")}</a>` : ""}`;
 }
 function briefing(level: number) {
   const l = levels[level - 1];
@@ -327,7 +356,7 @@ function renderAcademy() {
       })
       .join(
         "",
-      )}</section><div class="patrol-row">${INITIAL_SQUADS.map((id) => `<div>${unitIcon(id)}<strong>${squadName(id)}</strong><small>${ECONOMY.patrolSpeedKmh} km/h</small></div>`).join("")}</div><p class="fine-print">Training runs while away. Empty deployment slots are allowed.</p>${button(`${icon("play")} Play Level ${p.unlocked}`, "choose", `data-level="${p.unlocked}"`, "button secondary full")}`,
+      )}</section><article class="slot-upgrade" data-slot-upgrade><span class="specialist-icon">${icon("squad")}</span><div><h2>Fourth deployment slot</h2><p>${slotCount(p) === 4 ? "Owned · take four squads into any level" : p.unlocked < ECONOMY.fourthSlot.unlock ? "Unlocks at Level 15" : "Add another squad to your deployment"}</p></div>${slotCount(p) === 4 ? `<span class="badge">${icon("check")} OWNED</span>` : button(`${icon("plus")} ${icon("coin")} ${ECONOMY.fourthSlot.price}`, "buy-slot", `data-network ${p.unlocked < ECONOMY.fourthSlot.unlock || p.wallet < ECONOMY.fourthSlot.price || !!client.response.active ? "disabled" : ""}`, "button secondary")}${client.response.active && slotCount(p) < 4 ? `<small>Finish or abandon your saved level before expanding.</small>` : ""}</article><div class="patrol-row">${INITIAL_SQUADS.map((id) => `<div>${unitIcon(id)}<strong>${squadName(id)}</strong><small>${ECONOMY.patrolSpeedKmh} km/h</small></div>`).join("")}</div><p class="fine-print">Training runs while away. Empty deployment slots are allowed.</p>${button(`${icon("play")} Play Level ${p.unlocked}`, "choose", `data-level="${p.unlocked}"`, "button secondary full")}`,
   );
   renderCoach();
 }
@@ -335,7 +364,7 @@ function renderRoster() {
   const p = player(),
     l = mission();
   shell(`<div class="page-heading"><span class="eyebrow">MISSION BRIEFING</span></div>${caseContent(l)}${button(`${icon("info")} Case file`, "briefing", `data-level="${l.number}"`, "text-button case-link")}
-    <div class="section-title"><h2>Deploy your squad</h2><span>${roster.filter(Boolean).length} / 3</span></div><div class="deployment-slots">${roster.map((id, i) => button(id ? `${unitIcon(id)}<strong>${escape(squadName(id))}</strong>${icon("close")}` : `${icon("plus")}<small>Slot ${i + 1}</small>`, "remove-slot", `data-slot="${i}" aria-label="${id ? `Remove ${squadName(id)}` : `Empty slot ${i + 1}`}"`, `deployment-slot ${id ? "filled" : ""}`)).join("")}</div>
+    <div class="section-title"><h2>Deploy your squad</h2><span>${roster.filter(Boolean).length} / ${slotCount(p)}</span></div><div class="deployment-slots">${roster.map((id, i) => button(id ? `${unitIcon(id)}<strong>${escape(squadName(id))}</strong>${icon("close")}` : `${icon("plus")}<small>Slot ${i + 1}</small>`, "remove-slot", `data-slot="${i}" aria-label="${id ? `Remove ${squadName(id)}` : `Empty slot ${i + 1}`}"`, `deployment-slot ${id ? "filled" : ""}`)).join("")}</div>
     <section class="roster-list" aria-label="Available squads">${(
       Object.keys(p.squads) as SquadId[]
     )
@@ -353,13 +382,16 @@ function renderRoster() {
       })
       .join(
         "",
-      )}</section><div class="roster-footer">${button(`${icon("play")} START PURSUIT`, "start", "data-network", "button primary full")}${roster.filter(Boolean).length < 3 ? "<small>Empty slots · you may still play</small>" : ""}${button(`${icon("academy")} Academy`, "academy", "", "text-button")}</div>`);
+      )}</section><div class="roster-footer">${button(`${icon("play")} START PURSUIT`, "start", "data-network", "button primary full")}${roster.filter(Boolean).length < slotCount(p) ? "<small>Empty slots · you may still play</small>" : ""}${button(`${icon("academy")} Academy`, "academy", "", "text-button")}</div>`);
   renderCoach();
 }
 function restoreGame() {
   const active = client.response.active;
   if (!active) return false;
   levelNumber = active.level;
+  const world = currentWorld(levelNumber);
+  board = world.board;
+  navigation = world.navigation!;
   moveLog = [...active.moves];
   game = new PatrolGame(board, active.setup, active.rules, navigation);
   for (let i = 0; i < moveLog.length; i++) {
@@ -410,7 +442,7 @@ async function renderPlay() {
   }
   stopMap();
   const generation = mapGeneration;
-  root.innerHTML = `<main class="game-page"><div id="map" role="region" aria-label="India patrol map"></div><header class="game-top topbar">${button(icon("home"), "leave", 'aria-label="Return to base"', "game-back")}<button class="target-hud" data-action="briefing" data-level="${levelNumber}"><img src="/${portraitPath(targetFile())}" alt=""/><span><small>LEVEL ${levelNumber}</small><b>${escape(targetFile().shortName)}</b><small>${game.rules.runnerSpeedKmh} km/h</small></span></button>${soundButton("audio-button game-sound")}</header><div class="metrics"><strong id="moves-left">${ECONOMY.maxMoves - game.ordersUsed}</strong><span>MOVES</span></div><div class="game-note" id="game-note"></div><section class="squad-dock" aria-label="Deployed squads"><div class="dock-heading"><span id="selected-label">Choose a squad or a free post</span>${button(icon("close"), "clear", 'aria-label="Clear selection"', "text-button")}</div><div id="game-squads" class="game-squads"></div><div class="journey" id="journey"></div><div id="deploy-control"></div></section><div id="coach-host"></div><section class="result-panel" id="result-panel" hidden></section>${toast()}<div id="modal-host"></div></main>`;
+  root.innerHTML = `<main class="game-page"><div id="map" role="region" aria-label="${chapterForLevel(levelNumber).name} patrol map"></div><header class="game-top topbar">${button(icon("home"), "leave", 'aria-label="Return to base"', "game-back")}<button class="target-hud" data-action="briefing" data-level="${levelNumber}"><img src="/${portraitPath(targetFile())}" alt=""/><span><small>LEVEL ${levelNumber}</small><b>${escape(targetFile().shortName)}</b><small>${game.rules.runnerSpeedKmh} km/h</small></span></button>${soundButton("audio-button game-sound")}</header><div class="metrics"><strong id="moves-left">${ECONOMY.maxMoves - game.ordersUsed}</strong><span>MOVES</span></div><div class="game-note" id="game-note"></div><section class="squad-dock" aria-label="Deployed squads"><div class="dock-heading"><span id="selected-label">Choose a squad or a free post</span>${button(icon("close"), "clear", 'aria-label="Clear selection"', "text-button")}</div><div id="game-squads" class="game-squads"></div><div class="journey" id="journey"></div><div id="deploy-control"></div></section><div id="coach-host"></div><section class="result-panel" id="result-panel" hidden></section>${toast()}<div id="modal-host"></div></main>`;
   const { PatrolMap: MapView } = await import("./map-view");
   if (generation !== mapGeneration || route !== "play" || !game) return;
   let fallbackReported = false;
@@ -676,7 +708,7 @@ function showResult(won: boolean) {
     gross = base * multiplier;
   panel.innerHTML = `<div class="result-medal">${icon(won ? "trophy" : "reset")}</div><span class="eyebrow">${won ? "CASE CLOSED" : "REGROUP"}</span><h1>${won ? `${escape(targetFile().shortName)} captured` : "They got away"}</h1><p>${won ? `${game.ordersUsed} moves · ${game.ordersUsed < 3 ? "Lightning response" : game.ordersUsed <= 5 ? "Sharp tactics" : "Mission complete"}` : game.outcome.kind === "lost" && game.outcome.reason === "budget" ? "Moves exhausted. Train or try another approach." : "The fugitive reached a land exit."}</p>
   ${won ? `<section class="reward-breakdown" aria-label="Reward calculation"><div class="reward-equation"><span><small>BASE</small>${icon("coin")} ${money(base)}</span><b>×</b><span><small>${game.ordersUsed} MOVES</small>${multiplier}</span><b>=</b><span><small>LEVEL TOTAL</small>${icon("coin")} ${money(gross)}</span></div>${resultBefore.paid ? `<p class="replay-reward">Best reward already collected: ${money(resultBefore.paid)}. Replays pay only the improvement.</p>` : ""}<div class="reward-earned"><span>NEW COINS</span><strong>+ ${money(award ?? 0)}</strong></div><div class="balance-equation">Your balance <b>${money(resultBefore.wallet)} + ${money(award ?? 0)} = ${money(player().wallet)}</b></div></section>` : ""}
-  <div class="result-actions">${won ? (levelNumber < ECONOMY.levelCount ? button(`NEXT LEVEL ${icon("arrow")}`, "next", "", "button primary full") : button(`${icon("levels")} INDIA COMPLETE`, "levels", "", "button primary full")) : button(`${icon("reset")} TRY AGAIN`, "retry", "", "button primary full")}${button(`${icon("home")} HOME`, "home", "", "button secondary full")}${!won ? button(`${icon("academy")} Academy`, "academy", "", "text-button") : ""}</div>`;
+  <div class="result-actions">${won ? (levelNumber < ECONOMY.levelCount ? button(`${levelNumber === 15 ? "USA · LEVEL 16" : "NEXT LEVEL"} ${icon("arrow")}`, "next", "", "button primary full") : button(`${icon("levels")} CAMPAIGN COMPLETE`, "levels", "", "button primary full")) : button(`${icon("reset")} TRY AGAIN`, "retry", "", "button primary full")}${button(`${icon("home")} HOME`, "home", "", "button secondary full")}${!won ? button(`${icon("academy")} Academy`, "academy", "", "text-button") : ""}</div>`;
   renderCoach();
   panel.setAttribute("aria-label", won ? "Capture reward" : "Retry mission");
   if (!coachLesson)
@@ -1015,6 +1047,7 @@ root.addEventListener("click", (event) => {
         : player().selection.map((id) =>
             id && readySquad(player(), id, client.now()) ? id : null,
           );
+    void prepareWorld(levelNumber).catch(() => { /* Start provides a visible retry on failure. */ });
     go("roster");
     return;
   }
@@ -1062,6 +1095,16 @@ root.addEventListener("click", (event) => {
       audio.effect("ready");
       completeLesson("academy");
       render();
+    });
+    return;
+  }
+  if (action === "buy-slot") {
+    void run(async () => {
+      await client.action({ kind: "buy-slot" });
+      track("deployment_slot_purchase", { amount: ECONOMY.fourthSlot.price });
+      roster = [...player().selection];
+      audio.effect("purchase");
+      renderAcademy();
     });
     return;
   }
@@ -1196,19 +1239,15 @@ setInterval(() => {
   }
 }, 1000);
 async function initialize() {
-  showLoading("Loading the India map…");
+  showLoading("Loading your campaign…");
   try {
     const started = performance.now();
-    if (!board) {
-      const [b, c] = await Promise.all([
-        fetch("/data/india.json"),
-        fetch("/data/india-campaign.json"),
-      ]);
-      if (!b.ok || !c.ok) throw new Error("Campaign data could not be loaded");
-      board = await b.json();
-      levels = (await c.json()).levels;
-      navigation = new Navigation(board);
-      client = new ProgressClient(board, levels, navigation);
+    if (!levels) {
+      const responses = await Promise.all(ECONOMY.chapters.map(chapter => fetch(`/data/${chapter.country}-campaign.json`)));
+      if (responses.some(response => !response.ok)) throw new Error("Campaign data could not be loaded");
+      const chapters = await Promise.all(responses.map(response => response.json()));
+      levels = chapters.flatMap(chapter => chapter.levels).sort((a, b) => a.number - b.number);
+      client = new ProgressClient(currentWorld, levels, undefined, prepareWorld);
     }
     showLoading("Calling your squads. Restoring your campaign…");
     await client.load();
@@ -1228,13 +1267,7 @@ async function initialize() {
     if (route === "play") track("game_resume", { source: "refresh" });
     if (client.recoveryMessage) notice(client.recoveryMessage);
     performance.mark("patrol-ready");
-    track("campaign_entry", { source: "india_v2" });
-    track("country_load_success", {
-      duration_ms: Math.round(performance.now() - started),
-      country: "india",
-      setup_count: ECONOMY.levelCount,
-      border_count: board.borders.length,
-    });
+    track("campaign_entry", { source: "india_usa_v2", country: chapterForLevel(player().unlocked).country, duration_ms: Math.round(performance.now() - started) });
   } catch (error) {
     track("country_load_error", { reason: "initialization_failed" });
     root.innerHTML = `<main class="loading-screen"><div class="brand">${brand}</div><h1>Let’s reconnect.</h1><p>${escape(errorText(error))}</p>${button("Retry", "reload", "data-network", "button primary")}</main>`;

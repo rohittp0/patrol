@@ -25,6 +25,8 @@ export interface PlayerState {
   firstPurchase: boolean;
   /** Optional for saves made before the action-guided tutorials. */
   tutorials?: { field: boolean; academy: boolean };
+  /** Missing in existing saves means three deployment slots. */
+  deploymentSlots?: number;
 }
 export function newPlayer(): PlayerState {
   return {
@@ -42,6 +44,12 @@ export function newPlayer(): PlayerState {
     tutorials: { field: false, academy: false },
   };
 }
+export const slotCount = (state: PlayerState) => state.deploymentSlots ?? ECONOMY.slots;
+export const chapterForLevel = (level: number) => {
+  const chapter = ECONOMY.chapters.find(c => level >= c.first && level <= c.last);
+  if (!chapter) throw new Error("Unknown campaign level");
+  return chapter;
+};
 export const squadName = (id: SquadId) =>
   id.startsWith("patrol-")
     ? `Patrol Squad ${id.slice(-1)}`
@@ -91,6 +99,8 @@ export function rewardFor(level: number, moves: number) {
   );
 }
 export type PlayerAction =
+  | { kind: "buy-slot" }
+  | { kind: "extend-campaign" }
   | { kind: "purchase"; squad: Specialist }
   | { kind: "train"; squad: Specialist }
   | { kind: "selection"; selection: (SquadId | null)[] }
@@ -103,7 +113,17 @@ export function applyAction(
   now: number,
 ): PlayerState {
   const next = settleTraining(current, now);
-  if (action.kind === "purchase") {
+  if (action.kind === "buy-slot") {
+    if (slotCount(next) !== 3) throw new Error("Fourth slot already owned");
+    if (next.unlocked < ECONOMY.fourthSlot.unlock) throw new Error("Available at Level 15");
+    if (next.wallet < ECONOMY.fourthSlot.price) throw new Error("Not enough money");
+    next.wallet -= ECONOMY.fourthSlot.price;
+    next.deploymentSlots = 4;
+    next.selection = [...next.selection, null];
+  } else if (action.kind === "extend-campaign") {
+    if (next.unlocked !== 15 || !next.results["15"]) throw new Error("Campaign already current");
+    next.unlocked = 16;
+  } else if (action.kind === "purchase") {
     if (!isSpecialist(action.squad)) throw new Error("Unknown squad");
     const item = ECONOMY.catalog[action.squad];
     if (next.squads[action.squad]) throw new Error("Already owned");
@@ -144,7 +164,7 @@ export function validateSelection(
   selection: (SquadId | null)[],
   now: number,
 ) {
-  if (!Array.isArray(selection) || selection.length !== ECONOMY.slots)
+  if (!Array.isArray(selection) || selection.length !== slotCount(state))
     throw new Error("Invalid roster");
   const ids = selection.filter((id): id is SquadId => id !== null);
   if (

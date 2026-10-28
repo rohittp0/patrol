@@ -10,7 +10,7 @@ import {
   type SquadId,
 } from "./collection";
 import { createMission, type Mission, type MissionAttempt } from "./missions";
-import type { CountryBoard } from "./types";
+import { worldFor, type BoardSource } from "./campaign-world";
 import type { Navigation } from "./navigation";
 
 export interface PlayerProgress {
@@ -41,7 +41,7 @@ export const initialProgress = (): PlayerProgress => ({
 export function advanceProgress(
   current: PlayerProgress,
   change: ProgressMutation,
-  board: CountryBoard,
+  board: BoardSource,
   levels: Mission[],
   now: number,
   navigation?: Navigation,
@@ -58,22 +58,26 @@ export function advanceProgress(
       throw new Error(
         "Finish or abandon the saved level before training a deployed squad",
       );
+    if (change.action.kind === "buy-slot" && next.active)
+      throw new Error("Finish or abandon the saved level before expanding deployment slots");
     next.player = applyAction(next.player, change.action, now);
   } else if (change.op === "start") {
     const mission = levels.find((level) => level.number === change.level);
     if (!mission || !change.selection)
       throw new Error("Unknown level or roster");
+    const world = worldFor(board, mission.number, navigation);
     const { setup, rules, steps, game } = createMission(
-      board,
+      world.board,
       mission,
       next.player,
       change.selection,
       now,
-      navigation,
+      world.navigation,
     );
     if (game.outcome.kind !== "playing")
       throw new Error("Choose another starting roster");
     next.active = {
+      country: world.board.id,
       id: crypto.randomUUID(),
       level: mission.number,
       selection: [...change.selection],
@@ -106,7 +110,9 @@ export function advanceProgress(
       (next.pendingHours === null || pending < next.pendingHours)
     )
       throw new Error("A newer move checkpoint is already saved");
-    const game = new PatrolGame(board, active.setup, active.rules, navigation);
+    const world = worldFor(board, active.level, navigation);
+    if (active.country && active.country !== world.board.id) throw new Error("Saved country no longer matches this level");
+    const game = new PatrolGame(world.board, active.setup, active.rules, world.navigation);
     for (let index = 0; index < moves.length; index++) {
       const move = moves[index];
       if (

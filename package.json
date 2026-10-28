@@ -11,7 +11,8 @@
     "prepare:maps": "node --import tsx scripts/prepare-maps.ts",
     "prepare:setups": "node --import tsx scripts/prepare-setups.ts",
     "prepare:tutorial": "node --import tsx scripts/prepare-tutorial.ts",
-    "prepare:campaign": "node --import tsx scripts/prepare-campaign.ts",
+    "prepare:campaign": "node --import tsx scripts/prepare-campaign.ts && node --import tsx scripts/prepare-usa-campaign.ts",
+    "prepare:usa": "node --import tsx scripts/prepare-usa-campaign.ts",
     "test:rules": "node --import tsx --test scripts/firestore-rules.test.ts",
     "test:saves": "node --import tsx --test scripts/firestore-progress.test.ts"
   },

@@ -38,10 +38,17 @@
  */
 export const PLAYTEST_CONFIG = {
   progressionV2: {
-    /** AGREED: India first for everybody; at least 15 consecutive levels. */
-    version: 2, country: "india", levelCount: 15, maxMoves: 15, slots: 3,
-    /** AGREED: extra slot purchases are future content, not enabled by this build. */
-    futureSlots: [15, 25],
+    /** AGREED: India first for everybody; 25 consecutive levels across two chapters. */
+    version: 2, country: "india", levelCount: 25, maxMoves: 15, slots: 3,
+    /** AGREED: the fifth slot remains future content, with no assigned unlock level. */
+    futureSlots: [],
+    /** AGREED: fourth slot at Level 15; fifth slot deferred. Price is STARTER coins. */
+    fourthSlot: { unlock: 15, price: 250 },
+    /** AGREED: sequential chapter boundaries; global level numbers never reset. */
+    chapters: [
+      { country: "india", name: "India", first: 1, last: 15 },
+      { country: "usa", name: "USA", first: 16, last: 25 },
+    ],
     /** STARTER: integer game-money amounts, never real currency. */
     baseReward: 30, rewardStep: 15,
     /** AGREED: real seconds per sequential upgrade. Each specialist's first
@@ -70,7 +77,7 @@ export const PLAYTEST_CONFIG = {
     /** STARTER: ground squad speed in simulated km/h, positive. */
     patrolSpeedKmh: 120,
     /** AGREED: one distinct illustrated opponent and independently tunable running
-     * speed per India level. STARTER speeds are simulated km/h, positive and
+     * speed per campaign level. STARTER speeds are simulated km/h, positive and
      * increasing; fictional chase values, never historical athletic claims. */
     opponents: [
       { caseId: "veerappan", speedKmh: 48 },
@@ -88,12 +95,26 @@ export const PLAYTEST_CONFIG = {
       { caseId: "ambrus", speedKmh: 108 },
       { caseId: "rozsa", speedKmh: 112 },
       { caseId: "savanyu", speedKmh: 116 },
+      { caseId: "sutton", speedKmh: 120 },
+      { caseId: "floyd", speedKmh: 124 },
+      { caseId: "doc-barker", speedKmh: 128 },
+      { caseId: "fred-barker", speedKmh: 132 },
+      { caseId: "morris", speedKmh: 136 },
+      { caseId: "ray", speedKmh: 140 },
+      { caseId: "kaczynski", speedKmh: 144 },
+      { caseId: "rudolph", speedKmh: 148 },
+      { caseId: "holden", speedKmh: 152 },
+      { caseId: "cooper", speedKmh: 156 },
     ],
-    /** STARTER: runner minimum per move as fraction of sqrt(India land area). */
+    /** STARTER: runner minimum per move as fraction of sqrt(the current country land area). */
     travelFloorFraction: 0.008,
     /** STARTER: simulated seconds per real second, positive. One uniform clock
      * across all orders; never accelerate a long journey to meet a duration cap. */
     playbackScale: 6000,
+    /** STARTER: offline authoring search bounds: moves, beam states, nearest posts,
+     * candidate spawns per region and fourth-post minimum clearance in km.
+     * Bounded search is not a proof of impossibility. */
+    usaAuthoring: { depth: 7, beam: 12, nearestPosts: 8, spawnsPerRegion: 12, fourthPostClearanceKm: 350 },
     /** STARTER: worker search bounds; not a proof of impossibility. */
     searchBeam: 24, searchDepth: 15,
   },

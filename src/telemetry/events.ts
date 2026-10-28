@@ -83,13 +83,14 @@ export const EVENTS = {
   page_view: event("A screen becomes visible; rerenders and timer ticks do not repeat it.", "main.ts", ["screen"]),
   level_briefing: event("Inspect a case, including a locked-level preview.", "main.ts", ["locked", "level_name"]),
   first_squad_purchase: event("First successful specialist recruitment in this saved campaign; the purchase activation milestone.", "main.ts", ["squad_type", "amount"]),
+  deployment_slot_purchase: event("Fourth deployment slot purchased once; separate from specialist activation.", "main.ts", ["amount"]),
   squad_purchase: event("A specialist purchase was confirmed.", "main.ts", ["squad_type", "amount"]),
   squad_training: event("Sequential upgrade training started.", "main.ts", ["squad_type", "amount", "upgrade_rank", "training_seconds"]),
   helicopter_deploy: event("A helicopter deployment consumed a move.", "main.ts", ["squad", "post"]),
   reward_awarded: event("Verified reward difference credited to the wallet.", "main.ts", ["amount"]),
   sign_in_prompt: event("Optional save-progress prompt was displayed.", "main.ts", ["source"]),
   sign_in_complete: event("Google account link or sign-in completed without recording account details.", "main.ts", ["source"]),
-  campaign_entry: event("New timezone/default start or remembered/legacy campaign restored; no raw timezone collected.", "main.ts", ["source"]),
+  campaign_entry: event("India-first campaign opened or saved global progression restored.", "main.ts", ["source"]),
   guide_begin: event("Mandatory field or Academy lesson first becomes visible on this page.", "main.ts", ["entry", "lesson"]),
   guide_step_view: event("A guided click or travel explanation is shown; no per-frame events.", "hunt-guide.ts", ["guide_step", "guide_move"]),
   guide_skip: event("Player takes command freely without resetting their hunt.", "hunt-guide.ts", ["guide_step", "guide_move", "reason", "duration_ms"]),
@@ -156,7 +157,7 @@ export type AnalyticsParams = Partial<Record<Parameter, string | number | boolea
 export const COLLECTED_EVENTS = new Set<string>([
   "app_open", "page_view", "campaign_entry", "country_load_success", "country_load_error",
   "level_briefing", "level_start", "game_resume", "level_end", "level_abandon",
-  "guide_begin", "guide_complete", "first_squad_purchase", "squad_purchase", "squad_training",
+  "guide_begin", "guide_complete", "first_squad_purchase", "squad_purchase", "deployment_slot_purchase", "squad_training",
   "reward_awarded", "sign_in_prompt", "sign_in_complete", "map_fallback",
 ]);
 export const PERFORMANCE_TRACES = {

@@ -8,30 +8,32 @@ service cloud.firestore {
     function validPlayer(p) {
       return p is map
         && p.keys().hasAll(['version', 'revision', 'wallet', 'unlocked', 'squads', 'results', 'selection', 'loginPrompted', 'firstPurchase'])
-        && p.keys().hasOnly(['version', 'revision', 'wallet', 'unlocked', 'squads', 'results', 'selection', 'loginPrompted', 'firstPurchase', 'tutorials'])
+        && p.keys().hasOnly(['version', 'revision', 'wallet', 'unlocked', 'squads', 'results', 'selection', 'loginPrompted', 'firstPurchase', 'tutorials', 'deploymentSlots'])
         && (!('tutorials' in p) || (p.tutorials is map
           && p.tutorials.keys().hasAll(['field', 'academy'])
           && p.tutorials.keys().hasOnly(['field', 'academy'])
           && p.tutorials.field is bool && p.tutorials.academy is bool))
         && p.version == 2 && p.revision is int && p.revision >= 0
         && p.wallet is int && p.wallet >= 0
-        && p.unlocked is int && p.unlocked >= 1 && p.unlocked <= 15
+        && p.unlocked is int && p.unlocked >= 1 && p.unlocked <= 25
         && p.squads is map
         && p.squads.keys().hasAll(['patrol-1', 'patrol-2', 'patrol-3'])
         && p.squads.keys().hasOnly(['patrol-1', 'patrol-2', 'patrol-3', 'rapid', 'helicopter', 'marksman'])
         && p.results is map
-        && p.results.keys().hasOnly(['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15'])
-        && p.selection is list && p.selection.size() == 3
+        && p.results.keys().hasOnly(['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25'])
+        && (!("deploymentSlots" in p) || (p.deploymentSlots is int && p.deploymentSlots in [3,4]))
+        && p.selection is list && p.selection.size() == ("deploymentSlots" in p ? p.deploymentSlots : 3)
         && p.loginPrompted is bool && p.firstPurchase is bool;
     }
     function validAttempt(a) {
       return a == null || (a is map
         && a.keys().hasAll(['id', 'level', 'selection', 'steps', 'setup', 'rules', 'moves'])
-        && a.keys().hasOnly(['id', 'level', 'selection', 'steps', 'setup', 'rules', 'moves'])
+        && a.keys().hasOnly(['id', 'level', 'selection', 'steps', 'setup', 'rules', 'moves', 'country'])
+        && (!('country' in a) ? a.level <= 15 : a.country == (a.level <= 15 ? 'india' : 'usa'))
         && a.id is string && a.id.size() <= 80
-        && a.level is int && a.level >= 1 && a.level <= 15
-        && a.selection is list && a.selection.size() == 3
-        && a.steps is list && a.steps.size() <= 3
+        && a.level is int && a.level >= 1 && a.level <= 25
+        && a.selection is list && a.selection.size() >= 3 && a.selection.size() <= 4
+        && a.steps is list && a.steps.size() <= 4
         && a.setup is map && a.rules is map
         && a.moves is list && a.moves.size() <= 15);
     }

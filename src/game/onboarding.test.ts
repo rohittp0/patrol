@@ -58,10 +58,11 @@ test("old saves preserve earned progress and optional tutorial flags survive ser
     "Legacy Skip cannot bypass recruitment and training",
   );
 });
-test("all 15 accessible case previews have distinct illustrations, sources and exact per-level speed", () => {
-  const levels: Mission[] = JSON.parse(
-    readFileSync("public/data/india-campaign.json", "utf8"),
-  ).levels;
+test("all 25 accessible case previews have distinct illustrations, sources and exact per-level speed", () => {
+  const levels: Mission[] = ["india", "usa"].flatMap(country => JSON.parse(
+    readFileSync(`public/data/${country}-campaign.json`, "utf8"),
+  ).levels);
+  assert.equal(levels.length, 25);
   const ids = new Set<string>();
   for (const l of levels) {
     const file = caseForLevel(l.number);
@@ -72,7 +73,7 @@ test("all 15 accessible case previews have distinct illustrations, sources and e
     assert.equal(l.runnerSpeed, ECONOMY.opponents[l.number - 1].speedKmh);
   }
   assert.equal(caseForLevel(1).id, "veerappan");
-  assert.throws(() => caseForLevel(16));
+  assert.throws(() => caseForLevel(26));
 });
 test("guided first win resumes a correct prefix and never hijacks a different move", () => {
   const board: CountryBoard = JSON.parse(

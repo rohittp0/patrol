@@ -105,7 +105,7 @@ function solve(game: PatrolGame, targets: number[], maxDepth = 6) {
 
 const missions: Mission[] = [];
 const bases = [0, 1, 0, 1, 3, 0, 1, 3, 3, 2, 3, 3, 3, 0, 3];
-for (let i = 0; i < ECONOMY.levelCount; i++) {
+for (let i = 0; i < ECONOMY.chapters[0].last; i++) {
   const level = i + 1,
     base = board.setups[bases[i]];
   const rapidStep = level < 8 ? 1 : level < 12 ? 2 : level < 14 ? 3 : 4;

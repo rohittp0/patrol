@@ -68,7 +68,7 @@ test("save rules reject stale revisions, malformed data and spoofed update times
   const invalid = [
     { "player.revision": 0 },
     { "player.wallet": -1, "player.revision": 1 },
-    { "player.unlocked": 16, "player.revision": 1 },
+    { "player.unlocked": 26, "player.revision": 1 },
     { "player.version": 3, "player.revision": 1 },
     { "player.squads": "invalid", "player.revision": 1 },
     { "player.selection": [], "player.revision": 1 },
@@ -141,4 +141,24 @@ test("legacy saves can add tutorial completion without replacing their campaign"
   const saved = (await getDoc(ref)).data()!;
   assert.equal(saved.player.wallet, 75);
   assert.equal(saved.player.unlocked, 3);
+});
+
+test("four-slot USA saves are accepted while five slots, invalid levels and mismatched roster shapes are rejected", async () => {
+  const id = `usa-${crypto.randomUUID()}`;
+  const db = environment.authenticatedContext(id).firestore(), ref = doc(db, "players", id);
+  const save = freshSave();
+  save.player.unlocked = 25;
+  save.player.deploymentSlots = 4;
+  save.player.selection = ["patrol-1", "patrol-2", "patrol-3", null];
+  save.player.results["25"] = { bestMoves: 7, paid: 390 };
+  await assertSucceeds(setDoc(ref, save));
+  for (const patch of [
+    { "player.deploymentSlots": 5, "player.selection": [null,null,null,null,null] },
+    { "player.deploymentSlots": 4, "player.selection": [null,null,null] },
+    { "player.deploymentSlots": 3, "player.selection": [null,null,null,null] },
+    { "player.unlocked": 26 },
+  ]) await assertFails(updateDoc(ref, { ...patch, "player.revision": 1, updatedAt: serverTimestamp() }));
+  const active = { id: "usa-16", level: 16, country: "usa", selection: ["patrol-1",null,null,null], steps: [0], setup: {}, rules: {}, moves: [] };
+  await assertSucceeds(updateDoc(ref, { active, "player.revision": 1, updatedAt: serverTimestamp() }));
+  for (const country of ["hungary", "india"]) await assertFails(updateDoc(ref, { active: {...active,country}, "player.revision": 2, updatedAt: serverTimestamp() }));
 });

@@ -13,7 +13,7 @@ A numbered, playable mission with its own starting setup, patrol zone, move budg
 _Avoid_: Challenge, hunt in player-facing copy
 
 **Campaign**:
-The ordered progression through levels and then successive countries, beginning with India for every player. Only India is enabled in the current release scope; other countries form future sequential progression.
+The ordered progression through levels and then successive countries, beginning with India for every player. India contains Levels 1–15; the USA follows with Levels 16–25. Other countries remain future progression.
 
 **Opening country**:
 The country in which the campaign begins, currently India for every player.
@@ -34,7 +34,7 @@ The level's base money award multiplied by the winning move-count multiplier: th
 The positive difference between a replay's level reward and the highest reward already earned for that level, payable only when the player wins in fewer moves than their previous best. A better move count within the same multiplier tier improves the record without awarding more money.
 
 **Case file**:
-The illustrated historical fugitive and sourced story assigned to one level. All fifteen India levels use distinct members of the existing case cast, beginning with Veerappan; their India encounters are fictional and do not relocate their historical biographies. A case file shows running speed during squad selection and remains inspectable while its level is locked. Historical outcomes retain their sourced arrest, surrender, or death.
+The illustrated historical fugitive and sourced story assigned to one level. All campaign levels use distinct illustrated case characters, beginning with Veerappan. India encounters and USA encounters are fictional and do not relocate historical biographies. A case file shows running speed during squad selection and remains inspectable while its level is locked. Historical outcomes retain their sourced arrest, surrender, or death.
 
 **Starting setup**:
 The fugitive's initial position and the initial border posts associated with a level's deployment slots. Selected ground squads deploy automatically at their slots' posts, while Helicopter Squads begin in reserve; each level has a verified winning sequence with a stated roster.
@@ -84,7 +84,7 @@ The ordered sequence of upgrades for an individual squad, with each upgrade beco
 The real-world waiting period required to complete a purchased squad upgrade. The squad is unavailable for level selection while training, and gains the upgrade when training finishes. Each specialist's first upgrade takes longer than the preceding specialist's final upgrade, in the order Rapid Action, Helicopter, Marksman. Existing training keeps its promised completion time.
 
 **Deployment slot**:
-One optional place for a selected squad in a level; players may start with slots empty, including while owned squads are training. Players begin with three slots; a fourth and fifth become available to purchase through progression at levels 15 and 25 respectively.
+One optional place for a selected squad in a level; players may start with slots empty, including while owned squads are training. Players begin with three slots. A fourth becomes available to purchase at Level 15 and carries across countries. A fifth remains future content, with no release level assigned.
 
 **Unlock requirement**:
 A campaign progression requirement that must be met before a squad or additional deployment slot becomes available to purchase. Unlocking a purchase does not grant it for free.

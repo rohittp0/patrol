@@ -57,4 +57,9 @@ test("first squad conversion is separate from recurring purchases and level comp
   assert.deepEqual(metaEvents("squad_purchase", { squad_type: "helicopter" }).map(e => e.name), ["SquadPurchased"]);
   assert.deepEqual(metaEvents("level_end", { success: 1, hunt_number: 4 }).map(e => e.name), ["GameCompleted", "GameWon"]);
   assert.deepEqual(metaEvents("level_end", { success: 0 }).map(e => e.name), ["GameCompleted"]);
+  assert.deepEqual(metaEvents("deployment_slot_purchase", { country: "usa", amount: 250 }), []);
+  assert.deepEqual(metaEvents("level_end", { country: "usa", hunt_number: 25, success: 1 }), [
+    {name:"GameCompleted",properties:{country:"usa",hunt_number:25,success:1}},
+    {name:"GameWon",properties:{country:"usa",hunt_number:25,success:1}},
+  ]);
 });

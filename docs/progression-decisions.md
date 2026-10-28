@@ -4,8 +4,8 @@ This records settled design decisions from the ongoing interview, not an
 implementation plan or a claim that the rewrite is complete.
 
 - India is the opening campaign for every player, with at least 15 consecutive
-  levels of increasing difficulty. Other countries follow sequentially in the
-  future and are disabled for this release.
+  levels of increasing difficulty. USA now follows with Levels 16–25; other
+  countries remain future sequential progression.
 - Existing prototype players start a fresh campaign at Level 1. Old hunt results,
   scores, and in-progress chases are not converted into new campaign unlocks,
   rewards, or wallet balances. This reset applies to the prototype transition;
@@ -14,8 +14,8 @@ implementation plan or a claim that the rewrite is complete.
   levels may be impossible without them. All levels require new balance and
   verification under the new mechanics.
 - Players begin with three Patrol Squads and three deployment slots. The fourth
-  and fifth slots are future purchases labeled for Levels 15 and 25; purchasing
-  those extra slots was deferred in the original scope.
+  slot is now purchasable at Level 15 for a starter 250 coins. The fifth stays
+  deferred with no assigned unlock level.
 - Players may start with empty slots. Training can leave fewer than three squads
   available, and squads in training cannot be selected.
 - Specialist types are Rapid Action Squad, Helicopter Squad, and Marksman Squad.
@@ -106,3 +106,22 @@ implementation plan or a claim that the rewrite is complete.
   recomputes the preview. Neither selection spends a move; Deploy does.
 - All toast messages dismiss after 20 seconds. A new message receives its own
   full 20-second deadline and may also be dismissed manually.
+
+
+## Confirmed expansion through Level 25 (2026-10-29)
+
+- Preserve India Levels 1–15 and append USA Levels 16–25, sequentially unlocked.
+- Preserve all existing rewards, purchases, upgrade deadlines and unfinished India
+  attempts. Existing Level 15 winners unlock Level 16 without another win or payout.
+- Enable a one-time fourth deployment-slot purchase at Level 15. Starter price: 250
+  game coins. The fifth slot stays deferred, including at Level 25.
+- Carry the collection, wallet, training, selected squads and global level numbers
+  across country boundaries. Old levels remain replayable and locked case files
+  remain inspectable. No tutorials are added after the existing Level 3 lesson.
+- New levels use distinct sourced case characters and centrally tuned speeds.
+  USA geometry loads on demand; opening the home screen must not fetch both maps.
+
+Implementation/verification sequence: extend campaign resolution and save
+compatibility; add the slot and USA cases/portraits; author and replay all ten new
+winning witnesses with weaker-roster comparisons; then test migration, country
+transition, locked previews, four-slot layouts, saves, telemetry and live delivery.

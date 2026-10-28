@@ -17,7 +17,7 @@ const board = (id: string): CountryBoard => JSON.parse(readFileSync(`public/data
 test("every campaign hunt has a distinct illustrated, sourced historical case", () => {
   const ids = new Set<string>();
   for (const level of CONFIG.levels) {
-    assert.equal(CASE_FILES[level.id].length, board(level.id).setups.length);
+    assert(CASE_FILES[level.id].length >= board(level.id).setups.length);
     for (let i = 0; i < CONFIG.setups.poolSize; i++) {
       const file = caseForChallenge(level.id, i);
       assert(!ids.has(file.id)); ids.add(file.id);
@@ -26,7 +26,7 @@ test("every campaign hunt has a distinct illustrated, sourced historical case", 
       assert(file.intro && file.ending && file.endingDate);
     }
   }
-  assert.throws(() => caseForChallenge("usa", CONFIG.setups.poolSize));
+  assert.throws(() => caseForChallenge("usa", CASE_FILES.usa.length));
 });
 
 for (const level of CONFIG.levels) {

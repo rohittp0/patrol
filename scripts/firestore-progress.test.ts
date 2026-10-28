@@ -18,6 +18,7 @@ import {
 } from "firebase/firestore";
 import { FIREBASE_CONFIG } from "../src/firebase.config";
 import { ProgressStore, ProgressConflict } from "../src/progress-store";
+import { chapterForLevel } from "../src/game/collection";
 import { Navigation } from "../src/game/navigation";
 import type {
   PlayerProgress,
@@ -33,6 +34,10 @@ const levels: Mission[] = JSON.parse(
   readFileSync("public/data/india-campaign.json", "utf8"),
 ).levels;
 const navigation = new Navigation(board);
+const usa: CountryBoard = JSON.parse(readFileSync("public/data/usa.json", "utf8"));
+const usaLevels: Mission[] = JSON.parse(readFileSync("public/data/usa-campaign.json", "utf8")).levels;
+const worlds = { india: {board, navigation}, usa: {board:usa, navigation:new Navigation(usa)} };
+const campaignWorld = (level: number) => worlds[chapterForLevel(level).country];
 async function session(
   credential?: AuthCredential,
   now: () => number = Date.now,
@@ -48,7 +53,7 @@ async function session(
   return {
     auth,
     uid,
-    store: new ProgressStore(db, board, levels, navigation, now),
+    store: new ProgressStore(db, campaignWorld, [...levels,...usaLevels], undefined, now),
     close: async () => {
       await terminate(db);
       await deleteApp(app);
@@ -273,4 +278,27 @@ test("optimistic snapshots persist their exact attempt IDs, clocks and receipts"
   } finally {
     await s.close();
   }
+});
+
+
+test("four-slot USA attempts persist, resume, and award their globally numbered level exactly once", async () => {
+  const s = await session();
+  try {
+    const fresh = await s.store.load(s.uid);
+    const seeded = structuredClone(fresh); seeded.player.unlocked = 16; seeded.player.wallet = 1000; seeded.player.revision++;
+    for (const squad of ["rapid", "helicopter", "marksman"] as const) seeded.player.squads[squad] = {step:4,training:null};
+    let state = await s.store.commit(s.uid, {actionId:crypto.randomUUID(),revision:fresh.player.revision,progress:seeded});
+    state = await s.store.mutate(s.uid, mutation(state, {op:"action",action:{kind:"buy-slot"}}));
+    state = await s.store.mutate(s.uid, mutation(state, {op:"start",level:16,selection:usaLevels[0].recommended.map(r=>r.id)}));
+    const attemptId = state.active!.id;
+    state = await s.store.mutate(s.uid, mutation(state,{op:"save",attemptId,moves:usaLevels[0].witness.slice(0,1)}));
+    state = await s.store.load(s.uid);
+    assert.equal(state.active!.country,"usa"); assert.equal(state.active!.selection.length,4);
+    assert.equal(state.active!.moves.length,1);
+    const claim = mutation(state,{op:"finish",attemptId,moves:usaLevels[0].witness});
+    const result = await s.store.mutate(s.uid,claim);
+    assert.equal(result.player.unlocked,17); assert(result.player.results["16"]);
+    assert.equal(result.active,null);
+    assert.deepEqual(await s.store.mutate(s.uid,claim),result);
+  } finally { await s.close(); }
 });

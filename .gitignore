@@ -25,3 +25,5 @@ ui-debug.log*
 .env.local
 .env.*.local
 gha-creds-*.json
+
+.playwright-mcp/

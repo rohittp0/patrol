@@ -23,7 +23,7 @@ import {
   type ProgressMutation,
 } from "./game/player-progress";
 import type { Mission, MissionAttempt } from "./game/missions";
-import type { CountryBoard } from "./game/types";
+import type { BoardSource } from "./game/campaign-world";
 import type { Navigation } from "./game/navigation";
 import { ProgressStore } from "./progress-store";
 import {
@@ -94,9 +94,10 @@ export class ProgressClient {
   private volatile = new Map<string, string>();
 
   constructor(
-    private board: CountryBoard,
+    private board: BoardSource,
     private levels: Mission[],
     private navigation?: Navigation,
+    private prepareLevel?: (level: number) => Promise<unknown>,
   ) {
     if (
       import.meta.env.DEV &&
@@ -212,6 +213,13 @@ export class ProgressClient {
         lastMutationId: null,
       };
     }
+    // Only fetch geometry needed by an active/checkpointed country; home and
+    // locked previews need the small manifests, not both country maps.
+    const activeLevels = new Set([
+      receipt.progress.active?.level, journal?.confirmed.active?.level,
+      ...(journal?.pending.map(entry => entry.progress.active?.level) ?? []),
+    ].filter((level): level is number => typeof level === "number"));
+    await Promise.all([...activeLevels].map(level => this.prepareLevel?.(level)));
     const connect = (state: ProgressJournal) => {
       const outbox = new ProgressOutbox(state, {
         paused: !!backgroundReceipt,
@@ -257,6 +265,8 @@ export class ProgressClient {
       try {
         if (pending.input.revision !== this.response.player.revision)
           throw new Error("Older pending save");
+        if (pending.input.op === "start" && typeof pending.input.level === "number")
+          await this.prepareLevel?.(pending.input.level);
         const next = advanceProgress(
           this.response,
           pending.input,
@@ -304,6 +314,8 @@ export class ProgressClient {
           if (this.outbox === activeOutbox) activeOutbox.resume();
         });
     } else activeOutbox.resume();
+    if (this.player.unlocked === 15 && this.player.results["15"])
+      await this.operation("action", { action: { kind: "extend-campaign" } });
     return this.response;
   }
   private operation(
@@ -334,7 +346,8 @@ export class ProgressClient {
   action(action: PlayerAction) {
     return this.operation("action", { action });
   }
-  start(level: number, selection: (SquadId | null)[]) {
+  async start(level: number, selection: (SquadId | null)[]) {
+    await this.prepareLevel?.(level);
     return this.operation("start", { level, selection });
   }
   checkpoint(moves: MissionAttempt["moves"], pendingHours: number | null) {

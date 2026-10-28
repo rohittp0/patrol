@@ -11,6 +11,7 @@ import type { CountryBoard, StartingSetup } from "./types";
 import type { Navigation } from "./navigation";
 
 export interface Mission {
+  country?: string;
   number: number;
   id: string;
   title: string;
@@ -27,6 +28,7 @@ export interface Mission {
   };
 }
 export interface MissionAttempt {
+  country?: string;
   id: string;
   level: number;
   selection: (SquadId | null)[];
@@ -43,6 +45,7 @@ export function createMission(
   now: number,
   navigation?: Navigation,
 ) {
+  if (mission.country && mission.country !== board.id) throw new Error("Level belongs to another country");
   validateSelection(state, selection, now);
   if (mission.number > state.unlocked) throw new Error("Level is locked");
   const selected = selection.flatMap((id, slot) =>

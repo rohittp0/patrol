@@ -3,9 +3,8 @@
 ## Agreed rewrite scope
 
 The progression rewrite begins in India for every player, regardless of their
-country or timezone. Only India is enabled in this release; USA and other
-countries remain disabled and form future sequential campaign progression
-after India. Their redesign and release are outside the current scope. The India level
+country or timezone. India contains Levels 1–15 and USA follows at Levels 16–25.
+Other countries remain future sequential progression. The India level
 design and difficulty progression require a complete redesign and rebalance for
 the new squad collection, upgrades, rewards, and 15-move budget; existing setups
 and their proofs do not establish balance or correctness under the new rules.
@@ -198,7 +197,31 @@ speeds, runner behaviour, or simulation rules change. A future generator can
 publish new setups only after successfully replaying a winning sequence; failure
 to find a sequence does not prove a candidate is impossible.
 
-## Country progression and presentation
+## Current campaign expansion
+
+Global levels run from 1 to 25: India 1–15, then USA 16–25. The collection,
+wallet, training deadlines and selected roster carry forward. A fourth deployment
+slot is purchasable at Level 15 for 250 game coins; the fifth remains deferred.
+USA uses the existing contiguous mainland board with ten new distinct spawns,
+case illustrations and replayed winning routes. Runner speed increases from
+120 to 156 simulated km/h. USA witnesses use fully trained specialists and a
+fourth Patrol Squad; they take 3–7 moves within the common 15-move budget.
+
+All ten basic-roster same-route comparisons fail; lowering each specialist one
+upgrade fails nine of ten witnesses. These comparisons show the effect of squads
+and training on those routes, not that all alternate weaker-roster routes fail.
+Starter balance still needs player evidence. India positions and original
+three-slot witnesses are preserved. Existing completed Level 15 saves advance to
+16 once without a new payout; old active attempts retain their original setup.
+
+`npm run prepare:usa` rebuilds USA and adds optional fourth India starting posts
+without regenerating the original India levels. `npm run prepare:campaign`
+regenerates both chapters. Hashes and winning routes are checked by the game tests.
+
+## Legacy board-pool progression and presentation
+
+The following describes the retained prototype board pools, not the shipped
+25-level campaign. Their geometry and original setup tests remain useful.
 
 The authored default order is USA, India, then Hungary. A new player's supported
 home country moves to the front based on device timezone; unmatched timezones
