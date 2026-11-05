@@ -1,5 +1,5 @@
 import { PLAYTEST_CONFIG as CONFIG } from "../game/playtest.config";
-import { COLLECTED_EVENTS, COMMON_PARAMETERS, EVENTS, PERFORMANCE_TRACES, type AnalyticsParams, type EventName } from "./events";
+import { APP_VERSION, COLLECTED_EVENTS, COMMON_PARAMETERS, EVENTS, PERFORMANCE_TRACES, type AnalyticsParams, type EventName } from "./events";
 import { initMetaPixel } from "./meta-pixel";
 import { accountProperties, type EventAccount } from "./account";
 import { POSTHOG_CONFIG, POSTHOG_TOKEN } from "./posthog.config";
@@ -96,7 +96,7 @@ async function prepareDelivery(recordingStarted: boolean) {
   if (Math.random() < CONFIG.telemetry.performanceSampleRate || debug) {
     recordTrace = (name, start, duration, account, country) => {
       try {
-        sdk.capture(name, { ...account, duration_ms: Math.round(duration), ...(country ? { country } : {}), ...(debug ? { debug_mode: true } : {}) }, { timestamp: new Date(start + duration) });
+        sdk.capture(name, { ...account, app_version: APP_VERSION, duration_ms: Math.round(duration), ...(country ? { country } : {}), ...(debug ? { debug_mode: true } : {}) }, { timestamp: new Date(start + duration) });
         tracesRecorded++;
       } catch { /* Monitoring cannot interrupt later country/poster work. */ }
     };
@@ -119,7 +119,7 @@ export function sanitizeEvent(name: EventName, params: AnalyticsParams): Analyti
 export function gameContext(next: AnalyticsParams) { context = sanitizeEvent("level_start", next); }
 export function track(name: EventName, params: AnalyticsParams = {}) {
   if (!CONFIG.telemetry.enabled || !COLLECTED_EVENTS.has(name)) return;
-  const packet = { name, params: { ...sanitizeEvent(name, { ...context, ...params }), ...accountSnapshot() }, generation: identityGeneration };
+  const packet = { name, params: { ...sanitizeEvent(name, { ...context, ...params }), ...accountSnapshot(), app_version: APP_VERSION }, generation: identityGeneration };
   try { sendMeta?.(name, packet.params); } catch { /* Meta failure cannot interrupt gameplay or PostHog. */ }
   recent.push(packet); if (recent.length > CONFIG.telemetry.maxQueuedEvents) recent.shift();
   if (send) { try { send(packet); } catch { /* Collection cannot interrupt play. */ } }
