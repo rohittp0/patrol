@@ -5,10 +5,11 @@ import { POSTHOG_CONFIG, POSTHOG_TOKEN } from "../telemetry/posthog.config";
 import { COLLECTED_EVENTS, PERFORMANCE_TRACES } from "../telemetry/events";
 
 const user: EventAccount = {
-  isAnonymous: false, email: "officer@example.test", displayName: "Officer Ada",
+  uid: "firebase-uid", isAnonymous: false, email: "officer@example.test", displayName: "Officer Ada",
   emailVerified: true, providerData: [{ providerId: "google.com" }],
 };
 test("signed-in event properties use the requested Auth fields only", () => {
+  assert.equal(Object.hasOwn(accountProperties(user), "uid"), false);
   assert.deepEqual(accountProperties({ ...user, ...{ uid: "private", accessToken: "private", photoURL: "private" } }), {
     signed_in: true, email: "officer@example.test", name: "Officer Ada",
     email_verified: true, auth_provider: "google.com",
@@ -18,16 +19,16 @@ test("signed-in event properties use the requested Auth fields only", () => {
   assert.deepEqual(accountProperties({ ...user, isAnonymous: true }), { signed_in: false });
   assert.deepEqual(accountProperties({ ...user, email: null, displayName: null, providerData: [] }), { signed_in: true, email_verified: true });
 });
-test("every funnel and timing event retains signed-in account properties without creating a person", () => {
+test("every funnel and timing event retains signed-in account properties and SDK identity flags", () => {
   for (const event of [...COLLECTED_EVENTS, ...Object.keys(PERFORMANCE_TRACES)]) {
     const sent = POSTHOG_CONFIG.before_send({
       uuid: crypto.randomUUID(), event,
-      properties: { token: POSTHOG_TOKEN, ...accountProperties(user), uid: "private", accessToken: "private", photoURL: "private", $set: { email: "private" } },
+      properties: { token: POSTHOG_TOKEN, ...accountProperties(user), $process_person_profile: true, $is_identified: true, uid: "private", accessToken: "private", photoURL: "private", $set: { email: "private" } },
     });
     assert(sent);
     for (const [key, value] of Object.entries(accountProperties(user))) assert.equal(sent.properties[key], value, event);
-    assert.equal(sent.properties.$process_person_profile, false);
-    assert.equal(sent.properties.$is_identified, false);
+    assert.equal(sent.properties.$process_person_profile, true);
+    assert.equal(sent.properties.$is_identified, true);
     assert(!JSON.stringify(sent).includes("private"));
   }
 });
