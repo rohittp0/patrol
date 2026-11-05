@@ -7,6 +7,7 @@ const SDK_PROPERTIES = new Set([
   "token", "distinct_id", "$session_id", "$window_id", "$insert_id", "$lib", "$lib_version",
   "$browser", "$browser_version", "$os", "$device_type", "debug_mode",
   "$process_person_profile", "$is_identified", "$anon_distinct_id",
+  "utm_source", "utm_medium", "utm_campaign", "utm_content",
 ]);
 export const POSTHOG_CONFIG = {
   api_host: "https://us.i.posthog.com",
@@ -35,7 +36,7 @@ export const POSTHOG_CONFIG = {
   advanced_disable_feature_flags: true,
   disable_external_dependency_loading: false,
   save_referrer: false,
-  save_campaign_params: false,
+  save_campaign_params: true,
   disable_capture_url_hashes: true,
   before_send(event: CaptureResult) {
     // Replay has its own structured rrweb payload. The gameplay property filter
@@ -61,7 +62,7 @@ export const POSTHOG_CONFIG = {
       ? ["duration_ms", "country"]
       : [...COMMON_PARAMETERS, ...EVENTS[event.event as EventName].parameters];
     const allowed = new Set([...parameters, ...ACCOUNT_PARAMETERS, ...SDK_PROPERTIES]);
-    // An allow-list also strips automatic URLs, device IDs, attribution, person
+    // An allow-list also strips automatic URLs, device IDs, unapproved attribution, person
     // updates, unapproved account details, attempt IDs and arbitrary SDK/remote additions.
     for (const [key, value] of Object.entries(event.properties)) {
       if (!allowed.has(key) || !["string", "number", "boolean"].includes(typeof value))
