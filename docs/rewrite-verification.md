@@ -511,96 +511,96 @@ Meta event availability and ad-set selection remain owner-side setup.
 
 ## Telemetry identity and attribution (2026-11-05)
 
-**Status: blocked; not ready to merge.** Changes 1–6 are implemented, change 7 intentionally keeps inactive sharing excluded, and change 8 adds identity tests plus both browser checks. Six of seven browser scenarios pass. Scenario 3 exposes an SDK 1.438.12 incompatibility with the project's current V2 recording triggers. Resolving it requires a coordinator scope decision; the lane did not upgrade dependencies, change recording settings, or weaken the requirement.
+**Status: passed.** Changes 1–9 and the external PR draft are complete. This entry records the follow-up run after the coordinator accepted replay pausing until the next page load after sign-out. All seven browser scenarios pass under that contract.
 
 Local checks (Node 26.0.0, npm 12.2.0):
 
 | Command | Result |
 | --- | --- |
-| `npm ci` | PASS: 146 packages installed, 0 audit vulnerabilities. npm reported five dependency install scripts blocked by its existing allowScripts settings; tests/build still passed. |
-| `npm test` | PASS: 147/147 tests, 0 failures. |
-| `npm run build` | PASS: TypeScript and Vite build, 57 modules; bundle-size warning only. |
+| `npm ci` | PASS in the initial lane run: 146 packages installed, 0 audit vulnerabilities. Existing npm allowScripts settings blocked five dependency install scripts; tests/build passed. Dependencies did not change in this follow-up. |
+| `node --import tsx --test --test-name-pattern='live identity transitions' src/game/telemetry.test.ts` | Expected FAIL before the implementation change: the old code still called the ineffective live replay override. |
+| `node --import tsx --test src/game/telemetry.test.ts` | PASS after the fix: 20/20 telemetry tests, including startup reconciliation and live transition assertions. |
+| `npm test` | PASS on the final implementation: 147/147 tests, 0 failures. |
+| `npm run build` | PASS: TypeScript and Vite build, 57 modules; existing bundle-size warning only. |
 | `node --check scripts/check-account-analytics.js` and anonymous counterpart | PASS. |
 | `git diff --check` | PASS. |
 
-Browser environment: OpenJDK 21 from `/opt/homebrew/opt/openjdk@21/bin` was added to the command PATH. The default emulator command failed because an unrelated WhatsApp process owns localhost:8080; it was not stopped or changed. Firestore ran on 18080 via a temporary config and copies of the repository's unchanged rules/indexes. Auth stayed on 9099. Only test-context routes rewrote 8080 to 18080; application Firebase configuration stayed unchanged. The temporary files are removed after verification.
+Browser environment: OpenJDK 21 from `/opt/homebrew/opt/openjdk@21/bin` was added to the command PATH. Firestore ran on 18080 because an unrelated process owns localhost:8080; that process was not stopped or changed. A temporary config used copies of the repository's unchanged rules/indexes. Auth stayed on 9099. Test-context routes rewrote 8080 to 18080; application Firebase configuration stayed unchanged.
 
 ```sh
 PATH=/opt/homebrew/opt/openjdk@21/bin:$PATH npx --yes firebase-tools@13.29.1 emulators:start --only auth,firestore --project patrol-daac9 --config src/telemetry/.firebase-verification.json
 VITE_FIREBASE_EMULATORS=1 npm run dev
 npx --yes --package @playwright/cli playwright-cli -s=patrol-id open 'about:blank#firestore_emulator_port=18080'
-npx --yes --package @playwright/cli playwright-cli -s=patrol-id run-code --filename=scripts/check-anonymous-analytics.js
 npx --yes --package @playwright/cli playwright-cli -s=patrol-id run-code --filename=scripts/check-account-analytics.js
+npx --yes --package @playwright/cli playwright-cli -s=patrol-id run-code --filename=scripts/check-anonymous-analytics.js
 ```
 
-Vite served `http://localhost:3000/`. All test contexts installed routes before app navigation: every Meta request and every PostHog POST was fulfilled locally; only remote-config/recorder GETs continued. Production Firebase requests were blocked as a safeguard; successful scenarios reported zero such attempts. Requests were decoded from `postDataBuffer()` and gzip where applicable, including `/s/` snapshots. No synthetic analytics uploads reached PostHog or Meta. Playwright CLI exits successfully when a callback returns a FAIL result, so the scenario status below, not shell exit alone, is the acceptance result.
+Vite served `http://localhost:3000/`. All test contexts installed routes before app navigation: every Meta request and every PostHog POST was fulfilled locally; only remote-config/recorder GETs continued. Production Firebase requests were blocked, with zero attempts reported. Uploads were decoded from `postDataBuffer()` and gunzipped where applicable, including `/s/` snapshots. No synthetic analytics uploads reached PostHog or Meta. The assertions inspect decoded outbound payloads, not the in-page recent buffer. Playwright CLI exits successfully when a callback returns a FAIL result, so every scenario status was inspected separately.
 
-Initial browser runs exposed a test interceptor bug: it returned JSON for PostHog's JavaScript `config.js` endpoint. The scripts now permit both config GET forms. Final results below are from the corrected scripts; the sign-out replay assertion remains strict.
+The coordinator accepted the replay pause after sign-out. With pinned SDK 1.438.12 and the project's current trigger-group settings, recording starts on `app_open`, which fires once per page. After sign-out, replay stays buffered until the next page load; that page's `app_open` resumes recording under the new guest identity. Gameplay identity and session rotate immediately. Startup recording calls remain; the ineffective live-transition override was removed. No SDK upgrade, recording-setting change, project change or extra app_open was used.
 
 | Scenario | Result | Evidence |
 | --- | --- | --- |
-| 1. Tagged guest entry | **PASS** | Tagged app_open retains meta/paid, version 2.1.0 and false person processing; automatic URL/referrer/initial/GeoIP-disable properties absent. |
+| 1. Tagged guest entry | **PASS** | Tagged app_open retains meta/paid, version 2.1.0 and false person processing; automatic URL/referrer/initial/GeoIP-disable properties are absent. |
 | 2. Guest reload and fresh browser | **PASS** | Reload retains the anonymous distinct_id; a fresh browser context receives a different id. |
-| 3. Google link, shared replay, sign-out and replay rotation | **FAIL** | Nine identity/property checks pass, including one identify, unchanged session through linking, then a new guest id/session on sign-out. No qualifying new-session snapshot arrives within 45 seconds. Later app_open-count and aggregate privacy/version assertions were not reached. |
+| 3. Google link, sign-out privacy, and replay after reload | **PASS** | All 20 checks pass: one identify; same session through linking; new guest id/session and false person processing after sign-out; no replay activity after confirmed sign-out uses the old uid or session; replay resumes under the new guest on reload. One app_open per page; aggregate privacy/version checks pass. |
 | 4. Restore a linked Firebase account | **PASS** | First app_open after linked-account restore already uses the Firebase uid and true person processing. |
-| 5. Legacy identified store isolation | **PASS** | Seeded default-key identified store is ignored; the separate patrol_anonymous_v1 store contains a fresh guest id; no identify sent. |
+| 5. Legacy identified store isolation | **PASS** | Seeded default-key identified store is ignored; the separate patrol_anonymous_v1 store contains a fresh guest id; no identify is sent. |
 | 6. Failed campaign fetch waits for the guest fallback | **PASS** | Campaign fetch aborted before Auth exists; no event or snapshot before fallback; country_load_error then uses a fresh guest id. |
-| 7. Delayed Auth reconciles a different persisted account | **PASS** | Persisted linked account restored with Auth lookup held for 3 seconds; no upload during the hold; fresh anonymous predecessor in identify proves reset, then uid events and a new-session replay snapshot. |
+| 7. Delayed Auth reconciles a different persisted account | **PASS** | Persisted linked account restored with Auth lookup held for 3 seconds; no upload during the hold; fresh anonymous predecessor in identify proves reset, followed by uid events and a new-session replay snapshot. |
 
-Selected intercepted payload fields follow. Emails/names are synthetic and redacted; rrweb bodies are summarized by event count, type and timestamp. These are decoded outbound uploads, not the in-page recent buffer. No post-sign-out snapshot is fabricated for the failed scenario.
+Selected intercepted payload fields follow. Emails/names are synthetic and redacted; rrweb bodies are summarized by event count, type and timestamp.
 
 Scenario 1 (PASS):
 
 ```json
-{"event":"app_open","properties":{"distinct_id":"01a1ac37-b043-7493-9ec1-751493989ef0","utm_source":"meta","utm_medium":"paid","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac37-b10f-77c4-97e3-8c5cdb9cd01e","$is_identified":false,"$process_person_profile":false}}
+{"event":"app_open","properties":{"distinct_id":"01a1ac5a-c805-70d0-a31a-a4116f3ac1ea","utm_source":"meta","utm_medium":"paid","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac5a-c8f7-76d0-b450-30527ac4eb6b","$is_identified":false,"$process_person_profile":false}}
 ```
 
 Scenario 2 (PASS):
 
 ```json
-{"first":{"event":"app_open","properties":{"distinct_id":"01a1ac37-b043-7493-9ec1-751493989ef0","utm_source":"meta","utm_medium":"paid","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac37-b10f-77c4-97e3-8c5cdb9cd01e","$is_identified":false,"$process_person_profile":false}},"reloaded":{"event":"app_open","properties":{"distinct_id":"01a1ac37-b043-7493-9ec1-751493989ef0","utm_source":"meta","utm_medium":"paid","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac37-b10f-77c4-97e3-8c5cdb9cd01e","$is_identified":false,"$process_person_profile":false}},"freshBrowser":{"event":"app_open","properties":{"distinct_id":"01a1ac37-ca5a-7686-9f55-3741c1350389","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac37-cafb-726f-bad8-0056dc6bb6be","$is_identified":false,"$process_person_profile":false}}}
+{"first":{"event":"app_open","properties":{"distinct_id":"01a1ac5a-c805-70d0-a31a-a4116f3ac1ea","utm_source":"meta","utm_medium":"paid","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac5a-c8f7-76d0-b450-30527ac4eb6b","$is_identified":false,"$process_person_profile":false}},"reloaded":{"event":"app_open","properties":{"distinct_id":"01a1ac5a-c805-70d0-a31a-a4116f3ac1ea","utm_source":"meta","utm_medium":"paid","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac5a-c8f7-76d0-b450-30527ac4eb6b","$is_identified":false,"$process_person_profile":false}},"freshBrowser":{"event":"app_open","properties":{"distinct_id":"01a1ac5a-e219-73f8-a707-b796282fd605","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac5a-e353-738e-98d7-9bc75deed322","$is_identified":false,"$process_person_profile":false}}}
 ```
 
-Scenario 3 (FAIL):
+Scenario 3 (PASS):
 
 ```json
-{"guest":{"event":"app_open","properties":{"distinct_id":"01a1ac42-489d-7782-8c86-5797b7ac3e75","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac42-4c98-7739-996f-2cf658a3f567","$is_identified":false,"$process_person_profile":false}},"identify":{"event":"$identify","properties":{"distinct_id":"Arocq50NCdoETSIvxohk1a8uwhN7","$anon_distinct_id":"01a1ac42-489d-7782-8c86-5797b7ac3e75","$session_id":"01a1ac42-4c98-7739-996f-2cf658a3f567","$is_identified":true,"$process_person_profile":true}},"signedIn":{"event":"page_view","properties":{"distinct_id":"Arocq50NCdoETSIvxohk1a8uwhN7","screen":"home","signed_in":true,"email":"[synthetic email]","name":"[synthetic name]","email_verified":true,"auth_provider":"google.com","app_version":"2.1.0","$session_id":"01a1ac42-4c98-7739-996f-2cf658a3f567","$is_identified":true,"$process_person_profile":true}},"signedOut":{"event":"page_view","properties":{"distinct_id":"01a1ac42-6d9e-7bbe-a2a1-0860267dbc54","screen":"levels","signed_in":false,"app_version":"2.1.0","$session_id":"01a1ac42-6d9e-7bbe-a2a1-0861b15f3470","$is_identified":false,"$process_person_profile":false}}}
+{"guest":{"event":"app_open","properties":{"distinct_id":"01a1ac59-0d05-71d7-b945-e0c1ebc38105","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac59-0e9a-7b91-86ea-7a409bea1aa2","$is_identified":false,"$process_person_profile":false}},"identify":{"event":"$identify","properties":{"distinct_id":"n9nLLuav4FSHh9xufbW9BA8udkwO","$anon_distinct_id":"01a1ac59-0d05-71d7-b945-e0c1ebc38105","$session_id":"01a1ac59-0e9a-7b91-86ea-7a409bea1aa2","$is_identified":true,"$process_person_profile":true}},"signedIn":{"event":"page_view","properties":{"distinct_id":"n9nLLuav4FSHh9xufbW9BA8udkwO","screen":"home","signed_in":true,"email":"[synthetic email]","name":"[synthetic name]","email_verified":true,"auth_provider":"google.com","app_version":"2.1.0","$session_id":"01a1ac59-0e9a-7b91-86ea-7a409bea1aa2","$is_identified":true,"$process_person_profile":true}},"signedOut":{"event":"page_view","properties":{"distinct_id":"01a1ac59-26a0-7bc0-bbe6-fc97264e4f6f","screen":"levels","signed_in":false,"app_version":"2.1.0","$session_id":"01a1ac59-26d0-7c57-9aeb-1d93cece0bdb","$is_identified":false,"$process_person_profile":false}},"unsafeReplay":[],"reloadedGuest":{"event":"app_open","properties":{"distinct_id":"01a1ac59-26a0-7bc0-bbe6-fc97264e4f6f","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac59-26d0-7c57-9aeb-1d93cece0bdb","$is_identified":false,"$process_person_profile":false}},"replayAfterReload":{"event":"$snapshot","properties":{"$session_id":"01a1ac59-26d0-7c57-9aeb-1d93cece0bdb","distinct_id":"01a1ac59-26a0-7bc0-bbe6-fc97264e4f6f","$snapshot_data":{"eventCount":7,"types":[3],"earliestTimestamp":1793892898176,"latestTimestamp":1793892898188}}}}
 ```
 
 Scenario 4 (PASS):
 
 ```json
-{"event":"app_open","properties":{"distinct_id":"rzjMhGXOczLT627wwXxHimAh7DEp","app_version":"2.1.0","signed_in":true,"email":"[synthetic email]","name":"[synthetic name]","email_verified":true,"auth_provider":"google.com","$session_id":"01a1ac43-2b79-7ce0-a92a-144ada48be86","$is_identified":true,"$process_person_profile":true}}
+{"event":"app_open","properties":{"distinct_id":"d9RmqKyygB71cKU58Aqz4q2RUU6o","app_version":"2.1.0","signed_in":true,"email":"[synthetic email]","name":"[synthetic name]","email_verified":true,"auth_provider":"google.com","$session_id":"01a1ac59-6474-7c69-9b48-181aaeebffa0","$is_identified":true,"$process_person_profile":true}}
 ```
 
 Scenario 5 (PASS):
 
 ```json
-{"event":"app_open","properties":{"distinct_id":"01a1ac37-d803-7291-8d56-88072de187a6","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac37-d8ab-7d33-99dd-93a1f34a4a75","$is_identified":false,"$process_person_profile":false}}
+{"event":"app_open","properties":{"distinct_id":"01a1ac5a-efdc-7fb9-98dd-536d586931d3","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac5a-f089-7223-b603-5c8748a71b57","$is_identified":false,"$process_person_profile":false}}
 ```
 
 Scenario 6 (PASS):
 
 ```json
-{"event":"country_load_error","properties":{"distinct_id":"01a1ac43-6499-7f2c-9010-a8d76320496f","reason":"initialization_failed","signed_in":false,"app_version":"2.1.0","$session_id":"01a1ac43-649a-7ae9-90ca-16b723b08270","$is_identified":false,"$process_person_profile":false}}
+{"event":"country_load_error","properties":{"distinct_id":"01a1ac59-9e71-7b2e-8845-eee5e31f147d","reason":"initialization_failed","signed_in":false,"app_version":"2.1.0","$session_id":"01a1ac59-9e72-7af3-8b14-68454febaffa","$is_identified":false,"$process_person_profile":false}}
 ```
 
 Scenario 7 (PASS):
 
 ```json
-{"identify":{"event":"$identify","properties":{"distinct_id":"rzjMhGXOczLT627wwXxHimAh7DEp","$anon_distinct_id":"01a1ac43-8439-7c6c-a5da-ca5865953092","$session_id":"01a1ac43-843a-79fe-9ad7-f3dce6d6aa9d","$is_identified":true,"$process_person_profile":true}},"appOpen":{"event":"app_open","properties":{"distinct_id":"rzjMhGXOczLT627wwXxHimAh7DEp","app_version":"2.1.0","signed_in":true,"email":"[synthetic email]","name":"[synthetic name]","email_verified":true,"auth_provider":"google.com","$session_id":"01a1ac43-843a-79fe-9ad7-f3dce6d6aa9d","$is_identified":true,"$process_person_profile":true}},"replay":{"event":"$snapshot","properties":{"$session_id":"01a1ac43-843a-79fe-9ad7-f3dce6d6aa9d","distinct_id":"rzjMhGXOczLT627wwXxHimAh7DEp","$snapshot_data":{"eventCount":7,"types":[4,2,5],"earliestTimestamp":1793891468582,"latestTimestamp":1793891468588}}}}
+{"identify":{"event":"$identify","properties":{"distinct_id":"d9RmqKyygB71cKU58Aqz4q2RUU6o","$anon_distinct_id":"01a1ac59-bdc7-74bb-83d8-76d129cb588e","$session_id":"01a1ac59-bdc8-7197-884f-b1db091c490d","$is_identified":true,"$process_person_profile":true}},"appOpen":{"event":"app_open","properties":{"distinct_id":"d9RmqKyygB71cKU58Aqz4q2RUU6o","app_version":"2.1.0","signed_in":true,"email":"[synthetic email]","name":"[synthetic name]","email_verified":true,"auth_provider":"google.com","$session_id":"01a1ac59-bdc8-7197-884f-b1db091c490d","$is_identified":true,"$process_person_profile":true}},"replay":{"event":"$snapshot","properties":{"$session_id":"01a1ac59-bdc8-7197-884f-b1db091c490d","distinct_id":"d9RmqKyygB71cKU58Aqz4q2RUU6o","$snapshot_data":{"eventCount":7,"types":[4,2,5],"earliestTimestamp":1793892924936,"latestTimestamp":1793892924948}}}}
 ```
 
-Scenario 3 diagnostics: recorder status `buffering`, rrweb attached, 19 buffered events, zero bytes flushed for the new session. The SDK reports `v2_trigger_groups` and `trigger group "All users": event condition not matched`. The V1 activation key equals the new session id `01a1ac42-6d9e-7bbe-a2a1-0861b15f3470`, so this is not an old-session-id comparison error. Installed SDK code confirms that the public event-trigger override writes the V1 key while V2 matchers require group-specific activation. A read-only matcher check returned `trigger_pending` for the V1 key and `trigger_activated` for the group key. No SDK internals, sampling, project settings or extra app_open events were used as a workaround.
+Scenario 3 recorded confirmed sign-out after Firebase had replaced the account with an anonymous user and the home screen was ready (`signOutAt: 1793892886282`). After opening levels, it observed uploads for 5500 ms: no snapshot contained rrweb activity newer than that boundary. After reload and a visible screen change, a guest snapshot contained seven type-3 rrweb events at 1793892898176–1793892898188, later than the action boundary `1793892898126`. Across the observation window, no snapshot with post-sign-out rrweb timestamps carried the previous Firebase uid or session (`unsafeReplay: []`). Both app_open counts and all aggregate privacy/version checks were reached and passed.
 
-The fallback check observed its first upload 11264 ms after SDK readiness, against an 8000 ms Auth timeout (the script allows 100 ms observation tolerance). Gameplay queue batching/replay readiness can delay delivery beyond that timeout.
+The fallback scenario observed its first upload 11079 ms after SDK readiness, against an 8000 ms Auth timeout (100 ms observation tolerance). Gameplay batching/replay readiness can delay delivery beyond that timeout.
 
-Unverified: sign-out replay continuation, the later checks in scenario 3, PR CI, dashboard ingestion/GeoIP enrichment, cross-device production behavior, and deployment. No remote was touched, no push or PR creation was attempted, and main was not modified. The timing-trace allow-list is unchanged; its two inactive traces still strip app_version. Email/name event properties and capture_exceptions:false are unchanged.
+Unverified: PR CI, server-side ingestion/GeoIP enrichment, production return rates/attribution, cross-device production behavior and deployment. No remote was touched, no push or PR creation was attempted, and main was not modified. The two inactive timing traces retain their separate allow-list and still strip app_version. Email/name event properties and capture_exceptions:false are unchanged.
 
-Cleanup: all test-created browser contexts closed, Playwright session `patrol-id` closed, Auth/Firestore emulators shut down cleanly, and Vite stopped with SIGINT. No listeners remained on 3000, 9099 or 18080. Final Codex review completed successfully with one unresolved finding (L5/I4), zero additional findings and zero deferred findings. The requested disposition is to keep acceptance blocked until the coordinator decides the SDK/configuration scope, then rerun scenario 3 including its unreached assertions. No behavior change followed the review, so no review rerun was needed.
+Cleanup: all test-created browser contexts and Playwright session `patrol-id` closed; Auth/Firestore emulators shut down cleanly and Vite stopped with SIGINT. Temporary verification files are removed before commit. No listeners remained on 3000, 9099 or 18080.
 
-Read-only review command: `codex exec -s read-only --skip-git-repo-check --ephemeral -C /private/tmp/codex-lanes/patrol-0789d7e7/a -o <temporary-output> <saved-prompt>` → exit 0. It reviewed the 14 changed files, their complete baseline diff and the PR body, with findings limited to those artifacts.
+Final read-only Codex review: `codex exec -s read-only --skip-git-repo-check --ephemeral -C /private/tmp/codex-lanes/patrol-0789d7e7/a -o <temporary-output> <saved-prompt>` completed with exit 0. It reviewed the 14 changed files, their complete baseline diff and the PR body under the accepted sign-out replay contract. Both `## Fix` and `## Deferred` were empty. Codex review: 0 fixed, 0 deferred.
 
-> Replay does not resume after sign-out (L5/I4) — `src/telemetry/index.ts:46`: the SDK override writes V1 activation while the live project requires V2 trigger groups. Keep acceptance blocked pending the coordinator scope decision and require a passing scenario 3 rerun, including its unreached assertions.
-
-Codex review: 0 fixed, 0 deferred, 1 unresolved coordinator blocker. Final scope check found exactly the 14 approved changed paths; package-lock.json changes only the top-level and root-package version fields. Both reports were checked against all seven actual scenario samples and statuses.
+Final scope check: exactly the 14 approved paths differ from the baseline; package-lock.json changes only the top-level and root-package version fields, and the installed SDK remains 1.438.12. Both reports' seven scenario statuses and payload samples match the actual browser results.

@@ -60,9 +60,12 @@ function reconcileIdentity(): boolean {
     instance.identify(wantedIdentity);
     changed = true;
   }
-  // reset clears the app_open trigger, which fires only once per page.
-  if (changed) startRecording(true);
-  return changed;
+  // Arm the recorder during startup reconciliation. With the pinned SDK's
+  // trigger groups, a later reset buffers replay until the next page's app_open;
+  // event_trigger cannot restart recording after a mid-page sign-out.
+  const startReplay = changed && !preparingDelivery;
+  if (startReplay) startRecording(true);
+  return startReplay;
 }
 
 async function prepareDelivery(recordingStarted: boolean) {

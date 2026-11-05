@@ -372,7 +372,7 @@ test("Auth timeout gates uploads and replay, then flushes exactly once under a f
   assert.equal(h.calls.filter(call => call.method === "reset").length, 1);
 });
 
-test("live identity transitions re-arm replay and repeated Auth notifications are no-ops", async t => {
+test("live identity transitions do not restart replay and repeated Auth notifications are no-ops", async t => {
   const h = await telemetryHarness(t);
   h.telemetry.setTelemetryIdentity(null);
   await h.ready();
@@ -385,9 +385,9 @@ test("live identity transitions re-arm replay and repeated Auth notifications ar
   h.telemetry.setTelemetryIdentity(null);
   h.telemetry.setTelemetryIdentity(null);
   assert.deepEqual(h.calls, [
-    { method: "identify", args: ["account-A"] }, { method: "record", args: [{ event_trigger: true }] },
-    { method: "reset", args: [] }, { method: "identify", args: ["account-B"] }, { method: "record", args: [{ event_trigger: true }] },
-    { method: "reset", args: [] }, { method: "record", args: [{ event_trigger: true }] },
+    { method: "identify", args: ["account-A"] },
+    { method: "reset", args: [] }, { method: "identify", args: ["account-B"] },
+    { method: "reset", args: [] },
   ]);
 });
 

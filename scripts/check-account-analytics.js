@@ -154,8 +154,9 @@ async basePage => {
   };
   let restoreSession, restoredUid, replaySeed;
   try {
-    await run(3, "Google link, shared replay, sign-out and replay rotation", async (check, result) => {
+    await run(3, "Google link, sign-out privacy, and replay after reload", async (check, result) => {
       const session = await make();
+      result.networkSafety = session.safety;
       await enter(session);
       const guest = session.packets.find(packet => packet.event === "app_open");
       result.sample = { guest: sample(guest) };
@@ -190,50 +191,39 @@ async basePage => {
       await session.waitFor(() => session.packets.slice(beforeSignOut).some(packet => packet.event === "page_view" && packet.properties.signed_in === false), "post-sign-out guest event");
       const signedOut = session.packets.slice(beforeSignOut).find(packet => packet.event === "page_view" && packet.properties.signed_in === false);
       result.sample.signedOut = sample(signedOut);
-      check(signedOut.properties.distinct_id !== uid && signedOut.properties.distinct_id !== guest.properties.distinct_id && signedOut.properties.$process_person_profile === false, "Sign-out rotates to a new guest identity without person processing");
+      check(!!signedOut.properties.distinct_id && signedOut.properties.distinct_id !== uid && signedOut.properties.distinct_id !== guest.properties.distinct_id && signedOut.properties.$process_person_profile === false, "Sign-out rotates to a new guest identity without person processing");
+      check(!!signedOut.properties.$session_id && signedOut.properties.$session_id !== signed.properties.$session_id, "Sign-out rotates the previous replay session");
       check(!signedOut.properties.email && !signedOut.properties.name, "Sign-out clears the account event properties");
-      try {
-        await session.waitFor(() => snapshotAfter(session, signedOut.properties.distinct_id, signOutAt, guest.properties.$session_id), "new guest replay with a post-sign-out rrweb timestamp");
-      } catch (error) {
-        result.replayDiagnostics = {
-          signOutAt,
-          snapshots: session.packets.filter(packet => packet.event === "$snapshot").map(packet => ({
-            ...sample(packet),
-            propertyKeys: Object.keys(packet.properties || {}),
-            dataType: typeof packet.properties?.$snapshot_data,
-            dataIsArray: Array.isArray(packet.properties?.$snapshot_data),
-          })),
-        };
-        try {
-          result.replayDiagnostics.sdk = await session.page.evaluate(async () => {
-            const source = performance.getEntriesByType("resource").find(entry => /\/node_modules\/\.vite\/deps\/posthog-js\.js/.test(entry.name));
-            const sdk = (await import(source.name)).default;
-            const recorder = sdk.sessionRecording?._lazyLoadedSessionRecording;
-            return {
-              recordingStarted: sdk.sessionRecordingStarted(),
-              disabled: sdk.config.disable_session_recording,
-              remoteConfigEnabled: sdk.get_property("$session_recording_remote_config")?.enabled,
-              recordingStatus: sdk.sessionRecording?.status,
-              sdkDebugProperties: sdk.sessionRecording?.sdkDebugProperties,
-              lazyRecorder: {
-                sessionId: recorder?._sessionId, windowId: recorder?._windowId,
-                status: recorder?.status, isStarted: recorder?.isStarted,
-                bufferSessionId: recorder?._buffer?.sessionId,
-                bufferWindowId: recorder?._buffer?.windowId,
-                bufferLength: recorder?._buffer?.data?.length,
-              },
-              triggerProperties: Object.fromEntries(Object.entries(sdk.persistence?.props || {}).filter(([key]) =>
-                /trigger|sample|sesid|override/.test(key))),
-            };
-          });
-        } catch (diagnosticError) { result.replayDiagnostics.sdkError = diagnosticError.message; }
-        throw error;
-      }
-      const replay = snapshotAfter(session, signedOut.properties.distinct_id, signOutAt, guest.properties.$session_id);
-      result.sample.replayAfterSignOut = sample(replay);
       result.signOutAt = signOutAt;
-      check(!!replay, "Replay is re-armed, uses the new guest/session, and contains newly recorded rrweb events");
+      const snapshotsAfterSignOut = () => session.packets.filter(packet => packet.event === "$snapshot" &&
+        rrwebEvents(packet).some(event => Number.isFinite(event.timestamp) && event.timestamp > signOutAt));
+      const staleReplay = () => snapshotsAfterSignOut().filter(packet =>
+        packet.properties.distinct_id === uid || packet.properties.$session_id === signed.properties.$session_id);
+      // The approved SDK limitation permits a replay pause until reload. Keep
+      // observing uploads after a visible action and reject old-account leakage.
+      await session.page.waitForTimeout(5500);
+      result.replayObservation = { beforeReloadMs: 5500, snapshotsBeforeReload: snapshotsAfterSignOut().length };
+      result.sample.unsafeReplay = staleReplay().map(sample);
+      check(staleReplay().length === 0, "No replay activity recorded after sign-out uses the prior Firebase uid or session");
       check(session.packets.filter(packet => packet.event === "app_open").length === 1, "app_open fires exactly once on this page despite both identity transitions");
+
+      await session.page.reload({ waitUntil: "domcontentloaded" });
+      await session.waitFor(() => session.packets.filter(packet => packet.event === "app_open").length > 1, "guest app_open after sign-out and reload");
+      const reloaded = session.packets.filter(packet => packet.event === "app_open")[1];
+      result.sample.reloadedGuest = sample(reloaded);
+      check(reloaded.properties.distinct_id === signedOut.properties.distinct_id && reloaded.properties.signed_in === false && reloaded.properties.$process_person_profile === false, "Reload preserves the new guest identity without person processing");
+      check(!!reloaded.properties.$session_id && reloaded.properties.$session_id !== signed.properties.$session_id, "Reload stays outside the signed-in replay session");
+      const resumedAt = await session.page.evaluate(() => Date.now());
+      await session.page.locator('.bottom-nav [data-action="home"]').click();
+      await session.waitFor(() => snapshotAfter(session, signedOut.properties.distinct_id, resumedAt, signed.properties.$session_id), "guest replay with new rrweb activity after reload");
+      const replay = snapshotAfter(session, signedOut.properties.distinct_id, resumedAt, signed.properties.$session_id);
+      result.sample.replayAfterReload = sample(replay);
+      result.replayObservation.resumedAt = resumedAt;
+      result.replayObservation.snapshotsAfterSignOut = snapshotsAfterSignOut().length;
+      result.sample.unsafeReplay = staleReplay().map(sample);
+      check(!!replay, "Replay resumes after reload under the new guest ID and a different session with newly recorded activity");
+      check(staleReplay().length === 0, "All post-sign-out replay activity, including reload, excludes the prior Firebase uid and session");
+      check(session.packets.filter(packet => packet.event === "app_open").length === 2, "The two page loads each emit app_open exactly once");
       check(session.packets.filter(packet => packet.event !== "$snapshot").every(privacy), "Gameplay and identify payloads keep the privacy allow-list");
       check(session.packets.filter(packet => !packet.event.startsWith("$")).every(packet => packet.properties.app_version === "2.1.0"), "Every observed collected gameplay event carries app_version 2.1.0");
       check(session.errors.length === 0, "No page or payload errors");

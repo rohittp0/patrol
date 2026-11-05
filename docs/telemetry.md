@@ -109,22 +109,21 @@ canvas settings and the blocked selectors `#player-photo`, `#crop-editor` and
 property allow-list so recordings remain usable; the no-URL guarantee for
 gameplay and `$identify` payloads does not apply to recordings.
 
-Recording is disabled in the initial SDK configuration and starts only after
-identity reconciliation. Recordings belong to the Firebase uid while signed in;
-for guests, browser identity and replay session state persist across reloads.
+Recording is disabled in the initial SDK configuration. Startup still calls
+`startSessionRecording` after identity reconciliation, with the project's trigger
+and sampling rules in effect. Recordings belong to the Firebase uid while signed
+in; for guests, browser identity and replay session state persist across reloads.
 Guest-to-sign-in identification keeps the session, so one recording can span the
-sign-in. Sign-out and an account switch reset the SDK, rotating both identity and
-replay session. Code requests event-trigger re-arming with
-`startSessionRecording({ event_trigger: true })` after each applied identity
-transition and when a queued `app_open` is discarded as stale. Only the event
-trigger is overridden; sampling and other recording rules remain in effect.
+sign-in. Sign-out and an account switch reset the SDK, immediately rotating both
+identity and replay session.
 
-**Verification blocker (2026-11-05):** the current project configuration uses V2
-trigger groups. SDK 1.438.12's `event_trigger` override writes V1 activation state,
-leaving the V2 group pending after sign-out. The new guest identity and session
-are correct, but its replay stays buffered. This change is not ready to merge
-until that SDK/configuration incompatibility is resolved and browser scenario 3
-passes. No SDK upgrade, trigger-setting change or sampling override was applied.
+With SDK 1.438.12 and the project's current trigger-group settings, recording
+starts when `app_open` fires, once per page load. After sign-out, replay pauses
+until the next page load; that page's `app_open` resumes recording under the new
+guest identity. Gameplay events use the new guest identity and session immediately.
+This replay pause is an accepted constraint. Startup recording calls remain, but
+code does not re-arm recording during live identity transitions. The SDK version,
+project trigger settings and sampling rules are unchanged.
 
 Before flushing queued analytics, initialization waits up to another 8 seconds
 for the recorder's listeners, polling every 100 ms. This lets the project's
@@ -181,9 +180,9 @@ See [session replay installation](https://posthog.com/docs/session-replay/instal
 
 `scripts/check-account-analytics.js` and `scripts/check-anonymous-analytics.js`
 use local Firebase Auth/Firestore emulators and intercepted real SDK uploads.
-Together they cover tagged guest entry, persistent guest identity, Google linking
-and sign-out with replay rotation, restored Auth, legacy-store isolation, startup
-failure and delayed Auth resolution. Google credentials are linked against the
+Together they cover tagged guest entry, persistent guest identity, Google linking,
+sign-out with immediate identity/session rotation and replay resumption on reload,
+restored Auth, legacy-store isolation, startup failure and delayed Auth resolution. Google credentials are linked against the
 Auth emulator, not production Firebase. Every Meta request and every PostHog POST
 upload is fulfilled locally by routes registered before the first navigation.
 PostHog GETs for remote configuration and recorder assets may continue, so the
