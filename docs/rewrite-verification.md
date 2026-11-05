@@ -511,13 +511,13 @@ Meta event availability and ad-set selection remain owner-side setup.
 
 ## Telemetry identity and attribution (2026-11-05)
 
-**Status: passed.** Changes 1–9 and the external PR draft are complete. This entry records the follow-up run after the coordinator accepted replay pausing until the next page load after sign-out. All seven browser scenarios pass under that contract.
+**Status: passed.** All seven browser scenarios pass for Patrol 2.1.0.
 
 Local checks (Node 26.0.0, npm 12.2.0):
 
 | Command | Result |
 | --- | --- |
-| `npm ci` | PASS in the initial lane run: 146 packages installed, 0 audit vulnerabilities. Existing npm allowScripts settings blocked five dependency install scripts; tests/build passed. Dependencies did not change in this follow-up. |
+| `npm ci` | PASS: 146 packages installed, 0 audit vulnerabilities. Existing npm allowScripts settings blocked five dependency install scripts; tests/build passed. |
 | `node --import tsx --test --test-name-pattern='live identity transitions' src/game/telemetry.test.ts` | Expected FAIL before the implementation change: the old code still called the ineffective live replay override. |
 | `node --import tsx --test src/game/telemetry.test.ts` | PASS after the fix: 20/20 telemetry tests, including startup reconciliation and live transition assertions. |
 | `npm test` | PASS on the final implementation: 147/147 tests, 0 failures. |
@@ -525,19 +525,27 @@ Local checks (Node 26.0.0, npm 12.2.0):
 | `node --check scripts/check-account-analytics.js` and anonymous counterpart | PASS. |
 | `git diff --check` | PASS. |
 
-Browser environment: OpenJDK 21 from `/opt/homebrew/opt/openjdk@21/bin` was added to the command PATH. Firestore ran on 18080 because an unrelated process owns localhost:8080; that process was not stopped or changed. A temporary config used copies of the repository's unchanged rules/indexes. Auth stayed on 9099. Test-context routes rewrote 8080 to 18080; application Firebase configuration stayed unchanged.
+Browser environment: OpenJDK 21, Auth emulator on 9099 and Firestore emulator on 18080. Firestore used 18080 because localhost:8080 was occupied. The repository's rules/indexes and application Firebase configuration were unchanged; test-context routes redirected Firestore requests to 18080.
+
+To rerun, put Java 21 on PATH and use three terminals from the repository root. These commands use the standard emulator ports in `firebase.json`: Auth on 9099 and Firestore on 8080. Open a blank page first so the scripts can install interception before any app navigation.
 
 ```sh
-PATH=/opt/homebrew/opt/openjdk@21/bin:$PATH npx --yes firebase-tools@13.29.1 emulators:start --only auth,firestore --project patrol-daac9 --config src/telemetry/.firebase-verification.json
+# Terminal 1
+npx --yes firebase-tools@13.29.1 emulators:start --only auth,firestore --project patrol-daac9
+# Terminal 2
 VITE_FIREBASE_EMULATORS=1 npm run dev
-npx --yes --package @playwright/cli playwright-cli -s=patrol-id open 'about:blank#firestore_emulator_port=18080'
+# Terminal 3
+npx --yes --package @playwright/cli playwright-cli -s=patrol-id open about:blank
 npx --yes --package @playwright/cli playwright-cli -s=patrol-id run-code --filename=scripts/check-account-analytics.js
 npx --yes --package @playwright/cli playwright-cli -s=patrol-id run-code --filename=scripts/check-anonymous-analytics.js
+npx --yes --package @playwright/cli playwright-cli -s=patrol-id close
 ```
+
+Stop the emulator and dev-server processes with Ctrl-C after the checks finish.
 
 Vite served `http://localhost:3000/`. All test contexts installed routes before app navigation: every Meta request and every PostHog POST was fulfilled locally; only remote-config/recorder GETs continued. Production Firebase requests were blocked, with zero attempts reported. Uploads were decoded from `postDataBuffer()` and gunzipped where applicable, including `/s/` snapshots. No synthetic analytics uploads reached PostHog or Meta. The assertions inspect decoded outbound payloads, not the in-page recent buffer. Playwright CLI exits successfully when a callback returns a FAIL result, so every scenario status was inspected separately.
 
-The coordinator accepted the replay pause after sign-out. With pinned SDK 1.438.12 and the project's current trigger-group settings, recording starts on `app_open`, which fires once per page. After sign-out, replay stays buffered until the next page load; that page's `app_open` resumes recording under the new guest identity. Gameplay identity and session rotate immediately. Startup recording calls remain; the ineffective live-transition override was removed. No SDK upgrade, recording-setting change, project change or extra app_open was used.
+We accepted that replay pauses after sign-out until the next page load. With pinned SDK 1.438.12 and the project's current trigger-group settings, recording starts on `app_open`, which fires once per page. After sign-out, replay stays buffered until the next page load; that page's `app_open` resumes recording under the new guest identity. Gameplay identity and session rotate immediately. Startup recording calls remain; the ineffective live-transition override was removed. No SDK upgrade, recording-setting change, project change or extra app_open was used.
 
 | Scenario | Result | Evidence |
 | --- | --- | --- |
@@ -549,7 +557,7 @@ The coordinator accepted the replay pause after sign-out. With pinned SDK 1.438.
 | 6. Failed campaign fetch waits for the guest fallback | **PASS** | Campaign fetch aborted before Auth exists; no event or snapshot before fallback; country_load_error then uses a fresh guest id. |
 | 7. Delayed Auth reconciles a different persisted account | **PASS** | Persisted linked account restored with Auth lookup held for 3 seconds; no upload during the hold; fresh anonymous predecessor in identify proves reset, followed by uid events and a new-session replay snapshot. |
 
-Selected intercepted payload fields follow. Emails/names are synthetic and redacted; rrweb bodies are summarized by event count, type and timestamp.
+One intercepted payload sample per scenario follows. Emails/names are synthetic and redacted; rrweb bodies are summarized by event count, type and timestamp.
 
 Scenario 1 (PASS):
 
@@ -560,13 +568,13 @@ Scenario 1 (PASS):
 Scenario 2 (PASS):
 
 ```json
-{"first":{"event":"app_open","properties":{"distinct_id":"01a1ac5a-c805-70d0-a31a-a4116f3ac1ea","utm_source":"meta","utm_medium":"paid","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac5a-c8f7-76d0-b450-30527ac4eb6b","$is_identified":false,"$process_person_profile":false}},"reloaded":{"event":"app_open","properties":{"distinct_id":"01a1ac5a-c805-70d0-a31a-a4116f3ac1ea","utm_source":"meta","utm_medium":"paid","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac5a-c8f7-76d0-b450-30527ac4eb6b","$is_identified":false,"$process_person_profile":false}},"freshBrowser":{"event":"app_open","properties":{"distinct_id":"01a1ac5a-e219-73f8-a707-b796282fd605","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac5a-e353-738e-98d7-9bc75deed322","$is_identified":false,"$process_person_profile":false}}}
+{"event":"app_open","properties":{"distinct_id":"01a1ac5a-c805-70d0-a31a-a4116f3ac1ea","utm_source":"meta","utm_medium":"paid","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac5a-c8f7-76d0-b450-30527ac4eb6b","$is_identified":false,"$process_person_profile":false}}
 ```
 
 Scenario 3 (PASS):
 
 ```json
-{"guest":{"event":"app_open","properties":{"distinct_id":"01a1ac59-0d05-71d7-b945-e0c1ebc38105","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac59-0e9a-7b91-86ea-7a409bea1aa2","$is_identified":false,"$process_person_profile":false}},"identify":{"event":"$identify","properties":{"distinct_id":"n9nLLuav4FSHh9xufbW9BA8udkwO","$anon_distinct_id":"01a1ac59-0d05-71d7-b945-e0c1ebc38105","$session_id":"01a1ac59-0e9a-7b91-86ea-7a409bea1aa2","$is_identified":true,"$process_person_profile":true}},"signedIn":{"event":"page_view","properties":{"distinct_id":"n9nLLuav4FSHh9xufbW9BA8udkwO","screen":"home","signed_in":true,"email":"[synthetic email]","name":"[synthetic name]","email_verified":true,"auth_provider":"google.com","app_version":"2.1.0","$session_id":"01a1ac59-0e9a-7b91-86ea-7a409bea1aa2","$is_identified":true,"$process_person_profile":true}},"signedOut":{"event":"page_view","properties":{"distinct_id":"01a1ac59-26a0-7bc0-bbe6-fc97264e4f6f","screen":"levels","signed_in":false,"app_version":"2.1.0","$session_id":"01a1ac59-26d0-7c57-9aeb-1d93cece0bdb","$is_identified":false,"$process_person_profile":false}},"unsafeReplay":[],"reloadedGuest":{"event":"app_open","properties":{"distinct_id":"01a1ac59-26a0-7bc0-bbe6-fc97264e4f6f","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac59-26d0-7c57-9aeb-1d93cece0bdb","$is_identified":false,"$process_person_profile":false}},"replayAfterReload":{"event":"$snapshot","properties":{"$session_id":"01a1ac59-26d0-7c57-9aeb-1d93cece0bdb","distinct_id":"01a1ac59-26a0-7bc0-bbe6-fc97264e4f6f","$snapshot_data":{"eventCount":7,"types":[3],"earliestTimestamp":1793892898176,"latestTimestamp":1793892898188}}}}
+{"event":"$snapshot","properties":{"$session_id":"01a1ac59-26d0-7c57-9aeb-1d93cece0bdb","distinct_id":"01a1ac59-26a0-7bc0-bbe6-fc97264e4f6f","$snapshot_data":{"eventCount":7,"types":[3],"earliestTimestamp":1793892898176,"latestTimestamp":1793892898188}}}
 ```
 
 Scenario 4 (PASS):
@@ -590,17 +598,11 @@ Scenario 6 (PASS):
 Scenario 7 (PASS):
 
 ```json
-{"identify":{"event":"$identify","properties":{"distinct_id":"d9RmqKyygB71cKU58Aqz4q2RUU6o","$anon_distinct_id":"01a1ac59-bdc7-74bb-83d8-76d129cb588e","$session_id":"01a1ac59-bdc8-7197-884f-b1db091c490d","$is_identified":true,"$process_person_profile":true}},"appOpen":{"event":"app_open","properties":{"distinct_id":"d9RmqKyygB71cKU58Aqz4q2RUU6o","app_version":"2.1.0","signed_in":true,"email":"[synthetic email]","name":"[synthetic name]","email_verified":true,"auth_provider":"google.com","$session_id":"01a1ac59-bdc8-7197-884f-b1db091c490d","$is_identified":true,"$process_person_profile":true}},"replay":{"event":"$snapshot","properties":{"$session_id":"01a1ac59-bdc8-7197-884f-b1db091c490d","distinct_id":"d9RmqKyygB71cKU58Aqz4q2RUU6o","$snapshot_data":{"eventCount":7,"types":[4,2,5],"earliestTimestamp":1793892924936,"latestTimestamp":1793892924948}}}}
+{"event":"$identify","properties":{"distinct_id":"d9RmqKyygB71cKU58Aqz4q2RUU6o","$anon_distinct_id":"01a1ac59-bdc7-74bb-83d8-76d129cb588e","$session_id":"01a1ac59-bdc8-7197-884f-b1db091c490d","$is_identified":true,"$process_person_profile":true}}
 ```
 
 Scenario 3 recorded confirmed sign-out after Firebase had replaced the account with an anonymous user and the home screen was ready (`signOutAt: 1793892886282`). After opening levels, it observed uploads for 5500 ms: no snapshot contained rrweb activity newer than that boundary. After reload and a visible screen change, a guest snapshot contained seven type-3 rrweb events at 1793892898176–1793892898188, later than the action boundary `1793892898126`. Across the observation window, no snapshot with post-sign-out rrweb timestamps carried the previous Firebase uid or session (`unsafeReplay: []`). Both app_open counts and all aggregate privacy/version checks were reached and passed.
 
 The fallback scenario observed its first upload 11079 ms after SDK readiness, against an 8000 ms Auth timeout (100 ms observation tolerance). Gameplay batching/replay readiness can delay delivery beyond that timeout.
 
-Unverified: PR CI, server-side ingestion/GeoIP enrichment, production return rates/attribution, cross-device production behavior and deployment. No remote was touched, no push or PR creation was attempted, and main was not modified. The two inactive timing traces retain their separate allow-list and still strip app_version. Email/name event properties and capture_exceptions:false are unchanged.
-
-Cleanup: all test-created browser contexts and Playwright session `patrol-id` closed; Auth/Firestore emulators shut down cleanly and Vite stopped with SIGINT. Temporary verification files are removed before commit. No listeners remained on 3000, 9099 or 18080.
-
-Final read-only Codex review: `codex exec -s read-only --skip-git-repo-check --ephemeral -C /private/tmp/codex-lanes/patrol-0789d7e7/a -o <temporary-output> <saved-prompt>` completed with exit 0. It reviewed the 14 changed files, their complete baseline diff and the PR body under the accepted sign-out replay contract. Both `## Fix` and `## Deferred` were empty. Codex review: 0 fixed, 0 deferred.
-
-Final scope check: exactly the 14 approved paths differ from the baseline; package-lock.json changes only the top-level and root-package version fields, and the installed SDK remains 1.438.12. Both reports' seven scenario statuses and payload samples match the actual browser results.
+Unverified: PR CI, server-side ingestion/GeoIP enrichment, production return rates/attribution, cross-device production behavior and deployment. The two inactive timing traces retain their separate allow-list and still strip app_version. Email/name event properties and capture_exceptions:false are unchanged.
