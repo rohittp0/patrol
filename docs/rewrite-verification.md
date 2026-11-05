@@ -507,3 +507,100 @@ passed validation and deployment. All seven live UI/Meta SDK checks passed on
 and two GameCompleted events, no conversion on a rejected purchase, and no
 activation repeat after training/refresh. Test uploads were intercepted; actual
 Meta event availability and ad-set selection remain owner-side setup.
+
+
+## Telemetry identity and attribution (2026-11-05)
+
+**Status: blocked; not ready to merge.** Changes 1–6 are implemented, change 7 intentionally keeps inactive sharing excluded, and change 8 adds identity tests plus both browser checks. Six of seven browser scenarios pass. Scenario 3 exposes an SDK 1.438.12 incompatibility with the project's current V2 recording triggers. Resolving it requires a coordinator scope decision; the lane did not upgrade dependencies, change recording settings, or weaken the requirement.
+
+Local checks (Node 26.0.0, npm 12.2.0):
+
+| Command | Result |
+| --- | --- |
+| `npm ci` | PASS: 146 packages installed, 0 audit vulnerabilities. npm reported five dependency install scripts blocked by its existing allowScripts settings; tests/build still passed. |
+| `npm test` | PASS: 147/147 tests, 0 failures. |
+| `npm run build` | PASS: TypeScript and Vite build, 57 modules; bundle-size warning only. |
+| `node --check scripts/check-account-analytics.js` and anonymous counterpart | PASS. |
+| `git diff --check` | PASS. |
+
+Browser environment: OpenJDK 21 from `/opt/homebrew/opt/openjdk@21/bin` was added to the command PATH. The default emulator command failed because an unrelated WhatsApp process owns localhost:8080; it was not stopped or changed. Firestore ran on 18080 via a temporary config and copies of the repository's unchanged rules/indexes. Auth stayed on 9099. Only test-context routes rewrote 8080 to 18080; application Firebase configuration stayed unchanged. The temporary files are removed after verification.
+
+```sh
+PATH=/opt/homebrew/opt/openjdk@21/bin:$PATH npx --yes firebase-tools@13.29.1 emulators:start --only auth,firestore --project patrol-daac9 --config src/telemetry/.firebase-verification.json
+VITE_FIREBASE_EMULATORS=1 npm run dev
+npx --yes --package @playwright/cli playwright-cli -s=patrol-id open 'about:blank#firestore_emulator_port=18080'
+npx --yes --package @playwright/cli playwright-cli -s=patrol-id run-code --filename=scripts/check-anonymous-analytics.js
+npx --yes --package @playwright/cli playwright-cli -s=patrol-id run-code --filename=scripts/check-account-analytics.js
+```
+
+Vite served `http://localhost:3000/`. All test contexts installed routes before app navigation: every Meta request and every PostHog POST was fulfilled locally; only remote-config/recorder GETs continued. Production Firebase requests were blocked as a safeguard; successful scenarios reported zero such attempts. Requests were decoded from `postDataBuffer()` and gzip where applicable, including `/s/` snapshots. No synthetic analytics uploads reached PostHog or Meta. Playwright CLI exits successfully when a callback returns a FAIL result, so the scenario status below, not shell exit alone, is the acceptance result.
+
+Initial browser runs exposed a test interceptor bug: it returned JSON for PostHog's JavaScript `config.js` endpoint. The scripts now permit both config GET forms. Final results below are from the corrected scripts; the sign-out replay assertion remains strict.
+
+| Scenario | Result | Evidence |
+| --- | --- | --- |
+| 1. Tagged guest entry | **PASS** | Tagged app_open retains meta/paid, version 2.1.0 and false person processing; automatic URL/referrer/initial/GeoIP-disable properties absent. |
+| 2. Guest reload and fresh browser | **PASS** | Reload retains the anonymous distinct_id; a fresh browser context receives a different id. |
+| 3. Google link, shared replay, sign-out and replay rotation | **FAIL** | Nine identity/property checks pass, including one identify, unchanged session through linking, then a new guest id/session on sign-out. No qualifying new-session snapshot arrives within 45 seconds. Later app_open-count and aggregate privacy/version assertions were not reached. |
+| 4. Restore a linked Firebase account | **PASS** | First app_open after linked-account restore already uses the Firebase uid and true person processing. |
+| 5. Legacy identified store isolation | **PASS** | Seeded default-key identified store is ignored; the separate patrol_anonymous_v1 store contains a fresh guest id; no identify sent. |
+| 6. Failed campaign fetch waits for the guest fallback | **PASS** | Campaign fetch aborted before Auth exists; no event or snapshot before fallback; country_load_error then uses a fresh guest id. |
+| 7. Delayed Auth reconciles a different persisted account | **PASS** | Persisted linked account restored with Auth lookup held for 3 seconds; no upload during the hold; fresh anonymous predecessor in identify proves reset, then uid events and a new-session replay snapshot. |
+
+Selected intercepted payload fields follow. Emails/names are synthetic and redacted; rrweb bodies are summarized by event count, type and timestamp. These are decoded outbound uploads, not the in-page recent buffer. No post-sign-out snapshot is fabricated for the failed scenario.
+
+Scenario 1 (PASS):
+
+```json
+{"event":"app_open","properties":{"distinct_id":"01a1ac37-b043-7493-9ec1-751493989ef0","utm_source":"meta","utm_medium":"paid","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac37-b10f-77c4-97e3-8c5cdb9cd01e","$is_identified":false,"$process_person_profile":false}}
+```
+
+Scenario 2 (PASS):
+
+```json
+{"first":{"event":"app_open","properties":{"distinct_id":"01a1ac37-b043-7493-9ec1-751493989ef0","utm_source":"meta","utm_medium":"paid","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac37-b10f-77c4-97e3-8c5cdb9cd01e","$is_identified":false,"$process_person_profile":false}},"reloaded":{"event":"app_open","properties":{"distinct_id":"01a1ac37-b043-7493-9ec1-751493989ef0","utm_source":"meta","utm_medium":"paid","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac37-b10f-77c4-97e3-8c5cdb9cd01e","$is_identified":false,"$process_person_profile":false}},"freshBrowser":{"event":"app_open","properties":{"distinct_id":"01a1ac37-ca5a-7686-9f55-3741c1350389","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac37-cafb-726f-bad8-0056dc6bb6be","$is_identified":false,"$process_person_profile":false}}}
+```
+
+Scenario 3 (FAIL):
+
+```json
+{"guest":{"event":"app_open","properties":{"distinct_id":"01a1ac42-489d-7782-8c86-5797b7ac3e75","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac42-4c98-7739-996f-2cf658a3f567","$is_identified":false,"$process_person_profile":false}},"identify":{"event":"$identify","properties":{"distinct_id":"Arocq50NCdoETSIvxohk1a8uwhN7","$anon_distinct_id":"01a1ac42-489d-7782-8c86-5797b7ac3e75","$session_id":"01a1ac42-4c98-7739-996f-2cf658a3f567","$is_identified":true,"$process_person_profile":true}},"signedIn":{"event":"page_view","properties":{"distinct_id":"Arocq50NCdoETSIvxohk1a8uwhN7","screen":"home","signed_in":true,"email":"[synthetic email]","name":"[synthetic name]","email_verified":true,"auth_provider":"google.com","app_version":"2.1.0","$session_id":"01a1ac42-4c98-7739-996f-2cf658a3f567","$is_identified":true,"$process_person_profile":true}},"signedOut":{"event":"page_view","properties":{"distinct_id":"01a1ac42-6d9e-7bbe-a2a1-0860267dbc54","screen":"levels","signed_in":false,"app_version":"2.1.0","$session_id":"01a1ac42-6d9e-7bbe-a2a1-0861b15f3470","$is_identified":false,"$process_person_profile":false}}}
+```
+
+Scenario 4 (PASS):
+
+```json
+{"event":"app_open","properties":{"distinct_id":"rzjMhGXOczLT627wwXxHimAh7DEp","app_version":"2.1.0","signed_in":true,"email":"[synthetic email]","name":"[synthetic name]","email_verified":true,"auth_provider":"google.com","$session_id":"01a1ac43-2b79-7ce0-a92a-144ada48be86","$is_identified":true,"$process_person_profile":true}}
+```
+
+Scenario 5 (PASS):
+
+```json
+{"event":"app_open","properties":{"distinct_id":"01a1ac37-d803-7291-8d56-88072de187a6","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac37-d8ab-7d33-99dd-93a1f34a4a75","$is_identified":false,"$process_person_profile":false}}
+```
+
+Scenario 6 (PASS):
+
+```json
+{"event":"country_load_error","properties":{"distinct_id":"01a1ac43-6499-7f2c-9010-a8d76320496f","reason":"initialization_failed","signed_in":false,"app_version":"2.1.0","$session_id":"01a1ac43-649a-7ae9-90ca-16b723b08270","$is_identified":false,"$process_person_profile":false}}
+```
+
+Scenario 7 (PASS):
+
+```json
+{"identify":{"event":"$identify","properties":{"distinct_id":"rzjMhGXOczLT627wwXxHimAh7DEp","$anon_distinct_id":"01a1ac43-8439-7c6c-a5da-ca5865953092","$session_id":"01a1ac43-843a-79fe-9ad7-f3dce6d6aa9d","$is_identified":true,"$process_person_profile":true}},"appOpen":{"event":"app_open","properties":{"distinct_id":"rzjMhGXOczLT627wwXxHimAh7DEp","app_version":"2.1.0","signed_in":true,"email":"[synthetic email]","name":"[synthetic name]","email_verified":true,"auth_provider":"google.com","$session_id":"01a1ac43-843a-79fe-9ad7-f3dce6d6aa9d","$is_identified":true,"$process_person_profile":true}},"replay":{"event":"$snapshot","properties":{"$session_id":"01a1ac43-843a-79fe-9ad7-f3dce6d6aa9d","distinct_id":"rzjMhGXOczLT627wwXxHimAh7DEp","$snapshot_data":{"eventCount":7,"types":[4,2,5],"earliestTimestamp":1793891468582,"latestTimestamp":1793891468588}}}}
+```
+
+Scenario 3 diagnostics: recorder status `buffering`, rrweb attached, 19 buffered events, zero bytes flushed for the new session. The SDK reports `v2_trigger_groups` and `trigger group "All users": event condition not matched`. The V1 activation key equals the new session id `01a1ac42-6d9e-7bbe-a2a1-0861b15f3470`, so this is not an old-session-id comparison error. Installed SDK code confirms that the public event-trigger override writes the V1 key while V2 matchers require group-specific activation. A read-only matcher check returned `trigger_pending` for the V1 key and `trigger_activated` for the group key. No SDK internals, sampling, project settings or extra app_open events were used as a workaround.
+
+The fallback check observed its first upload 11264 ms after SDK readiness, against an 8000 ms Auth timeout (the script allows 100 ms observation tolerance). Gameplay queue batching/replay readiness can delay delivery beyond that timeout.
+
+Unverified: sign-out replay continuation, the later checks in scenario 3, PR CI, dashboard ingestion/GeoIP enrichment, cross-device production behavior, and deployment. No remote was touched, no push or PR creation was attempted, and main was not modified. The timing-trace allow-list is unchanged; its two inactive traces still strip app_version. Email/name event properties and capture_exceptions:false are unchanged.
+
+Cleanup: all test-created browser contexts closed, Playwright session `patrol-id` closed, Auth/Firestore emulators shut down cleanly, and Vite stopped with SIGINT. No listeners remained on 3000, 9099 or 18080. Final Codex review completed successfully with one unresolved finding (L5/I4), zero additional findings and zero deferred findings. The requested disposition is to keep acceptance blocked until the coordinator decides the SDK/configuration scope, then rerun scenario 3 including its unreached assertions. No behavior change followed the review, so no review rerun was needed.
+
+Read-only review command: `codex exec -s read-only --skip-git-repo-check --ephemeral -C /private/tmp/codex-lanes/patrol-0789d7e7/a -o <temporary-output> <saved-prompt>` → exit 0. It reviewed the 14 changed files, their complete baseline diff and the PR body, with findings limited to those artifacts.
+
+> Replay does not resume after sign-out (L5/I4) — `src/telemetry/index.ts:46`: the SDK override writes V1 activation while the live project requires V2 trigger groups. Keep acceptance blocked pending the coordinator scope decision and require a passing scenario 3 rerun, including its unreached assertions.
+
+Codex review: 0 fixed, 0 deferred, 1 unresolved coordinator blocker. Final scope check found exactly the 14 approved changed paths; package-lock.json changes only the top-level and root-package version fields. Both reports were checked against all seven actual scenario samples and statuses.
