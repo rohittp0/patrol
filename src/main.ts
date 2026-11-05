@@ -22,6 +22,7 @@ import type { LevelWorld } from "./game/campaign-world";
 import type { PatrolMap } from "./map-view";
 import { borderName } from "./game/presentation";
 import { initTelemetry, track, gameContext } from "./telemetry";
+import { APP_VERSION } from "./telemetry/events";
 import { icon } from "./icons";
 import { GameAudio } from "./game/audio";
 import { PLAYTEST_CONFIG } from "./game/playtest.config";
@@ -1253,7 +1254,7 @@ async function initialize() {
     await client.load();
     if (!appEntryTracked) {
       appEntryTracked = true;
-      track("app_open", { width_px: innerWidth, height_px: innerHeight, app_version: "2.0.0" });
+      track("app_open", { width_px: innerWidth, height_px: innerHeight, app_version: APP_VERSION });
     }
     if (location.hash === "#play" && client.response.active) {
       route = restoreGame() ? "play" : "roster";

@@ -1,10 +1,11 @@
 import { PLAYTEST_CONFIG as CONFIG } from "../game/playtest.config";
-import { COLLECTED_EVENTS, COMMON_PARAMETERS, EVENTS, PERFORMANCE_TRACES, type AnalyticsParams, type EventName } from "./events";
+import { APP_VERSION, COLLECTED_EVENTS, COMMON_PARAMETERS, EVENTS, PERFORMANCE_TRACES, type AnalyticsParams, type EventName } from "./events";
 import { initMetaPixel } from "./meta-pixel";
 import { accountProperties, type EventAccount } from "./account";
 import { POSTHOG_CONFIG, POSTHOG_TOKEN } from "./posthog.config";
+import type { PostHog } from "posthog-js";
 
-type Packet = { name: EventName; params: AnalyticsParams };
+type Packet = { name: EventName; params: AnalyticsParams; generation: number };
 const queued: Packet[] = [], recent: Packet[] = [];
 let context: AnalyticsParams = {};
 let accountSource: () => EventAccount | null = () => null;
@@ -17,10 +18,98 @@ function accountSnapshot(): AnalyticsParams {
 let send: ((packet: Packet) => void) | null = null;
 let sendMeta: ReturnType<typeof initMetaPixel> | null = null;
 let recordTrace: ((name: keyof typeof PERFORMANCE_TRACES, start: number, duration: number, account: AnalyticsParams, country?: string) => void) | null = null;
-let traceQueue: { name: keyof typeof PERFORMANCE_TRACES; start: number; duration: number; account: AnalyticsParams; country?: string }[] = [];
+let traceQueue: { name: keyof typeof PERFORMANCE_TRACES; start: number; duration: number; account: AnalyticsParams; country?: string; generation: number }[] = [];
 let initialized = false;
 let debug = false;
 let tracesRecorded = 0;
+let instance: PostHog | undefined;
+let wantedIdentity: string | null | undefined;
+let identityGeneration = 0;
+let droppedStaleIdentity = 0;
+let identityTimeout: ReturnType<typeof setTimeout> | undefined;
+let preparingDelivery = false;
+
+/** Firebase token notifications include anonymous-account linking as well as restore. */
+export function setTelemetryIdentity(uid: string | null) {
+  if (wantedIdentity === uid) return;
+  // Initial Auth resolution retains startup packets; subsequent changes do not.
+  if (wantedIdentity !== undefined) identityGeneration++;
+  wantedIdentity = uid;
+  if (instance) {
+    clearTimeout(identityTimeout);
+    void prepareDelivery(reconcileIdentity());
+  }
+}
+
+function startRecording(eventTrigger = false) {
+  try {
+    if (eventTrigger) instance?.startSessionRecording({ event_trigger: true });
+    else instance?.startSessionRecording();
+  } catch { /* Event delivery still works if replay is unavailable. */ }
+}
+
+/** Never run while Auth is unresolved: the persisted store may belong to another account. */
+function reconcileIdentity(): boolean {
+  if (!instance || wantedIdentity === undefined) return false;
+  let changed = false;
+  if (instance._isIdentified() && (wantedIdentity === null || instance.get_distinct_id() !== wantedIdentity)) {
+    instance.reset();
+    changed = true;
+  }
+  if (wantedIdentity !== null) {
+    instance.identify(wantedIdentity);
+    changed = true;
+  }
+  // Arm the recorder during startup reconciliation. With the pinned SDK's
+  // trigger groups, a later reset buffers replay until the next page's app_open;
+  // event_trigger cannot restart recording after a mid-page sign-out.
+  const startReplay = changed && !preparingDelivery;
+  if (startReplay) startRecording(true);
+  return startReplay;
+}
+
+async function prepareDelivery(recordingStarted: boolean) {
+  if (!instance || wantedIdentity === undefined || preparingDelivery) return;
+  preparingDelivery = true;
+  const sdk = instance;
+  if (!recordingStarted) startRecording();
+  // Give the lazy recorder's listeners time to receive the queued app_open trigger.
+  const deadline = performance.now() + CONFIG.telemetry.replayReadyTimeoutMs;
+  await new Promise<void>((resolve) => {
+    const check = () => {
+      try {
+        if (sdk.sessionRecordingStarted() || performance.now() >= deadline) {
+          resolve();
+          return;
+        }
+      } catch { resolve(); return; }
+      setTimeout(check, CONFIG.telemetry.replayReadyPollMs);
+    };
+    check();
+  });
+  send = ({ name, params }) => { sdk.capture(name, { ...params, ...(debug ? { debug_mode: true } : {}) }); };
+  for (const packet of queued.splice(0)) {
+    if (packet.generation !== identityGeneration) {
+      droppedStaleIdentity++;
+      if (packet.name === "app_open") startRecording(true);
+    } else {
+      try { send(packet); } catch { /* Collection cannot interrupt play. */ }
+    }
+  }
+  if (Math.random() < CONFIG.telemetry.performanceSampleRate || debug) {
+    recordTrace = (name, start, duration, account, country) => {
+      try {
+        sdk.capture(name, { ...account, app_version: APP_VERSION, duration_ms: Math.round(duration), ...(country ? { country } : {}), ...(debug ? { debug_mode: true } : {}) }, { timestamp: new Date(start + duration) });
+        tracesRecorded++;
+      } catch { /* Monitoring cannot interrupt later country/poster work. */ }
+    };
+    for (const item of traceQueue) {
+      if (item.generation !== identityGeneration) droppedStaleIdentity++;
+      else recordTrace(item.name, item.start, item.duration, item.account, item.country);
+    }
+  }
+  traceQueue = [];
+}
 
 /** Runtime allow-list is deliberate: unknown fields are dropped even if a caller
  * defeats TypeScript. Auth account properties are attached separately; arbitrary
@@ -33,7 +122,7 @@ export function sanitizeEvent(name: EventName, params: AnalyticsParams): Analyti
 export function gameContext(next: AnalyticsParams) { context = sanitizeEvent("level_start", next); }
 export function track(name: EventName, params: AnalyticsParams = {}) {
   if (!CONFIG.telemetry.enabled || !COLLECTED_EVENTS.has(name)) return;
-  const packet = { name, params: { ...sanitizeEvent(name, { ...context, ...params }), ...accountSnapshot() } };
+  const packet = { name, params: { ...sanitizeEvent(name, { ...context, ...params }), ...accountSnapshot(), app_version: APP_VERSION }, generation: identityGeneration };
   try { sendMeta?.(name, packet.params); } catch { /* Meta failure cannot interrupt gameplay or PostHog. */ }
   recent.push(packet); if (recent.length > CONFIG.telemetry.maxQueuedEvents) recent.shift();
   if (send) { try { send(packet); } catch { /* Collection cannot interrupt play. */ } }
@@ -43,7 +132,7 @@ export function track(name: EventName, params: AnalyticsParams = {}) {
 /** Captures actual work duration even if the SDK loads after the work finishes.
  * No performance observer or timer runs in the frame loop. */
 export function measure(name: keyof typeof PERFORMANCE_TRACES, start: number, country?: string) {
-  const value = { name, start: performance.timeOrigin + start, duration: performance.now() - start, account: accountSnapshot(), country };
+  const value = { name, start: performance.timeOrigin + start, duration: performance.now() - start, account: accountSnapshot(), country, generation: identityGeneration };
   if (recordTrace) recordTrace(name, value.start, value.duration, value.account, country);
   else if (traceQueue.length < 20) traceQueue.push(value);
 }
@@ -51,46 +140,21 @@ export function measure(name: keyof typeof PERFORMANCE_TRACES, start: number, co
 export function initTelemetry() {
   if (initialized) return; initialized = true;
   debug = new URLSearchParams(location.search).get("telemetry_debug") === "1";
-  if (import.meta.env.DEV || debug) Object.defineProperty(window, "__PATROL_TELEMETRY__", { get: () => ({ recent: structuredClone(recent), ready: !!send, metaReady: !!sendMeta, performanceReady: !!recordTrace, tracesRecorded }) });
-  const allowed = CONFIG.telemetry.enabled && (debug || CONFIG.telemetry.enableInDevelopment || !import.meta.env.DEV && location.origin === CONFIG.hosting.productionOrigin);
+  if (import.meta.env?.DEV || debug) Object.defineProperty(window, "__PATROL_TELEMETRY__", { get: () => ({ recent: structuredClone(recent), ready: !!send, metaReady: !!sendMeta, performanceReady: !!recordTrace, tracesRecorded, droppedStaleIdentity }) });
+  const allowed = CONFIG.telemetry.enabled && (debug || CONFIG.telemetry.enableInDevelopment || !import.meta.env?.DEV && location.origin === CONFIG.hosting.productionOrigin);
   if (!allowed) { traceQueue = []; return; }
   try { sendMeta = initMetaPixel(window, document); } catch { /* PostHog remains independent. */ }
   const load = async () => {
     try {
       const { default: posthog } = await import("posthog-js");
-      const instance = posthog.init(POSTHOG_TOKEN, POSTHOG_CONFIG);
+      instance = posthog.init(POSTHOG_TOKEN, POSTHOG_CONFIG);
       if (!instance) return;
-      // The project's app_open trigger must reach the lazy recorder after its
-      // listeners attach. Queue analytics briefly; gameplay and Meta continue.
-      try {
-        instance.startSessionRecording();
-        const deadline = performance.now() + CONFIG.telemetry.replayReadyTimeoutMs;
-        await new Promise<void>((resolve) => {
-          const check = () => {
-            try {
-              if (instance.sessionRecordingStarted() || performance.now() >= deadline) {
-                resolve();
-                return;
-              }
-            } catch { resolve(); return; }
-            setTimeout(check, CONFIG.telemetry.replayReadyPollMs);
-          };
-          check();
-        });
-      } catch { /* Event delivery still works if replay is unavailable. */ }
-      send = ({ name, params }) => { instance.capture(name, { ...params, ...(debug ? { debug_mode: true } : {}) }); };
-      for (const packet of queued.splice(0)) send(packet);
-      if (Math.random() < CONFIG.telemetry.performanceSampleRate || debug) {
-        recordTrace = (name, start, duration, account, country) => {
-          try {
-            instance.capture(name, { ...account, duration_ms: Math.round(duration), ...(country ? { country } : {}), ...(debug ? { debug_mode: true } : {}) }, { timestamp: new Date(start + duration) });
-            tracesRecorded++;
-          }
-          catch { /* Monitoring cannot interrupt later country/poster work. */ }
-        };
-        for (const item of traceQueue) recordTrace(item.name, item.start, item.duration, item.account, item.country);
+      if (wantedIdentity === undefined) {
+        // Firebase can be blocked, or startup can fail before ProgressClient exists.
+        identityTimeout = setTimeout(() => setTelemetryIdentity(null), CONFIG.telemetry.replayReadyTimeoutMs);
+      } else {
+        await prepareDelivery(reconcileIdentity());
       }
-      traceQueue = [];
     } catch { queued.length = 0; traceQueue = []; /* Blocked telemetry must never break a hunt. */ }
   };
   if ("requestIdleCallback" in window) window.requestIdleCallback(() => void load(), { timeout: CONFIG.telemetry.idleTimeoutMs });

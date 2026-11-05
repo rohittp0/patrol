@@ -6,19 +6,22 @@ export const POSTHOG_TOKEN = "phc_qvnmtmJK9HVoMtGsY6HHS66U6dcbfqBpR3ZBhkgCW54G";
 const SDK_PROPERTIES = new Set([
   "token", "distinct_id", "$session_id", "$window_id", "$insert_id", "$lib", "$lib_version",
   "$browser", "$browser_version", "$os", "$device_type", "debug_mode",
+  "$process_person_profile", "$is_identified", "$anon_distinct_id",
+  "utm_source", "utm_medium", "utm_campaign", "utm_content",
 ]);
 export const POSTHOG_CONFIG = {
   api_host: "https://us.i.posthog.com",
   defaults: "2026-05-30",
-  person_profiles: "never",
-  // A fresh anonymous ID per page load; never reuse the formerly identified store.
-  persistence: "memory",
+  person_profiles: "identified_only",
+  // Persist browser identity without reopening the pre-v2 identified default store.
+  persistence: "localStorage+cookie",
   persistence_name: "patrol_anonymous_v1",
+  internal_or_test_user_hostname: null,
   ip: false,
   autocapture: false,
   capture_pageview: false,
   capture_pageleave: false,
-  disable_session_recording: false,
+  disable_session_recording: true,
   session_recording: {
     maskAllInputs: true,
     blockSelector: "#player-photo, #crop-editor, #newspaper",
@@ -33,7 +36,7 @@ export const POSTHOG_CONFIG = {
   advanced_disable_feature_flags: true,
   disable_external_dependency_loading: false,
   save_referrer: false,
-  save_campaign_params: false,
+  save_campaign_params: true,
   disable_capture_url_hashes: true,
   before_send(event: CaptureResult) {
     // Replay has its own structured rrweb payload. The gameplay property filter
@@ -41,9 +44,15 @@ export const POSTHOG_CONFIG = {
     if (event.event === "$snapshot") {
       delete event.$set;
       delete event.$set_once;
-      event.properties.$process_person_profile = false;
-      event.properties.$is_identified = false;
-      event.properties.$geoip_disable = true;
+      return event;
+    }
+    if (event.event === "$identify") {
+      for (const [key, value] of Object.entries(event.properties)) {
+        if (!SDK_PROPERTIES.has(key) || !["string", "number", "boolean"].includes(typeof value))
+          delete event.properties[key];
+      }
+      delete event.$set;
+      delete event.$set_once;
       return event;
     }
     const isTiming = Object.hasOwn(PERFORMANCE_TRACES, event.event);
@@ -52,7 +61,7 @@ export const POSTHOG_CONFIG = {
       ? ["duration_ms", "country"]
       : [...COMMON_PARAMETERS, ...EVENTS[event.event as EventName].parameters];
     const allowed = new Set([...parameters, ...ACCOUNT_PARAMETERS, ...SDK_PROPERTIES]);
-    // An allow-list also strips automatic URLs, device IDs, attribution, person
+    // An allow-list also strips automatic URLs, device IDs, unapproved attribution, person
     // updates, unapproved account details, attempt IDs and arbitrary SDK/remote additions.
     for (const [key, value] of Object.entries(event.properties)) {
       if (!allowed.has(key) || !["string", "number", "boolean"].includes(typeof value))
@@ -63,9 +72,6 @@ export const POSTHOG_CONFIG = {
     }
     delete event.$set;
     delete event.$set_once;
-    event.properties.$process_person_profile = false;
-    event.properties.$is_identified = false;
-    event.properties.$geoip_disable = true;
     return event;
   },
 } satisfies Partial<PostHogConfig>;

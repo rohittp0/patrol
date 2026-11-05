@@ -4,6 +4,7 @@
  * IDs, photos, URLs and raw errors are excluded.
  * COLLECTED_EVENTS is the current funnel. Legacy module definitions below remain
  * type-compatible but are blocked at both collection and transport boundaries. */
+export const APP_VERSION = "2.1.0";
 export const PARAMETERS = {
   email: "Signed-in Firebase account email, when available.",
   name: "Signed-in Firebase display name, when available.",
@@ -77,7 +78,7 @@ export const PARAMETERS = {
 } as const;
 export type Parameter = keyof typeof PARAMETERS;
 export const ACCOUNT_PARAMETERS = ["email", "name", "signed_in", "email_verified", "auth_provider"] as const;
-export const COMMON_PARAMETERS = ["country", "case_id", "challenge_id", "hunt_number", "moves_used", "moves_left", "squad_count", "campaign_start_country"] as const;
+export const COMMON_PARAMETERS = ["app_version", "country", "case_id", "challenge_id", "hunt_number", "moves_used", "moves_left", "squad_count", "campaign_start_country"] as const;
 const event = <P extends readonly Parameter[]>(description: string, usedIn: string, parameters: P) => ({ description, usedIn, parameters });
 export const EVENTS = {
   page_view: event("A screen becomes visible; rerenders and timer ticks do not repeat it.", "main.ts", ["screen"]),

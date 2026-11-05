@@ -507,3 +507,102 @@ passed validation and deployment. All seven live UI/Meta SDK checks passed on
 and two GameCompleted events, no conversion on a rejected purchase, and no
 activation repeat after training/refresh. Test uploads were intercepted; actual
 Meta event availability and ad-set selection remain owner-side setup.
+
+
+## Telemetry identity and attribution (2026-11-05)
+
+**Status: passed.** All seven browser scenarios pass for Patrol 2.1.0.
+
+Local checks (Node 26.0.0, npm 12.2.0):
+
+| Command | Result |
+| --- | --- |
+| `npm ci` | PASS: 146 packages installed, 0 audit vulnerabilities. Existing npm allowScripts settings blocked five dependency install scripts; tests/build passed. |
+| `node --import tsx --test --test-name-pattern='live identity transitions' src/game/telemetry.test.ts` | Expected FAIL before the implementation change: the old code still called the ineffective live replay override. |
+| `node --import tsx --test src/game/telemetry.test.ts` | PASS after the fix: 20/20 telemetry tests, including startup reconciliation and live transition assertions. |
+| `npm test` | PASS on the final implementation: 147/147 tests, 0 failures. |
+| `npm run build` | PASS: TypeScript and Vite build, 57 modules; existing bundle-size warning only. |
+| `node --check scripts/check-account-analytics.js` and anonymous counterpart | PASS. |
+| `git diff --check` | PASS. |
+
+Browser environment: OpenJDK 21, Auth emulator on 9099 and Firestore emulator on 18080. Firestore used 18080 because localhost:8080 was occupied. The repository's rules/indexes and application Firebase configuration were unchanged; test-context routes redirected Firestore requests to 18080.
+
+To rerun, put Java 21 on PATH and use three terminals from the repository root. These commands use the standard emulator ports in `firebase.json`: Auth on 9099 and Firestore on 8080. Open a blank page first so the scripts can install interception before any app navigation.
+
+```sh
+# Terminal 1
+npx --yes firebase-tools@13.29.1 emulators:start --only auth,firestore --project patrol-daac9
+# Terminal 2
+VITE_FIREBASE_EMULATORS=1 npm run dev
+# Terminal 3
+npx --yes --package @playwright/cli playwright-cli -s=patrol-id open about:blank
+npx --yes --package @playwright/cli playwright-cli -s=patrol-id run-code --filename=scripts/check-account-analytics.js
+npx --yes --package @playwright/cli playwright-cli -s=patrol-id run-code --filename=scripts/check-anonymous-analytics.js
+npx --yes --package @playwright/cli playwright-cli -s=patrol-id close
+```
+
+Stop the emulator and dev-server processes with Ctrl-C after the checks finish.
+
+Vite served `http://localhost:3000/`. All test contexts installed routes before app navigation: every Meta request and every PostHog POST was fulfilled locally; only remote-config/recorder GETs continued. Production Firebase requests were blocked, with zero attempts reported. Uploads were decoded from `postDataBuffer()` and gunzipped where applicable, including `/s/` snapshots. No synthetic analytics uploads reached PostHog or Meta. The assertions inspect decoded outbound payloads, not the in-page recent buffer. Playwright CLI exits successfully when a callback returns a FAIL result, so every scenario status was inspected separately.
+
+We accepted that replay pauses after sign-out until the next page load. With pinned SDK 1.438.12 and the project's current trigger-group settings, recording starts on `app_open`, which fires once per page. After sign-out, replay stays buffered until the next page load; that page's `app_open` resumes recording under the new guest identity. Gameplay identity and session rotate immediately. Startup recording calls remain; the ineffective live-transition override was removed. No SDK upgrade, recording-setting change, project change or extra app_open was used.
+
+| Scenario | Result | Evidence |
+| --- | --- | --- |
+| 1. Tagged guest entry | **PASS** | Tagged app_open retains meta/paid, version 2.1.0 and false person processing; automatic URL/referrer/initial/GeoIP-disable properties are absent. |
+| 2. Guest reload and fresh browser | **PASS** | Reload retains the anonymous distinct_id; a fresh browser context receives a different id. |
+| 3. Google link, sign-out privacy, and replay after reload | **PASS** | All 20 checks pass: one identify; same session through linking; new guest id/session and false person processing after sign-out; no replay activity after confirmed sign-out uses the old uid or session; replay resumes under the new guest on reload. One app_open per page; aggregate privacy/version checks pass. |
+| 4. Restore a linked Firebase account | **PASS** | First app_open after linked-account restore already uses the Firebase uid and true person processing. |
+| 5. Legacy identified store isolation | **PASS** | Seeded default-key identified store is ignored; the separate patrol_anonymous_v1 store contains a fresh guest id; no identify is sent. |
+| 6. Failed campaign fetch waits for the guest fallback | **PASS** | Campaign fetch aborted before Auth exists; no event or snapshot before fallback; country_load_error then uses a fresh guest id. |
+| 7. Delayed Auth reconciles a different persisted account | **PASS** | Persisted linked account restored with Auth lookup held for 3 seconds; no upload during the hold; fresh anonymous predecessor in identify proves reset, followed by uid events and a new-session replay snapshot. |
+
+One intercepted payload sample per scenario follows. Emails/names are synthetic and redacted; rrweb bodies are summarized by event count, type and timestamp.
+
+Scenario 1 (PASS):
+
+```json
+{"event":"app_open","properties":{"distinct_id":"01a1ac5a-c805-70d0-a31a-a4116f3ac1ea","utm_source":"meta","utm_medium":"paid","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac5a-c8f7-76d0-b450-30527ac4eb6b","$is_identified":false,"$process_person_profile":false}}
+```
+
+Scenario 2 (PASS):
+
+```json
+{"event":"app_open","properties":{"distinct_id":"01a1ac5a-c805-70d0-a31a-a4116f3ac1ea","utm_source":"meta","utm_medium":"paid","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac5a-c8f7-76d0-b450-30527ac4eb6b","$is_identified":false,"$process_person_profile":false}}
+```
+
+Scenario 3 (PASS):
+
+```json
+{"event":"$snapshot","properties":{"$session_id":"01a1ac59-26d0-7c57-9aeb-1d93cece0bdb","distinct_id":"01a1ac59-26a0-7bc0-bbe6-fc97264e4f6f","$snapshot_data":{"eventCount":7,"types":[3],"earliestTimestamp":1793892898176,"latestTimestamp":1793892898188}}}
+```
+
+Scenario 4 (PASS):
+
+```json
+{"event":"app_open","properties":{"distinct_id":"d9RmqKyygB71cKU58Aqz4q2RUU6o","app_version":"2.1.0","signed_in":true,"email":"[synthetic email]","name":"[synthetic name]","email_verified":true,"auth_provider":"google.com","$session_id":"01a1ac59-6474-7c69-9b48-181aaeebffa0","$is_identified":true,"$process_person_profile":true}}
+```
+
+Scenario 5 (PASS):
+
+```json
+{"event":"app_open","properties":{"distinct_id":"01a1ac5a-efdc-7fb9-98dd-536d586931d3","app_version":"2.1.0","signed_in":false,"$session_id":"01a1ac5a-f089-7223-b603-5c8748a71b57","$is_identified":false,"$process_person_profile":false}}
+```
+
+Scenario 6 (PASS):
+
+```json
+{"event":"country_load_error","properties":{"distinct_id":"01a1ac59-9e71-7b2e-8845-eee5e31f147d","reason":"initialization_failed","signed_in":false,"app_version":"2.1.0","$session_id":"01a1ac59-9e72-7af3-8b14-68454febaffa","$is_identified":false,"$process_person_profile":false}}
+```
+
+Scenario 7 (PASS):
+
+```json
+{"event":"$identify","properties":{"distinct_id":"d9RmqKyygB71cKU58Aqz4q2RUU6o","$anon_distinct_id":"01a1ac59-bdc7-74bb-83d8-76d129cb588e","$session_id":"01a1ac59-bdc8-7197-884f-b1db091c490d","$is_identified":true,"$process_person_profile":true}}
+```
+
+Scenario 3 recorded confirmed sign-out after Firebase had replaced the account with an anonymous user and the home screen was ready (`signOutAt: 1793892886282`). After opening levels, it observed uploads for 5500 ms: no snapshot contained rrweb activity newer than that boundary. After reload and a visible screen change, a guest snapshot contained seven type-3 rrweb events at 1793892898176–1793892898188, later than the action boundary `1793892898126`. Across the observation window, no snapshot with post-sign-out rrweb timestamps carried the previous Firebase uid or session (`unsafeReplay: []`). Both app_open counts and all aggregate privacy/version checks were reached and passed.
+
+The fallback scenario observed its first upload 11079 ms after SDK readiness, against an 8000 ms Auth timeout (100 ms observation tolerance). Gameplay batching/replay readiness can delay delivery beyond that timeout.
+
+Unverified: PR CI, server-side ingestion/GeoIP enrichment, production return rates/attribution, cross-device production behavior and deployment. The two inactive timing traces retain their separate allow-list and still strip app_version. Email/name event properties and capture_exceptions:false are unchanged.

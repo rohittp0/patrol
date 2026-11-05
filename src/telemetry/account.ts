@@ -1,7 +1,8 @@
 import type { AnalyticsParams } from "./events";
 
-/** Only these Firebase Auth fields can become event properties. No tokens/UIDs. */
+/** Auth fields used by telemetry. The uid is identity only, never an event property. */
 export interface EventAccount {
+  uid: string;
   isAnonymous: boolean;
   email: string | null;
   displayName: string | null;
