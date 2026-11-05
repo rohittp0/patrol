@@ -6,19 +6,21 @@ export const POSTHOG_TOKEN = "phc_qvnmtmJK9HVoMtGsY6HHS66U6dcbfqBpR3ZBhkgCW54G";
 const SDK_PROPERTIES = new Set([
   "token", "distinct_id", "$session_id", "$window_id", "$insert_id", "$lib", "$lib_version",
   "$browser", "$browser_version", "$os", "$device_type", "debug_mode",
+  "$process_person_profile", "$is_identified", "$anon_distinct_id",
 ]);
 export const POSTHOG_CONFIG = {
   api_host: "https://us.i.posthog.com",
   defaults: "2026-05-30",
-  person_profiles: "never",
-  // A fresh anonymous ID per page load; never reuse the formerly identified store.
-  persistence: "memory",
+  person_profiles: "identified_only",
+  // Persist browser identity without reopening the pre-v2 identified default store.
+  persistence: "localStorage+cookie",
   persistence_name: "patrol_anonymous_v1",
+  internal_or_test_user_hostname: null,
   ip: false,
   autocapture: false,
   capture_pageview: false,
   capture_pageleave: false,
-  disable_session_recording: false,
+  disable_session_recording: true,
   session_recording: {
     maskAllInputs: true,
     blockSelector: "#player-photo, #crop-editor, #newspaper",
@@ -41,9 +43,16 @@ export const POSTHOG_CONFIG = {
     if (event.event === "$snapshot") {
       delete event.$set;
       delete event.$set_once;
-      event.properties.$process_person_profile = false;
-      event.properties.$is_identified = false;
       event.properties.$geoip_disable = true;
+      return event;
+    }
+    if (event.event === "$identify") {
+      for (const [key, value] of Object.entries(event.properties)) {
+        if (!SDK_PROPERTIES.has(key) || !["string", "number", "boolean"].includes(typeof value))
+          delete event.properties[key];
+      }
+      delete event.$set;
+      delete event.$set_once;
       return event;
     }
     const isTiming = Object.hasOwn(PERFORMANCE_TRACES, event.event);
@@ -63,8 +72,6 @@ export const POSTHOG_CONFIG = {
     }
     delete event.$set;
     delete event.$set_once;
-    event.properties.$process_person_profile = false;
-    event.properties.$is_identified = false;
     event.properties.$geoip_disable = true;
     return event;
   },

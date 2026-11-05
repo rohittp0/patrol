@@ -4,12 +4,13 @@ import {
   getAuth,
   GoogleAuthProvider,
   linkWithPopup,
+  onIdTokenChanged,
   signInAnonymously,
   signInWithCredential,
   signOut,
 } from "firebase/auth";
 import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
-import { setTelemetryAccount } from "./telemetry";
+import { setTelemetryAccount, setTelemetryIdentity } from "./telemetry";
 import { FIREBASE_CONFIG } from "./firebase.config";
 import {
   settleTraining,
@@ -110,6 +111,7 @@ export class ProgressClient {
     }
     this.store = new ProgressStore(this.db, board, levels, navigation);
     setTelemetryAccount(() => this.auth.currentUser);
+    onIdTokenChanged(this.auth, user => setTelemetryIdentity(user && !user.isAnonymous ? user.uid : null));
   }
   get player() {
     return settleTraining(this.response.player, this.now());
