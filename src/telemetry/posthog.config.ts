@@ -44,7 +44,6 @@ export const POSTHOG_CONFIG = {
     if (event.event === "$snapshot") {
       delete event.$set;
       delete event.$set_once;
-      event.properties.$geoip_disable = true;
       return event;
     }
     if (event.event === "$identify") {
@@ -73,7 +72,6 @@ export const POSTHOG_CONFIG = {
     }
     delete event.$set;
     delete event.$set_once;
-    event.properties.$geoip_disable = true;
     return event;
   },
 } satisfies Partial<PostHogConfig>;
