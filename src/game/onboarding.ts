@@ -1,4 +1,6 @@
-import type { PlayerState } from "./collection";
+import { ECONOMY, type PlayerState } from "./collection";
+/** The Academy lesson runs at the level that first unlocks Rapid Action. */
+export const ACADEMY_LESSON_LEVEL = ECONOMY.catalog.rapid.unlock;
 import type { PatrolGame } from "./engine";
 export function needsFieldLesson(player: PlayerState) {
   return !player.results["1"];
@@ -7,7 +9,7 @@ export function academyLesson(
   player: PlayerState,
 ): "purchase" | "train" | "timer" | null {
   // No surprise onboarding for an existing player beyond the requested cutoff.
-  if (player.unlocked !== 3 || player.results["3"]) return null;
+  if (player.unlocked !== ACADEMY_LESSON_LEVEL || player.results[String(ACADEMY_LESSON_LEVEL)]) return null;
   const rapid = player.squads.rapid;
   if (!rapid) return "purchase";
   if (rapid.training || rapid.step > 0)

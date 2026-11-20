@@ -156,9 +156,24 @@ test("four-slot USA saves are accepted while five slots, invalid levels and mism
     { "player.deploymentSlots": 5, "player.selection": [null,null,null,null,null] },
     { "player.deploymentSlots": 4, "player.selection": [null,null,null] },
     { "player.deploymentSlots": 3, "player.selection": [null,null,null,null] },
-    { "player.unlocked": 26 },
+    { "player.unlocked": 41 },
   ]) await assertFails(updateDoc(ref, { ...patch, "player.revision": 1, updatedAt: serverTimestamp() }));
   const active = { id: "usa-16", level: 16, country: "usa", selection: ["patrol-1",null,null,null], steps: [0], setup: {}, rules: {}, moves: [] };
   await assertSucceeds(updateDoc(ref, { active, "player.revision": 1, updatedAt: serverTimestamp() }));
-  for (const country of ["hungary", "india"]) await assertFails(updateDoc(ref, { active: {...active,country}, "player.revision": 2, updatedAt: serverTimestamp() }));
+  for (const country of ["hungary", "india", "europe"]) await assertFails(updateDoc(ref, { active: {...active,country}, "player.revision": 2, updatedAt: serverTimestamp() }));
+});
+
+test("Europe Levels 26–40 save with the europe country and reject other countries", async () => {
+  const id = `europe-${crypto.randomUUID()}`;
+  const db = environment.authenticatedContext(id).firestore(), ref = doc(db, "players", id);
+  const save = freshSave();
+  save.player.unlocked = 40;
+  save.player.deploymentSlots = 4;
+  save.player.selection = ["patrol-1", "patrol-2", "patrol-3", null];
+  save.player.results["40"] = { bestMoves: 5, paid: 102 };
+  await assertSucceeds(setDoc(ref, save));
+  const active = { id: "europe-26", level: 26, country: "europe", selection: ["patrol-1",null,null,null], steps: [0], setup: {}, rules: {}, moves: [] };
+  await assertSucceeds(updateDoc(ref, { active, "player.revision": 1, updatedAt: serverTimestamp() }));
+  for (const country of ["usa", "india"]) await assertFails(updateDoc(ref, { active: {...active,country}, "player.revision": 2, updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(ref, { active: {...active,level:41}, "player.revision": 2, updatedAt: serverTimestamp() }));
 });

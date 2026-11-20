@@ -36,7 +36,8 @@ const levels: Mission[] = JSON.parse(
 const navigation = new Navigation(board);
 const usa: CountryBoard = JSON.parse(readFileSync("public/data/usa.json", "utf8"));
 const usaLevels: Mission[] = JSON.parse(readFileSync("public/data/usa-campaign.json", "utf8")).levels;
-const worlds = { india: {board, navigation}, usa: {board:usa, navigation:new Navigation(usa)} };
+const europe: CountryBoard = JSON.parse(readFileSync("public/data/europe.json", "utf8"));
+const worlds = { india: {board, navigation}, usa: {board:usa, navigation:new Navigation(usa)}, europe: {board:europe, navigation:new Navigation(europe)} };
 const campaignWorld = (level: number) => worlds[chapterForLevel(level).country];
 async function session(
   credential?: AuthCredential,

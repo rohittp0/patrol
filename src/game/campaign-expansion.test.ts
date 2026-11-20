@@ -8,10 +8,10 @@ import { createMission, replayAttempt, type Mission } from "./missions";
 import { Navigation } from "./navigation";
 import type { CountryBoard } from "./types";
 const read = (name: string) => JSON.parse(readFileSync(`public/data/${name}.json`, "utf8"));
-const india: CountryBoard = read("india"), usa: CountryBoard = read("usa");
-const manifests = [read("india-campaign"), read("usa-campaign")];
+const india: CountryBoard = read("india"), usa: CountryBoard = read("usa"), europe: CountryBoard = read("europe");
+const manifests = [read("india-campaign"), read("usa-campaign"), read("europe-campaign")];
 const levels: Mission[] = manifests.flatMap(c => c.levels);
-const worlds = { india: { board: india, navigation: new Navigation(india) }, usa: { board: usa, navigation: new Navigation(usa) } };
+const worlds = { india: { board: india, navigation: new Navigation(india) }, usa: { board: usa, navigation: new Navigation(usa) }, europe: { board: europe, navigation: new Navigation(europe) } };
 const worldForLevel = (level: number) => worlds[chapterForLevel(level).country];
 function change(state: PlayerProgress, input: Omit<ProgressMutation, "revision" | "actionId">) {
   return advanceProgress(state, { ...input, revision: state.player.revision, actionId: crypto.randomUUID() }, worldForLevel, levels, 1000);
