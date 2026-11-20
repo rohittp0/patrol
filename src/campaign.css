@@ -1942,6 +1942,13 @@ button .icon {
   height: 44px;
   background: #1b2e23ee;
 }
+.game-actions {
+  display: flex;
+  gap: 8px;
+}
+.game-actions > * {
+  pointer-events: auto;
+}
 .game-tools,
 .help-button {
   display: none;
