@@ -196,12 +196,14 @@ function author(country: string) {
       const nodes = board.nodes.map((node, index) => ({ node, index, exit: exitDistance(node.p) }))
         .filter(({ node, exit }) => node.kind === "land" && node.region === region && exit >= tuning.spawnExitKm[0] && exit <= tuning.spawnExitKm[1])
         .sort((a, b) => a.index - b.index);
-      const pick = nodes[(number * 7 + r) % Math.max(1, nodes.length)];
+      for (let k = 0; k < tuning.spawnsPerRegion; k++) {
+      const pick = nodes[(number * 7 + r + k * 13) % Math.max(1, nodes.length)];
       if (!pick) continue;
       const order = board.borders.map((border, index) => ({ index, d: distanceKm(border.post, pick.node.p) })).sort((a, b) => a.d - b.d).map((entry) => entry.index);
       const posts = [0, 1, 2, 3].map((i) => order[Math.min(order.length - 1, spread + i * 3)]);
       if (slots === 3) posts[3] = order.at(-1)!;
       candidates.push({ runnerNode: pick.index, posts, targets: [] });
+      }
     }
     for (const candidate of candidates) {
       if (missions.some((m) => m.runnerNode === candidate.runnerNode)) continue;

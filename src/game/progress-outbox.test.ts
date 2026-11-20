@@ -39,7 +39,7 @@ const transition = (
 const wait = () => new Promise<void>((resolve) => queueMicrotask(resolve));
 test("purchase and training update immediately while the first cloud write is held", async () => {
   const p = initialProgress();
-  p.player.unlocked = 3;
+  p.player.unlocked = 6;
   p.player.wallet = 75;
   let release!: (p: PlayerProgress) => void;
   const sent: PendingProgress[] = [];
@@ -110,7 +110,7 @@ test("start, saved moves, reward and next level retain exact attempt identities 
       moves: levels[0].witness,
     }),
   );
-  assert.equal(box.response.player.wallet, 90);
+  assert.equal(box.response.player.wallet, 36);
   assert.equal(box.response.player.unlocked, 2);
   box.enqueue(
     "next",
@@ -126,11 +126,11 @@ test("start, saved moves, reward and next level retain exact attempt identities 
   release();
   await box.flush();
   assert.equal(committed.active!.id, second);
-  assert.equal(committed.player.wallet, 90);
+  assert.equal(committed.player.wallet, 36);
 });
 test("offline journal survives reload and a committed response-lost purchase is not applied twice", async () => {
   const p = initialProgress();
-  p.player.unlocked = 3;
+  p.player.unlocked = 6;
   p.player.wallet = 75;
   const box = new ProgressOutbox(
     { confirmed: p, pending: [] },
@@ -197,7 +197,7 @@ test("a newer device revision preserves unsynced local progress without overwrit
 
 test("cached optimistic play continues while startup reconciles a response-lost write", async () => {
   const p = initialProgress();
-  p.player.unlocked = 3;
+  p.player.unlocked = 6;
   p.player.wallet = 75;
   const bought = transition(p, {
     action: { kind: "purchase", squad: "rapid" },

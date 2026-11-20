@@ -143,20 +143,21 @@ export const PLAYTEST_CONFIG = {
       { levels: [1, 5], roster: [["patrol-1", 0], ["patrol-2", 0], ["patrol-3", 0]], moves: [2, 2], minOpenings: 3, basicMustFail: false },
       { levels: [6, 8], roster: [["patrol-1", 0], ["rapid", 0], ["patrol-3", 0]], moves: [2, 2], minOpenings: 2, basicMustFail: false },
       { levels: [9, 10], roster: [["patrol-1", 0], ["rapid", 1], ["patrol-3", 0]], moves: [2, 3], minOpenings: 1, basicMustFail: false },
-      { levels: [11, 12], roster: [["patrol-1", 0], ["rapid", 1], ["helicopter", 0]], moves: [3, 3], minOpenings: 0, basicMustFail: true },
-      { levels: [13, 15], roster: [["patrol-1", 0], ["rapid", 2], ["helicopter", 1]], moves: [3, 4], minOpenings: 0, basicMustFail: true },
+      { levels: [11, 12], roster: [["patrol-1", 0], ["rapid", 1], ["helicopter", 0]], moves: [2, 4], minOpenings: 0, basicMustFail: true },
+      { levels: [13, 15], roster: [["patrol-1", 0], ["rapid", 2], ["helicopter", 2]], moves: [3, 5], minOpenings: 0, basicMustFail: true },
       { levels: [16, 18], roster: [["marksman", 0], ["rapid", 2], ["helicopter", 1], ["patrol-1", 0]], moves: [3, 3], minOpenings: 0, basicMustFail: true },
       { levels: [19, 21], roster: [["marksman", 1], ["rapid", 3], ["helicopter", 2], ["patrol-1", 0]], moves: [3, 4], minOpenings: 0, basicMustFail: true },
       { levels: [22, 25], roster: [["marksman", 2], ["rapid", 3], ["helicopter", 3], ["patrol-1", 0]], moves: [3, 5], minOpenings: 0, basicMustFail: true },
-      { levels: [26, 30], roster: [["marksman", 3], ["rapid", 4], ["helicopter", 3], ["patrol-1", 0]], moves: [3, 5], minOpenings: 0, basicMustFail: true },
-      { levels: [31, 35], roster: [["marksman", 4], ["rapid", 4], ["helicopter", 4], ["patrol-1", 0]], moves: [4, 6], minOpenings: 0, basicMustFail: true },
-      { levels: [36, 40], roster: [["marksman", 4], ["rapid", 4], ["helicopter", 4], ["patrol-1", 0]], moves: [5, 7], minOpenings: 0, basicMustFail: true },
+      { levels: [26, 30], roster: [["marksman", 3], ["rapid", 4], ["helicopter", 3], ["patrol-1", 0]], moves: [3, 6], minOpenings: 0, basicMustFail: true },
+      { levels: [31, 35], roster: [["marksman", 4], ["rapid", 4], ["helicopter", 4], ["patrol-1", 0]], moves: [4, 7], minOpenings: 0, basicMustFail: true },
+      { levels: [36, 40], roster: [["marksman", 4], ["rapid", 4], ["helicopter", 4], ["patrol-1", 0]], moves: [4, 8], minOpenings: 0, basicMustFail: true },
     ],
     /** STARTER: offline authoring search bounds per country: beam states,
      * nearest posts tried per state, candidate spawns per curated setup, first-move
      * posts checked for forgiveness, distance ranks for fallback starting posts,
-     * and the [min, max] km from a land-exit post for fallback spawns. */
-    authoring: { beam: 10, nearestPosts: 10, spawnsPerSetup: 8, openingPosts: 10, farPostRanks: [2, 5, 8, 12, 16], spawnExitKm: [80, 260] },
+     * the [min, max] km from a land-exit post for fallback spawns, and fallback
+     * spawns tried per region and post spread. */
+    authoring: { beam: 10, nearestPosts: 10, spawnsPerSetup: 8, openingPosts: 10, farPostRanks: [2, 5, 8, 12, 16], spawnExitKm: [80, 260], spawnsPerRegion: 2 },
     /** STARTER: runner minimum per move as fraction of sqrt(the current country land area). */
     travelFloorFraction: 0.008,
     /** STARTER: simulated seconds per real second, positive. One uniform clock
