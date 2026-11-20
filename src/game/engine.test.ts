@@ -102,6 +102,17 @@ test("the runner can escape during its remaining travel after a squad arrives", 
   assert.deepEqual(game.outcome, { kind: "lost", reason: "escape" });
   assert(order.elapsedHours > order.squadArrivalHours);
   assert(game.securedBorders.has(3));
+  assert.equal(game.activeOrder, null, "An escape must end the move so playback can show the result");
+});
+
+test("frame-by-frame playback stops once the runner escapes", () => {
+  const { board, setup, rules } = floorFixture(0.2);
+  const game = new PatrolGame(board, setup, rules);
+  assert(game.issueOrder(0, 3));
+  let frames = 0;
+  while (game.activeOrder && frames++ < 100_000) game.advanceHours(1 / 600);
+  assert.deepEqual(game.outcome, { kind: "lost", reason: "escape" });
+  assert.equal(game.activeOrder, null);
 });
 
 test("advancing across early arrival in one frame matches many smaller frames", () => {
@@ -163,7 +174,9 @@ test("runner can escape during travel, before the new border is secured", () => 
   game.resolveOrder();
   assert.deepEqual(game.outcome, { kind: "lost", reason: "escape" });
   assert(!game.securedBorders.has(0));
-  assert(game.activeOrder!.elapsedHours < game.activeOrder!.durationHours);
+  assert.equal(game.activeOrder, null);
+  const order = game.history.at(-1)!;
+  assert(order.elapsedHours < order.durationHours);
   assert.equal(game.issueOrder(0, 1), false);
 });
 

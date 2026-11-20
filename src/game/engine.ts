@@ -284,7 +284,9 @@ export class PatrolGame {
       order.runnerTravelledKm += runnerMove.travelled;
       remaining = Math.max(0, remaining - actualElapsed);
       if (this.won) { this.activeOrder = null; return; }
-      if (runnerMove.escaped) { this.outcome = { kind: "lost", reason: "escape" }; return; }
+      // An escape ends the move: a lingering active order would keep playback
+      // running forever and lock every control.
+      if (runnerMove.escaped) { this.outcome = { kind: "lost", reason: "escape" }; this.activeOrder = null; return; }
       if (travelling && order.squadArrivalHours - order.elapsedHours <= tolerance) {
         squad.border = order.to;
         squad.actor = this.actorAt(this.board.borders[order.to].node);

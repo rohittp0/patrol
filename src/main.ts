@@ -443,7 +443,7 @@ async function renderPlay() {
   }
   stopMap();
   const generation = mapGeneration;
-  root.innerHTML = `<main class="game-page"><div id="map" role="region" aria-label="${chapterForLevel(levelNumber).name} patrol map"></div><header class="game-top topbar">${button(icon("home"), "leave", 'aria-label="Return to base"', "game-back")}<button class="target-hud" data-action="briefing" data-level="${levelNumber}"><img src="/${portraitPath(targetFile())}" alt=""/><span><small>LEVEL ${levelNumber}</small><b>${escape(targetFile().shortName)}</b><small>${game.rules.runnerSpeedKmh} km/h</small></span></button>${soundButton("audio-button game-sound")}</header><div class="metrics"><strong id="moves-left">${ECONOMY.maxMoves - game.ordersUsed}</strong><span>MOVES</span></div><div class="game-note" id="game-note"></div><section class="squad-dock" aria-label="Deployed squads"><div class="dock-heading"><span id="selected-label">Choose a squad or a free post</span>${button(icon("close"), "clear", 'aria-label="Clear selection"', "text-button")}</div><div id="game-squads" class="game-squads"></div><div class="journey" id="journey"></div><div id="deploy-control"></div></section><div id="coach-host"></div><section class="result-panel" id="result-panel" hidden></section>${toast()}<div id="modal-host"></div></main>`;
+  root.innerHTML = `<main class="game-page"><div id="map" role="region" aria-label="${chapterForLevel(levelNumber).name} patrol map"></div><header class="game-top topbar">${button(icon("home"), "leave", 'aria-label="Return to base"', "game-back")}<button class="target-hud" data-action="briefing" data-level="${levelNumber}"><img src="/${portraitPath(targetFile())}" alt=""/><span><small>LEVEL ${levelNumber}</small><b>${escape(targetFile().shortName)}</b><small>${game.rules.runnerSpeedKmh} km/h</small></span></button><div class="game-actions">${guide ? "" : button(icon("reset"), "restart", 'aria-label="Restart level"', "audio-button game-sound game-restart")}${soundButton("audio-button game-sound")}</div></header><div class="metrics"><strong id="moves-left">${ECONOMY.maxMoves - game.ordersUsed}</strong><span>MOVES</span></div><div class="game-note" id="game-note"></div><section class="squad-dock" aria-label="Deployed squads"><div class="dock-heading"><span id="selected-label">Choose a squad or a free post</span>${button(icon("close"), "clear", 'aria-label="Clear selection"', "text-button")}</div><div id="game-squads" class="game-squads"></div><div class="journey" id="journey"></div><div id="deploy-control"></div></section><div id="coach-host"></div><section class="result-panel" id="result-panel" hidden></section>${toast()}<div id="modal-host"></div></main>`;
   const { PatrolMap: MapView } = await import("./map-view");
   if (generation !== mapGeneration || route !== "play" || !game) return;
   let fallbackReported = false;
@@ -619,8 +619,10 @@ function animate() {
     if (!active) return;
     advancePlayback(game, elapsed);
     map?.renderActors(game);
-    if (game.activeOrder) moveFrame = requestAnimationFrame(frame);
+    if (game.activeOrder && game.outcome.kind === "playing")
+      moveFrame = requestAnimationFrame(frame);
     else {
+      moveFrame = 0;
       forecast = null;
       renderHUD();
       if (game.outcome.kind !== "playing") void finish();
@@ -1113,6 +1115,13 @@ root.addEventListener("click", (event) => {
     go("home");
     return;
   }
+  if (action === "restart") {
+    if (route !== "play" || !client.response.active || guide) return;
+    modal(
+      `<div class="result-medal">${icon("reset")}</div><span class="eyebrow">LEVEL ${levelNumber}</span><h2>Restart this level?</h2><p>Your current moves will be lost and the pursuit starts again with the same squads.</p>${button(`${icon("reset")} RESTART`, "confirm-restart", "data-network", "button primary full")}${button("Keep playing", "close-modal", "", "text-button full")}`,
+    );
+    return;
+  }
   void run(async () => {
     if (action === "purchase" || action === "train") {
       const squad = target.dataset.id as Specialist;
@@ -1173,6 +1182,21 @@ root.addEventListener("click", (event) => {
           rapid_rank: rank("rapid"), helicopter_rank: rank("helicopter"), marksman_rank: rank("marksman"),
         });
       }
+    } else if (action === "confirm-restart") {
+      const active = client.response.active;
+      if (!active || route !== "play") return;
+      const restartedLevel = game?.outcome.kind === "playing" ? active.level : undefined;
+      const selection = [...active.selection];
+      document.querySelector<HTMLDialogElement>("dialog")?.close();
+      stopMap();
+      await client.start(active.level, selection);
+      if (restartedLevel) track("level_abandon", { hunt_number: restartedLevel, reason: "restart" });
+      roster = selection;
+      const restored = restoreGame();
+      if (restored) {
+        await renderPlay();
+        track("level_start", { entry: "restart", level_name: mission().id, empty_slots: selection.filter((id) => id === null).length });
+      } else go("roster");
     } else if (action === "resume") {
       await client.load();
       const restored = restoreGame();
