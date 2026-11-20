@@ -115,9 +115,10 @@ npm run test:rules
 npm run prepare:campaign
 ```
 
-The two public campaign manifests contain 25 distinct spawns and replayed winning
-witnesses with recommended rosters. `npm run prepare:usa` preserves the existing
-India levels while regenerating USA; `prepare:campaign` regenerates both chapters. Geometry and economy hashes are checked by
+The three public campaign manifests (India, USA, Europe) contain 40 levels with
+distinct spawns and replayed winning witnesses, authored from the difficulty plan
+in `progressionV2.campaignPlan`. `npm run prepare:campaign [country...]` regenerates
+chapters, resuming from per-level checkpoints. Geometry and economy hashes are checked by
 tests. Basic/less-trained same-route comparisons are recorded separately: a
 failed witness is not proof that every possible weaker-roster strategy fails.
 The campaign's prices and progression remain playtest tuning, not a claim of

@@ -16,6 +16,7 @@ import {
   settleTraining,
   type PlayerAction,
   type SquadId,
+  campaignExtensionDue,
 } from "./game/collection";
 import {
   advanceProgress,
@@ -316,7 +317,7 @@ export class ProgressClient {
           if (this.outbox === activeOutbox) activeOutbox.resume();
         });
     } else activeOutbox.resume();
-    if (this.player.unlocked === 15 && this.player.results["15"])
+    if (campaignExtensionDue(this.player))
       await this.operation("action", { action: { kind: "extend-campaign" } });
     return this.response;
   }

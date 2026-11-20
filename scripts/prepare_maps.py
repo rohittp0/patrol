@@ -60,7 +60,10 @@ def haversine(a, b):
 
 def build(level):
     iso = level["admin0Code"]
-    features = [f for f in states if f["properties"]["adm0_a3"] == iso]
+    # A combined patrol zone lists every member country; shared national
+    # boundaries become internal borders and only outside frontiers are exits.
+    members = set(level.get("admin0Codes", [iso]))
+    features = [f for f in states if f["properties"]["adm0_a3"] in members]
     raw_country = max(parts(make_valid(unary_union([shape(f["geometry"]) for f in features])), "Polygon"), key=lambda p: p.area)
     latitude = raw_country.centroid.y
     sx = math.pi * 6371.0088 / 180 * math.cos(math.radians(latitude))
@@ -92,6 +95,24 @@ def build(level):
                 if group is None:
                     group = min(hosts, key=lambda host: host[1].distance(poly.representative_point()))[0]
                 groups[group].append(poly)
+    elif len(members) > 1:
+        # Large members split into their first-level regions (French regions,
+        # German states); smaller members stay whole. City-states join a host.
+        hosts_by_name = {"Berlin": "Brandenburg", "Bremen": "Niedersachsen", "Hamburg": "Schleswig-Holstein"}
+        def group_of(props):
+            if props["adm0_a3"] == "FRA":
+                return "fr-" + props["region"].lower().replace(" ", "-"), props["region"]
+            if props["adm0_a3"] == "DEU":
+                name = hosts_by_name.get(props["name"], props["name"])
+                return "de-" + name.lower().replace(" ", "-"), name
+            return props["adm0_a3"].lower(), props["admin"]
+        labels = {}
+        for feature in features:
+            group, label = group_of(feature["properties"])
+            labels[group] = label
+            geometry = transform(project, make_valid(shape(feature["geometry"]))).intersection(country)
+            for poly in parts(geometry, "Polygon"):
+                groups[group].append(poly)
     else:
         counties = {"GS", "VA", "ZA", "SO", "BA", "TO", "VE", "PE", "FE", "KE", "NO", "HE", "BZ", "BK", "CS", "BE", "HB", "SZ", "JN"}
         named = {"HU-"+code: "hu-"+code.lower() for code in counties}
@@ -105,7 +126,20 @@ def build(level):
             groups[group].append(geometry)
 
     grouped = {key: make_valid(unary_union(values)).intersection(country) for key, values in groups.items()}
-    land_lines = unary_union([transform(project, shape(f["geometry"])) for f in land_boundaries if iso in (f["properties"]["ADM0_A3_L"], f["properties"]["ADM0_A3_R"])])
+    grouped = {key: geometry for key, geometry in grouped.items() if not geometry.is_empty}
+    if len(members) > 1:
+        # Detached fragments (such as the Enclave des Papes) join the region
+        # that surrounds them; a guardable border can never be a closed ring.
+        main_parts = {key: max(parts(geometry, "Polygon"), key=lambda polygon: polygon.area) for key, geometry in grouped.items()}
+        regrouped = defaultdict(list)
+        for key, geometry in grouped.items():
+            for polygon in parts(geometry, "Polygon"):
+                owner = key
+                if polygon is not main_parts[key] and not polygon.equals(main_parts[key]):
+                    owner = min((other for other in main_parts if other != key), key=lambda other: main_parts[other].distance(polygon))
+                regrouped[owner].append(polygon)
+        grouped = {key: make_valid(unary_union(values)) for key, values in regrouped.items()}
+    land_lines = unary_union([transform(project, shape(f["geometry"])) for f in land_boundaries if members & {f["properties"]["ADM0_A3_L"], f["properties"]["ADM0_A3_R"]} and not {f["properties"]["ADM0_A3_L"], f["properties"]["ADM0_A3_R"]} <= members])
     network = linemerge(unary_union([geometry.boundary for geometry in grouped.values()]))
     arcs = []
     for line in parts(network, "LineString"):

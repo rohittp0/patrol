@@ -54,7 +54,7 @@ test("browser progression only pays a completed win once and preserves the origi
     /Complete/,
   );
   state = change(state, { op: "finish", attemptId, moves: levels[0].witness });
-  assert.equal(state.player.wallet, 90);
+  assert.equal(state.player.wallet, 36);
   assert.equal(state.player.unlocked, 2);
   assert.equal(state.active, null);
   assert.throws(
@@ -72,7 +72,7 @@ test("browser progression only pays a completed win once and preserves the origi
     moves: levels[0].witness,
   });
   assert.equal(state.reward, 0);
-  assert.equal(state.player.wallet, 90);
+  assert.equal(state.player.wallet, 36);
 });
 test("partial-move checkpoints cannot rewind saved time or replace prior moves", () => {
   let state = change(initialProgress(), {
@@ -103,7 +103,7 @@ test("partial-move checkpoints cannot rewind saved time or replace prior moves",
 });
 test("browser training honors its clock and keeps empty-slot play available", () => {
   let state = initialProgress();
-  state.player.unlocked = 3;
+  state.player.unlocked = 6;
   state.player.wallet = 100;
   state = change(state, {
     op: "action",

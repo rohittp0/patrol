@@ -4,6 +4,9 @@ A pursuit game played on the real world map. The player commands squads to catch
 
 ## Language
 
+**Europe zone**:
+The combined patrol zone for Levels 26–40: France, Germany, Belgium, the Netherlands, Luxembourg, Switzerland, Austria and Czechia. Their shared national boundaries are internal borders; frontiers with every other country are land exits. Large members are divided into French regions and German states.
+
 **Patrol zone**:
 The geographic area under the player's patrol authority, currently one non-island country with detached islands excluded. A combined zone can encompass adjoining countries, with their shared national boundaries inside the zone.
 _Avoid_: Authoritative zone
@@ -13,7 +16,7 @@ A numbered, playable mission with its own starting setup, patrol zone, move budg
 _Avoid_: Challenge, hunt in player-facing copy
 
 **Campaign**:
-The ordered progression through levels and then successive countries, beginning with India for every player. India contains Levels 1–15; the USA follows with Levels 16–25. Other countries remain future progression.
+The ordered progression through levels and then successive countries, beginning with India for every player. India contains Levels 1–15; the USA follows with Levels 16–25; the combined Europe zone follows with Levels 26–40. Other zones remain future progression. Difficulty rises gently: Levels 1–8 are two-move wins that basic patrols can solve, and specialists become necessary from Level 11.
 
 **Opening country**:
 The country in which the campaign begins, currently India for every player.
@@ -22,7 +25,7 @@ The country in which the campaign begins, currently India for every player.
 The numbered sequence of levels within each country, followed by the next country in the campaign. Every player follows the same progression beginning in India, regardless of location.
 
 **Guided level**:
-Level 1, beginning immediately after Play: select three squads, choose a squad and a destination, preview movement, deploy, and continue through the first capture. Level 2 has no guide. Level 3 has a separate Academy lesson for recruiting Rapid Action and starting its first upgrade, with enough earned money for both. The timer explains unavailability and sequential upgrades; tutorials end there. Both lessons are mandatory. Completing the first capture ends field training; recruiting and starting the first Rapid upgrade enables the Academy lesson’s completion action. Completion is saved with campaign progress.
+Level 1, beginning immediately after Play: select three squads, read self-paced briefing cards on the fugitive, guarded borders, moves and previews, then choose a squad and a destination, compare free previews, deploy, read a debrief of what changed, and continue through the first capture. Only Deploy is restricted to the taught move. Levels 2–5 have no guide. Level 6, where Rapid Action unlocks, has a separate Academy lesson for recruiting Rapid Action and starting its first upgrade, with enough earned money for both. The timer explains unavailability and sequential upgrades; tutorials end there. Both lessons are mandatory. Completing the first capture ends field training; recruiting and starting the first Rapid upgrade enables the Academy lesson’s completion action. Completion is saved with campaign progress.
 
 **Campaign progress**:
 The player's campaign position, level results, money, squad collection, training progress, last-used squad selection, and current chase state. Signed-in players can continue their saved progress on another device.
@@ -84,10 +87,10 @@ The ordered sequence of upgrades for an individual squad, with each upgrade beco
 The real-world waiting period required to complete a purchased squad upgrade. The squad is unavailable for level selection while training, and gains the upgrade when training finishes. Each specialist's first upgrade takes longer than the preceding specialist's final upgrade, in the order Rapid Action, Helicopter, Marksman. Existing training keeps its promised completion time.
 
 **Deployment slot**:
-One optional place for a selected squad in a level; players may start with slots empty, including while owned squads are training. Players begin with three slots. A fourth becomes available to purchase at Level 15 and carries across countries. A fifth remains future content, with no release level assigned.
+One optional place for a selected squad in a level; players may start with slots empty, including while owned squads are training. Players begin with three slots. A fourth becomes available to purchase at Level 15 and carries across countries and zones. A fifth remains future content, with no release level assigned.
 
 **Unlock requirement**:
-A campaign progression requirement that must be met before a squad or additional deployment slot becomes available to purchase. Unlocking a purchase does not grant it for free.
+A campaign progression requirement that must be met before a squad or additional deployment slot becomes available to purchase. Unlocking a purchase does not grant it for free. Rapid Action unlocks at Level 6, Helicopter at Level 11, Marksman at Level 16 and the fourth slot at Level 15.
 
 **Move**:
 A single squad relocation or Helicopter Squad deployment, resolved before the next move while the fugitive travels. Guarding begins on arrival, and game time stays paused between completed moves; a short relocation can finish before the fugitive completes its minimum travel for that move.

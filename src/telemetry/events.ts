@@ -4,7 +4,7 @@
  * IDs, photos, URLs and raw errors are excluded.
  * COLLECTED_EVENTS is the current funnel. Legacy module definitions below remain
  * type-compatible but are blocked at both collection and transport boundaries. */
-export const APP_VERSION = "2.1.0";
+export const APP_VERSION = "2.2.0";
 export const PARAMETERS = {
   email: "Signed-in Firebase account email, when available.",
   name: "Signed-in Firebase display name, when available.",

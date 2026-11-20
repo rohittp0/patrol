@@ -38,8 +38,8 @@
  */
 export const PLAYTEST_CONFIG = {
   progressionV2: {
-    /** AGREED: India first for everybody; 25 consecutive levels across two chapters. */
-    version: 2, country: "india", levelCount: 25, maxMoves: 15, slots: 3,
+    /** AGREED: India first for everybody; 40 consecutive levels across three chapters. */
+    version: 2, country: "india", levelCount: 40, maxMoves: 15, slots: 3,
     /** AGREED: the fifth slot remains future content, with no assigned unlock level. */
     futureSlots: [],
     /** AGREED: fourth slot at Level 15; fifth slot deferred. Price is STARTER coins. */
@@ -48,9 +48,13 @@ export const PLAYTEST_CONFIG = {
     chapters: [
       { country: "india", name: "India", first: 1, last: 15 },
       { country: "usa", name: "USA", first: 16, last: 25 },
+      { country: "europe", name: "Europe", first: 26, last: 40 },
     ],
-    /** STARTER: integer game-money amounts, never real currency. */
-    baseReward: 30, rewardStep: 15,
+    /** STARTER: integer game-money amounts, never real currency. Level n pays
+     * baseReward + (n - 1) * rewardStep before its move multiplier. Kept close to
+     * what the Academy can absorb; Levels 1–5 at the 1× tier must still cover the
+     * Rapid recruit and first upgrade for the Academy lesson (>= 45). */
+    baseReward: 12, rewardStep: 1,
     /** AGREED: real seconds per sequential upgrade. Each specialist's first
      * upgrade takes longer than the previous specialist's last. Values STARTER. */
     trainingSeconds: {
@@ -60,11 +64,13 @@ export const PLAYTEST_CONFIG = {
     },
     /** STARTER: game money charged for upgrade steps 1–4. */
     upgradeCosts: [20, 30, 50, 70],
-    /** STARTER: unlock levels and prices; Rapid at Level 3 is AGREED. */
+    /** AGREED: Rapid Level 6, Helicopter Level 11, Marksman Level 16, so the
+     * first levels teach patrol logic alone. Prices are STARTER. The Academy
+     * lesson runs at Rapid's unlock level. */
     catalog: {
-      rapid: { name: "Rapid Action Squad", unlock: 3, price: 25, symbol: "↯", description: "Reach distant posts before the fugitive. Train for faster movement." },
-      helicopter: { name: "Helicopter Squad", unlock: 6, price: 60, symbol: "✣", description: "Deploy to any free post. Temporary guarding; reusable throughout a level." },
-      marksman: { name: "Marksman Squad", unlock: 10, price: 100, symbol: "◎", description: "A firing radius while stationed. Train to extend its reach." },
+      rapid: { name: "Rapid Action Squad", unlock: 6, price: 25, symbol: "↯", description: "Reach distant posts before the fugitive. Train for faster movement." },
+      helicopter: { name: "Helicopter Squad", unlock: 11, price: 60, symbol: "✣", description: "Deploy to any free post. Temporary guarding; reusable throughout a level." },
+      marksman: { name: "Marksman Squad", unlock: 16, price: 100, symbol: "◎", description: "A firing radius while stationed. Train to extend its reach." },
     },
     /** STARTER: km/h at upgrade steps 0–4; positive, strictly increasing. */
     rapidSpeeds: [180, 240, 320, 430, 580],
@@ -78,43 +84,85 @@ export const PLAYTEST_CONFIG = {
     patrolSpeedKmh: 120,
     /** AGREED: one distinct illustrated opponent and independently tunable running
      * speed per campaign level. STARTER speeds are simulated km/h, positive and
-     * increasing; fictional chase values, never historical athletic claims. */
+     * increasing; fictional chase values, never historical athletic claims.
+     * The curve rises gently through Level 8, then steepens per chapter. */
     opponents: [
-      { caseId: "veerappan", speedKmh: 48 },
-      { caseId: "sobhraj", speedKmh: 52 },
-      { caseId: "phoolan", speedKmh: 60 },
-      { caseId: "raghav", speedKmh: 64 },
-      { caseId: "tomar", speedKmh: 72 },
-      { caseId: "malkhan", speedKmh: 80 },
-      { caseId: "bulger", speedKmh: 84 },
-      { caseId: "kelly", speedKmh: 88 },
-      { caseId: "karpis", speedKmh: 92 },
-      { caseId: "dillinger", speedKmh: 96 },
-      { caseId: "barrow", speedKmh: 100 },
-      { caseId: "nelson", speedKmh: 104 },
-      { caseId: "ambrus", speedKmh: 108 },
-      { caseId: "rozsa", speedKmh: 112 },
-      { caseId: "savanyu", speedKmh: 116 },
-      { caseId: "sutton", speedKmh: 120 },
-      { caseId: "floyd", speedKmh: 124 },
-      { caseId: "doc-barker", speedKmh: 128 },
-      { caseId: "fred-barker", speedKmh: 132 },
-      { caseId: "morris", speedKmh: 136 },
-      { caseId: "ray", speedKmh: 140 },
-      { caseId: "kaczynski", speedKmh: 144 },
-      { caseId: "rudolph", speedKmh: 148 },
-      { caseId: "holden", speedKmh: 152 },
-      { caseId: "cooper", speedKmh: 156 },
+      // India 1–15: patrol-only start, Rapid from 6, Helicopter from 11
+      { caseId: "veerappan", speedKmh: 40 },
+      { caseId: "sobhraj", speedKmh: 44 },
+      { caseId: "phoolan", speedKmh: 48 },
+      { caseId: "raghav", speedKmh: 52 },
+      { caseId: "tomar", speedKmh: 56 },
+      { caseId: "malkhan", speedKmh: 58 },
+      { caseId: "bulger", speedKmh: 60 },
+      { caseId: "kelly", speedKmh: 62 },
+      { caseId: "karpis", speedKmh: 64 },
+      { caseId: "dillinger", speedKmh: 68 },
+      { caseId: "barrow", speedKmh: 70 },
+      { caseId: "nelson", speedKmh: 74 },
+      { caseId: "ambrus", speedKmh: 78 },
+      { caseId: "rozsa", speedKmh: 82 },
+      { caseId: "savanyu", speedKmh: 86 },
+      // USA 16–25: Marksman from 16, four slots
+      { caseId: "sutton", speedKmh: 90 },
+      { caseId: "floyd", speedKmh: 94 },
+      { caseId: "doc-barker", speedKmh: 98 },
+      { caseId: "fred-barker", speedKmh: 102 },
+      { caseId: "morris", speedKmh: 106 },
+      { caseId: "ray", speedKmh: 110 },
+      { caseId: "kaczynski", speedKmh: 114 },
+      { caseId: "rudolph", speedKmh: 118 },
+      { caseId: "holden", speedKmh: 122 },
+      { caseId: "cooper", speedKmh: 126 },
+      // Europe 26–40: the hardest stretch
+      { caseId: "mesrine", speedKmh: 130 },
+      { caseId: "cartouche", speedKmh: 132 },
+      { caseId: "schinderhannes", speedKmh: 134 },
+      { caseId: "grasel", speedKmh: 136 },
+      { caseId: "biggs", speedKmh: 138 },
+      { caseId: "de-lichte", speedKmh: 140 },
+      { caseId: "mandrin", speedKmh: 142 },
+      { caseId: "hiasl", speedKmh: 144 },
+      { caseId: "matuska", speedKmh: 146 },
+      { caseId: "milfajt", speedKmh: 148 },
+      { caseId: "sobri", speedKmh: 150 },
+      { caseId: "bonnot", speedKmh: 152 },
+      { caseId: "loutrel", speedKmh: 154 },
+      { caseId: "spaggiari", speedKmh: 156 },
+      { caseId: "carlos", speedKmh: 158 },
     ],
+    /** STARTER: offline level-authoring plan, applied by scripts/prepare-campaign.ts.
+     * Each tier covers an inclusive level range. `roster` is the recommended
+     * selection as [squad id, upgrade step]; the verified witness uses it.
+     * `moves` is the inclusive witness length range (moves). `minOpenings` is
+     * the minimum count of distinct first moves that still win within the range
+     * (forgiveness; 0 disables the check). `basicMustFail` requires the three
+     * basic Patrol squads to fail the same route, so the tier needs its
+     * specialists. Level 1 keeps its guided tutorial setup. */
+    campaignPlan: [
+      { levels: [1, 5], roster: [["patrol-1", 0], ["patrol-2", 0], ["patrol-3", 0]], moves: [2, 2], minOpenings: 3, basicMustFail: false },
+      { levels: [6, 8], roster: [["patrol-1", 0], ["rapid", 0], ["patrol-3", 0]], moves: [2, 2], minOpenings: 2, basicMustFail: false },
+      { levels: [9, 10], roster: [["patrol-1", 0], ["rapid", 1], ["patrol-3", 0]], moves: [2, 3], minOpenings: 1, basicMustFail: false },
+      { levels: [11, 12], roster: [["patrol-1", 0], ["rapid", 1], ["helicopter", 0]], moves: [2, 4], minOpenings: 0, basicMustFail: true },
+      { levels: [13, 15], roster: [["patrol-1", 0], ["rapid", 2], ["helicopter", 2]], moves: [3, 5], minOpenings: 0, basicMustFail: true },
+      { levels: [16, 18], roster: [["marksman", 0], ["rapid", 2], ["helicopter", 1], ["patrol-1", 0]], moves: [3, 3], minOpenings: 0, basicMustFail: true },
+      { levels: [19, 21], roster: [["marksman", 1], ["rapid", 3], ["helicopter", 2], ["patrol-1", 0]], moves: [3, 4], minOpenings: 0, basicMustFail: true },
+      { levels: [22, 25], roster: [["marksman", 2], ["rapid", 3], ["helicopter", 3], ["patrol-1", 0]], moves: [3, 5], minOpenings: 0, basicMustFail: true },
+      { levels: [26, 30], roster: [["marksman", 3], ["rapid", 4], ["helicopter", 3], ["patrol-1", 0]], moves: [3, 6], minOpenings: 0, basicMustFail: true },
+      { levels: [31, 35], roster: [["marksman", 4], ["rapid", 4], ["helicopter", 4], ["patrol-1", 0]], moves: [3, 7], minOpenings: 0, basicMustFail: true },
+      { levels: [36, 40], roster: [["marksman", 4], ["rapid", 4], ["helicopter", 4], ["patrol-1", 0]], moves: [3, 8], minOpenings: 0, basicMustFail: true },
+    ],
+    /** STARTER: offline authoring search bounds per country: beam states,
+     * nearest posts tried per state, candidate spawns per curated setup, first-move
+     * posts checked for forgiveness, distance ranks for fallback starting posts,
+     * the [min, max] km from a land-exit post for fallback spawns, and fallback
+     * spawns tried per region and post spread. */
+    authoring: { beam: 10, nearestPosts: 10, spawnsPerSetup: 8, openingPosts: 10, farPostRanks: [2, 5, 8, 12, 16], spawnExitKm: [80, 260], spawnsPerRegion: 2 },
     /** STARTER: runner minimum per move as fraction of sqrt(the current country land area). */
     travelFloorFraction: 0.008,
     /** STARTER: simulated seconds per real second, positive. One uniform clock
      * across all orders; never accelerate a long journey to meet a duration cap. */
     playbackScale: 6000,
-    /** STARTER: offline authoring search bounds: moves, beam states, nearest posts,
-     * candidate spawns per region and fourth-post minimum clearance in km.
-     * Bounded search is not a proof of impossibility. */
-    usaAuthoring: { depth: 7, beam: 12, nearestPosts: 8, spawnsPerRegion: 12, fourthPostClearanceKm: 350 },
     /** STARTER: worker search bounds; not a proof of impossibility. */
     searchBeam: 24, searchDepth: 15,
   },
@@ -607,6 +655,29 @@ export const PLAYTEST_CONFIG = {
       /** STARTER: minimum spawn distance from internal borders, in kilometres. */
       minimumRunnerInternalBorderKm: 15,
       /** AGREED starter budget: positive integer; winning on order 8 scores 0. */
+      maxOrders: 8,
+    },
+    {
+      /** AGREED: one combined Europe patrol zone after the USA. Shared national
+       * boundaries are internal borders; outside frontiers are land exits. */
+      id: "europe",
+      name: "Europe",
+      countryCodes: ["FR", "DE", "BE", "NL", "LU", "CH", "AT", "CZ"],
+      /** Map compiler key; admin0Codes lists every member country. */
+      admin0Code: "EUR",
+      admin0Codes: ["FRA", "DEU", "BEL", "NLD", "LUX", "CHE", "AUT", "CZE"],
+      /** STARTER: allowed squads per hunt, in preparation preference order. */
+      squadCounts: [4],
+      /** STARTER: runner travel floor / escape-route distance, in [0,1]. */
+      escapePressureRange: { min: 0, max: 0.4 },
+      /** STARTER: guard against accidentally reverting to a sparse internal network. */
+      minimumInternalBorders: 40,
+      /** STARTER: camera radius and spawn clearance distances, in kilometres. */
+      initialViewRadiusKm: 300,
+      minimumRunnerZoneEdgeKm: 25,
+      minimumRunnerExitKm: 60,
+      minimumRunnerInternalBorderKm: 10,
+      /** STARTER: positive integer; legacy hunt budget, unused by the campaign. */
       maxOrders: 8,
     },
     {

@@ -8,10 +8,10 @@ import { createMission, replayAttempt, type Mission } from "./missions";
 import { Navigation } from "./navigation";
 import type { CountryBoard } from "./types";
 const read = (name: string) => JSON.parse(readFileSync(`public/data/${name}.json`, "utf8"));
-const india: CountryBoard = read("india"), usa: CountryBoard = read("usa");
-const manifests = [read("india-campaign"), read("usa-campaign")];
+const india: CountryBoard = read("india"), usa: CountryBoard = read("usa"), europe: CountryBoard = read("europe");
+const manifests = [read("india-campaign"), read("usa-campaign"), read("europe-campaign")];
 const levels: Mission[] = manifests.flatMap(c => c.levels);
-const worlds = { india: { board: india, navigation: new Navigation(india) }, usa: { board: usa, navigation: new Navigation(usa) } };
+const worlds = { india: { board: india, navigation: new Navigation(india) }, usa: { board: usa, navigation: new Navigation(usa) }, europe: { board: europe, navigation: new Navigation(europe) } };
 const worldForLevel = (level: number) => worlds[chapterForLevel(level).country];
 function change(state: PlayerProgress, input: Omit<ProgressMutation, "revision" | "actionId">) {
   return advanceProgress(state, { ...input, revision: state.player.revision, actionId: crypto.randomUUID() }, worldForLevel, levels, 1000);
@@ -35,12 +35,23 @@ test("fourth slot is a one-time Level 15 purchase, with no fifth slot or forced 
   assert.throws(() => applyAction(purchased, { kind: "selection", selection: [null,null,null,null,null] }, 0), /roster/);
   assert.deepEqual(ECONOMY.futureSlots, []);
 });
-test("minimum India rewards fund all specialist upgrades plus the fourth slot", () => {
+test("minimum India rewards fund the early specialists and the fourth slot only gradually", () => {
   let player = newPlayer();
   for (let level = 1; level <= 15; level++) player = awardWin(player, level, ECONOMY.maxMoves).player;
-  const allUpgrades = Object.values(ECONOMY.catalog).reduce((cost, squad) => cost + squad.price + ECONOMY.upgradeCosts.reduce((a,b)=>a+b,0), 0);
-  assert(player.wallet >= allUpgrades + ECONOMY.fourthSlot.price);
+  assert(player.wallet >= ECONOMY.catalog.rapid.price + ECONOMY.catalog.helicopter.price + ECONOMY.upgradeCosts[0] * 2);
+  const training = ECONOMY.upgradeCosts.reduce((x, y) => x + y, 0);
+  assert(player.wallet < ECONOMY.catalog.rapid.price + ECONOMY.catalog.helicopter.price + training * 2 + ECONOMY.fourthSlot.price, "Slow play cannot buy everything India offers");
   assert.equal(player.unlocked, 16);
+});
+test("legacy USA completion unlocks Europe once without a payout", () => {
+  const old = initialProgress(); old.player.unlocked = 25; old.player.wallet = 900;
+  old.player.results["25"] = { bestMoves: 7, paid: 390 };
+  const migrated = change(old, { op: "action", action: { kind: "extend-campaign" } });
+  assert.equal(migrated.player.unlocked, 26);
+  assert.equal(migrated.player.wallet, 900);
+  assert.throws(() => change(migrated, { op: "action", action: { kind: "extend-campaign" } }));
+  const unfinished = initialProgress(); unfinished.player.unlocked = 25;
+  assert.throws(() => change(unfinished, { op: "action", action: { kind: "extend-campaign" } }));
 });
 test("legacy India completion unlocks USA once without changing money, training, results or active pursuit", () => {
   const old = initialProgress(); old.player.unlocked = 15; old.player.wallet = 780;
@@ -62,35 +73,36 @@ test("legacy India completion unlocks USA once without changing money, training,
   const finished = change(extended, { op: "finish", attemptId: active.active!.id, moves: levels[0].witness });
   assert.equal(finished.active, null);
 });
-test("all USA levels replay verified wins on their own map, preserve global numbers, and require stronger same-route responses", () => {
-  const campaign = manifests[1];
-  assert.deepEqual(levels.map(l=>l.number), Array.from({length:25},(_,i)=>i+1));
-  assert.equal(campaign.levels.length, 10);
-  assert.equal(new Set(campaign.levels.map((m:Mission)=>m.runnerNode)).size, 10);
+for (const [index, country] of (["usa", "europe"] as const).entries()) test(`all ${country} levels replay verified wins on their own map, preserve global numbers, and require stronger same-route responses`, () => {
+  const campaign = manifests[index + 1], map = worlds[country].board, navigation = worlds[country].navigation;
+  const chapter = ECONOMY.chapters.find((c) => c.country === country)!;
+  assert.deepEqual(levels.map(l=>l.number), Array.from({length:ECONOMY.levelCount},(_,i)=>i+1));
+  assert.equal(campaign.levels.length, chapter.last - chapter.first + 1);
+  assert.equal(new Set(campaign.levels.map((m:Mission)=>m.runnerNode)).size, campaign.levels.length);
   assert.equal(campaign.configHash, createHash("sha256").update(JSON.stringify(ECONOMY)).digest("hex"));
-  assert.equal(campaign.geometryHash, createHash("sha256").update(JSON.stringify([usa.land,usa.borders,usa.nodes,usa.links])).digest("hex"));
-  let speed = levels[14].runnerSpeed;
+  assert.equal(campaign.geometryHash, createHash("sha256").update(JSON.stringify([map.land,map.borders,map.nodes,map.links])).digest("hex"));
+  let speed = levels[chapter.first - 2].runnerSpeed;
   for (const mission of campaign.levels as Mission[]) {
     assert(mission.runnerSpeed > speed); speed = mission.runnerSpeed;
-    let player = newPlayer(); player.unlocked = 25; player.wallet = 1000;
+    let player = newPlayer(); player.unlocked = ECONOMY.levelCount; player.wallet = 1000;
     player = applyAction(player, { kind:"buy-slot" }, 0);
     mission.recommended.forEach(({id,step})=>player.squads[id]={step,training:null});
     const roster = mission.recommended.map(s=>s.id);
     const state = change({ ...initialProgress(), player }, {op:"start",level:mission.number,selection:roster});
-    assert.equal(state.active!.country, "usa");
+    assert.equal(state.active!.country, country);
     assert.equal(state.active!.selection.length, 4);
-    const replay = replayAttempt(usa, {...state.active!,moves:mission.witness},worlds.usa.navigation);
+    const replay = replayAttempt(map, {...state.active!,moves:mission.witness},navigation);
     assert(replay.won,mission.id);
     assert.equal(replay.ordersUsed,mission.verification!.moves);
     assert(replay.ordersUsed >= 3 && replay.ordersUsed <= ECONOMY.maxMoves);
-    const basicPlayer = newPlayer(); basicPlayer.unlocked=25; basicPlayer.deploymentSlots=4; basicPlayer.selection.push(null);
-    const basic = createMission(usa,mission,basicPlayer,["patrol-1","patrol-2","patrol-3",null],0,worlds.usa.navigation).game;
+    const basicPlayer = newPlayer(); basicPlayer.unlocked=ECONOMY.levelCount; basicPlayer.deploymentSlots=4; basicPlayer.selection.push(null);
+    const basic = createMission(map,mission,basicPlayer,["patrol-1","patrol-2","patrol-3",null],0,navigation).game;
     for (const move of mission.witness) { if(!basic.issueOrder(move.squad,move.border))break; basic.resolveOrder(); }
     assert.equal(basic.won,false,mission.id);
     assert.equal(mission.verification!.basicWitnessWins,basic.won);
     const lower = structuredClone(player);
     for (const squad of Object.values(lower.squads)) if(squad) squad.step=Math.max(0,squad.step-1);
-    const weaker=createMission(usa,mission,lower,roster,0,worlds.usa.navigation).game;
+    const weaker=createMission(map,mission,lower,roster,0,navigation).game;
     for (const move of mission.witness) { if(!weaker.issueOrder(move.squad,move.border))break; weaker.resolveOrder(); }
     assert.equal(mission.verification!.weakerWitnessMoves,weaker.won?weaker.ordersUsed:null);
     assert.throws(()=>createMission(india,mission,player,roster,0),/another country/);
@@ -98,7 +110,7 @@ test("all USA levels replay verified wins on their own map, preserve global numb
     const loaded = JSON.parse(JSON.stringify(saved));
     const finished = change(loaded,{op:"finish",attemptId:state.active!.id,moves:mission.witness});
     assert.equal(finished.active,null);
-    assert.equal(finished.player.unlocked,25);
+    assert.equal(finished.player.unlocked,ECONOMY.levelCount);
     assert(finished.player.results[String(mission.number)]);
   }
 });

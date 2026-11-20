@@ -61,7 +61,8 @@ test("Previous hunt is disabled only at the campaign start and crosses country b
   assert.equal(previousHunt("usa", 0), null);
   assert.deepEqual(previousHunt("usa", 1), { country: "usa", huntIndex: 0 });
   assert.deepEqual(previousHunt("india", 0), { country: "usa", huntIndex: 5 });
-  assert.deepEqual(previousHunt("hungary", 0), { country: "india", huntIndex: 5 });
+  assert.deepEqual(previousHunt("europe", 0), { country: "india", huntIndex: 5 });
+  assert.deepEqual(previousHunt("hungary", 0), { country: "europe", huntIndex: 5 });
   assert.equal(previousHunt("missing", 0), null);
   const indiaFirst = ["india", "usa", "hungary"];
   assert.equal(previousHunt("india", 0, indiaFirst), null);
