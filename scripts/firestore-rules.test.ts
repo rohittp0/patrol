@@ -68,7 +68,7 @@ test("save rules reject stale revisions, malformed data and spoofed update times
   const invalid = [
     { "player.revision": 0 },
     { "player.wallet": -1, "player.revision": 1 },
-    { "player.unlocked": 26, "player.revision": 1 },
+    { "player.unlocked": 41, "player.revision": 1 },
     { "player.version": 3, "player.revision": 1 },
     { "player.squads": "invalid", "player.revision": 1 },
     { "player.selection": [], "player.revision": 1 },

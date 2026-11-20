@@ -214,9 +214,13 @@ Starter balance still needs player evidence. India positions and original
 three-slot witnesses are preserved. Existing completed Level 15 saves advance to
 16 once without a new payout; old active attempts retain their original setup.
 
-`npm run prepare:usa` rebuilds USA and adds optional fourth India starting posts
-without regenerating the original India levels. `npm run prepare:campaign`
-regenerates both chapters. Hashes and winning routes are checked by the game tests.
+`npm run prepare:campaign [india|usa|europe]` authors every level from the tier
+plan in `progressionV2.campaignPlan`: roster and ranks, witness move range,
+forgiveness (winning first moves) for the opening levels, and whether the basic
+patrols must fail the same route. Level 1 keeps its guided tutorial setup. Search
+is bounded, so move ranges describe the shortest win found, not a proof. The
+Europe board comes from `npm run prepare:maps europe` and its pool from
+`npm run prepare:setups europe`. Hashes and winning routes are checked by the game tests.
 
 ## Legacy board-pool progression and presentation
 

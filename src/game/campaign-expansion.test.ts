@@ -39,7 +39,8 @@ test("minimum India rewards fund the early specialists and the fourth slot only 
   let player = newPlayer();
   for (let level = 1; level <= 15; level++) player = awardWin(player, level, ECONOMY.maxMoves).player;
   assert(player.wallet >= ECONOMY.catalog.rapid.price + ECONOMY.catalog.helicopter.price + ECONOMY.upgradeCosts[0] * 2);
-  assert(player.wallet < ECONOMY.fourthSlot.price + ECONOMY.catalog.rapid.price, "Slow play no longer buys everything at once");
+  const training = ECONOMY.upgradeCosts.reduce((x, y) => x + y, 0);
+  assert(player.wallet < ECONOMY.catalog.rapid.price + ECONOMY.catalog.helicopter.price + training * 2 + ECONOMY.fourthSlot.price, "Slow play cannot buy everything India offers");
   assert.equal(player.unlocked, 16);
 });
 test("legacy USA completion unlocks Europe once without a payout", () => {

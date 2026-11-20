@@ -824,7 +824,7 @@ function renderCoach() {
       title = `Choose Squad ${squadLetter}`;
       body =
         selectedPost === null
-          ? `One squad moves per turn while the others keep their borders closed. Squad ${squadLetter} can move without opening the fugitive's way out.`
+          ? `One squad moves per turn while the others keep their borders closed. Send Squad ${squadLetter} this turn.`
           : `Post ${selectedPost + 1} is selected. Choose Squad ${squadLetter} to preview the chase.`;
     } else if (selectedPost === null) {
       selector = `[data-border="${order.border}"]`;
@@ -1010,6 +1010,8 @@ root.addEventListener(
         post = element.closest<HTMLElement>("[data-border]"),
         squad = element.closest<HTMLElement>('[data-action="select-squad"]');
       const planning = fieldBriefing >= FIELD_BRIEFING.length && !fieldDebrief && !game.activeOrder;
+      // Deploy explains itself when the previewed plan is not the taught one.
+      if (planning && action === "deploy") return;
       if (
         order &&
         ((post && (planning || Number(post.dataset.border) === order.border)) ||

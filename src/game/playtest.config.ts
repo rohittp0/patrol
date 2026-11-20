@@ -149,8 +149,8 @@ export const PLAYTEST_CONFIG = {
       { levels: [19, 21], roster: [["marksman", 1], ["rapid", 3], ["helicopter", 2], ["patrol-1", 0]], moves: [3, 4], minOpenings: 0, basicMustFail: true },
       { levels: [22, 25], roster: [["marksman", 2], ["rapid", 3], ["helicopter", 3], ["patrol-1", 0]], moves: [3, 5], minOpenings: 0, basicMustFail: true },
       { levels: [26, 30], roster: [["marksman", 3], ["rapid", 4], ["helicopter", 3], ["patrol-1", 0]], moves: [3, 6], minOpenings: 0, basicMustFail: true },
-      { levels: [31, 35], roster: [["marksman", 4], ["rapid", 4], ["helicopter", 4], ["patrol-1", 0]], moves: [4, 7], minOpenings: 0, basicMustFail: true },
-      { levels: [36, 40], roster: [["marksman", 4], ["rapid", 4], ["helicopter", 4], ["patrol-1", 0]], moves: [4, 8], minOpenings: 0, basicMustFail: true },
+      { levels: [31, 35], roster: [["marksman", 4], ["rapid", 4], ["helicopter", 4], ["patrol-1", 0]], moves: [3, 7], minOpenings: 0, basicMustFail: true },
+      { levels: [36, 40], roster: [["marksman", 4], ["rapid", 4], ["helicopter", 4], ["patrol-1", 0]], moves: [3, 8], minOpenings: 0, basicMustFail: true },
     ],
     /** STARTER: offline authoring search bounds per country: beam states,
      * nearest posts tried per state, candidate spawns per curated setup, first-move
@@ -163,10 +163,6 @@ export const PLAYTEST_CONFIG = {
     /** STARTER: simulated seconds per real second, positive. One uniform clock
      * across all orders; never accelerate a long journey to meet a duration cap. */
     playbackScale: 6000,
-    /** STARTER: offline authoring search bounds: moves, beam states, nearest posts,
-     * candidate spawns per region and fourth-post minimum clearance in km.
-     * Bounded search is not a proof of impossibility. */
-    usaAuthoring: { depth: 7, beam: 12, nearestPosts: 8, spawnsPerRegion: 12, fourthPostClearanceKm: 350 },
     /** STARTER: worker search bounds; not a proof of impossibility. */
     searchBeam: 24, searchDepth: 15,
   },
