@@ -18,7 +18,7 @@ import {
 } from "firebase/firestore";
 import { FIREBASE_CONFIG } from "../src/firebase.config";
 import { ProgressStore, ProgressConflict } from "../src/progress-store";
-import { chapterForLevel } from "../src/game/collection";
+import { chapterForLevel, ECONOMY } from "../src/game/collection";
 import { Navigation } from "../src/game/navigation";
 import type {
   PlayerProgress,
@@ -36,7 +36,8 @@ const levels: Mission[] = JSON.parse(
 const navigation = new Navigation(board);
 const usa: CountryBoard = JSON.parse(readFileSync("public/data/usa.json", "utf8"));
 const usaLevels: Mission[] = JSON.parse(readFileSync("public/data/usa-campaign.json", "utf8")).levels;
-const worlds = { india: {board, navigation}, usa: {board:usa, navigation:new Navigation(usa)} };
+const europe: CountryBoard = JSON.parse(readFileSync("public/data/europe.json", "utf8"));
+const worlds = { india: {board, navigation}, usa: {board:usa, navigation:new Navigation(usa)}, europe: {board:europe, navigation:new Navigation(europe)} };
 const campaignWorld = (level: number) => worlds[chapterForLevel(level).country];
 async function session(
   credential?: AuthCredential,
@@ -115,31 +116,34 @@ test("browser progression saves directly, deduplicates retries, restores moves a
       moves: levels[0].witness,
     });
     state = await s.store.mutate(s.uid, claim);
-    assert.equal(state.reward, 90);
+    assert.equal(state.reward, 36);
     const duplicate = await s.store.mutate(s.uid, claim);
-    assert.equal(duplicate.player.wallet, 90);
+    assert.equal(duplicate.player.wallet, 36);
     assert.equal(duplicate.player.revision, state.player.revision);
     await assert.rejects(
       () => s.store.mutate(s.uid, { ...claim, actionId: crypto.randomUUID() }),
       ProgressConflict,
     );
-    state = await s.store.mutate(
-      s.uid,
-      mutation(state, {
-        op: "start",
-        level: 2,
-        selection: ["patrol-1", "patrol-2", "patrol-3"],
-      }),
-    );
-    state = await s.store.mutate(
-      s.uid,
-      mutation(state, {
-        op: "finish",
-        attemptId: state.active!.id,
-        moves: levels[1].witness,
-      }),
-    );
-    assert.equal(state.player.unlocked, 3);
+    // Levels 2–5 are patrol-only; Rapid Action unlocks at Level 6.
+    for (let level = 2; level < ECONOMY.catalog.rapid.unlock; level++) {
+      state = await s.store.mutate(
+        s.uid,
+        mutation(state, {
+          op: "start",
+          level,
+          selection: ["patrol-1", "patrol-2", "patrol-3"],
+        }),
+      );
+      state = await s.store.mutate(
+        s.uid,
+        mutation(state, {
+          op: "finish",
+          attemptId: state.active!.id,
+          moves: levels[level - 1].witness,
+        }),
+      );
+    }
+    assert.equal(state.player.unlocked, ECONOMY.catalog.rapid.unlock);
     state = await s.store.mutate(
       s.uid,
       mutation(state, {
@@ -286,7 +290,7 @@ test("four-slot USA attempts persist, resume, and award their globally numbered 
   try {
     const fresh = await s.store.load(s.uid);
     const seeded = structuredClone(fresh); seeded.player.unlocked = 16; seeded.player.wallet = 1000; seeded.player.revision++;
-    for (const squad of ["rapid", "helicopter", "marksman"] as const) seeded.player.squads[squad] = {step:4,training:null};
+    for (const {id, step} of usaLevels[0].recommended) seeded.player.squads[id] = {step,training:null};
     let state = await s.store.commit(s.uid, {actionId:crypto.randomUUID(),revision:fresh.player.revision,progress:seeded});
     state = await s.store.mutate(s.uid, mutation(state, {op:"action",action:{kind:"buy-slot"}}));
     state = await s.store.mutate(s.uid, mutation(state, {op:"start",level:16,selection:usaLevels[0].recommended.map(r=>r.id)}));

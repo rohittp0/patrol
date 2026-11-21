@@ -89,7 +89,7 @@ restoration; it is not repeated to compensate for a discarded queue entry.
 
 ## Attribution, privacy and replay
 
-Every collected gameplay/funnel event carries `app_version: '2.1.0'`, so version
+Every collected gameplay/funnel event carries `app_version: '2.2.0'`, so version
 filters also cover level starts and outcomes. The transport retains `utm_source`,
 `utm_medium`, `utm_campaign` and `utm_content` for ad-source analysis.
 `save_referrer` remains false. Gameplay and `$identify` payloads exclude

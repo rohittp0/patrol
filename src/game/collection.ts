@@ -107,6 +107,13 @@ export type PlayerAction =
   | { kind: "prompt" }
   | { kind: "tutorial"; lesson: "field" | "academy" };
 /** Browser game transition with an explicit clock for training and repeatable tests. */
+/** A winner of an earlier campaign's final level, saved before more levels
+ * existed, advances one level without another payout. */
+export function campaignExtensionDue(state: PlayerState) {
+  return ECONOMY.chapters.some((chapter) => chapter.last === state.unlocked)
+    && state.unlocked < ECONOMY.levelCount
+    && !!state.results[String(state.unlocked)];
+}
 export function applyAction(
   current: PlayerState,
   action: PlayerAction,
@@ -115,14 +122,14 @@ export function applyAction(
   const next = settleTraining(current, now);
   if (action.kind === "buy-slot") {
     if (slotCount(next) !== 3) throw new Error("Fourth slot already owned");
-    if (next.unlocked < ECONOMY.fourthSlot.unlock) throw new Error("Available at Level 15");
+    if (next.unlocked < ECONOMY.fourthSlot.unlock) throw new Error(`Available at Level ${ECONOMY.fourthSlot.unlock}`);
     if (next.wallet < ECONOMY.fourthSlot.price) throw new Error("Not enough money");
     next.wallet -= ECONOMY.fourthSlot.price;
     next.deploymentSlots = 4;
     next.selection = [...next.selection, null];
   } else if (action.kind === "extend-campaign") {
-    if (next.unlocked !== 15 || !next.results["15"]) throw new Error("Campaign already current");
-    next.unlocked = 16;
+    if (!campaignExtensionDue(next)) throw new Error("Campaign already current");
+    next.unlocked += 1;
   } else if (action.kind === "purchase") {
     if (!isSpecialist(action.squad)) throw new Error("Unknown squad");
     const item = ECONOMY.catalog[action.squad];

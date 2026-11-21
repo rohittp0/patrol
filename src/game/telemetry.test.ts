@@ -400,6 +400,6 @@ test("every collected event carries the release version through the SDK filter",
   for (const capture of h.captures) {
     const sent = POSTHOG_CONFIG.before_send({ uuid: crypto.randomUUID(), event: capture.name, properties: capture.params });
     assert(sent);
-    assert.equal(sent.properties.app_version, "2.1.0", capture.name);
+    assert.equal(sent.properties.app_version, "2.2.0", capture.name);
   }
 });

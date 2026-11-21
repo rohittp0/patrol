@@ -29,6 +29,7 @@ import { PLAYTEST_CONFIG } from "./game/playtest.config";
 import { caseForLevel, portraitPath } from "./game/case-files";
 import {
   academyLesson,
+  ACADEMY_LESSON_LEVEL,
   needsFieldLesson,
   guidedOrder,
 } from "./game/onboarding";
@@ -122,10 +123,35 @@ function updateAnalyticsContext() {
 function completeLesson(lesson: "field" | "academy") {
   track("guide_complete", {
     lesson,
-    hunt_number: lesson === "field" ? 1 : 3,
+    hunt_number: lesson === "field" ? 1 : ACADEMY_LESSON_LEVEL,
     duration_ms: Math.round(performance.now() - (lessonStarted.get(lesson) ?? performance.now())),
   });
 }
+/** Level 1 concept cards, read at the player's own pace before the first move. */
+const FIELD_BRIEFING = [
+  {
+    selector: ".runner-marker",
+    title: "Meet the fugitive",
+    body: () => `${targetFile().shortName} is hiding inside ${chapterForLevel(levelNumber).name}. They escape by crossing any unguarded land frontier out of the country. You win when every route out is closed.`,
+  },
+  {
+    selector: "#game-squads",
+    title: "Squads guard borders",
+    body: () => "Each squad stands at a numbered border post and guards that whole border. A guarded border glows bright and the fugitive cannot cross it. When a squad leaves, its old border opens again.",
+  },
+  {
+    selector: ".metrics",
+    title: "Moves and time",
+    body: () => `Time is frozen while you plan. Each Deploy spends one of your ${ECONOMY.maxMoves} moves, then your squad and the fugitive move at the same time. Faraway posts give the fugitive longer to run.`,
+  },
+  {
+    selector: "#game-squads",
+    title: "Preview before you commit",
+    body: () => "Pick a squad and a post to preview the chase: blue is your squad's path, gold is the fugitive's. Previews are free. Try a few, then deploy the plan that closes the net.",
+  },
+];
+let fieldBriefing: number = FIELD_BRIEFING.length;
+let fieldDebrief: { title: string; body: string } | null = null;
 let moveFrame = 0,
   lastFrame = 0,
   ended = false,
@@ -301,11 +327,11 @@ function renderLevels() {
         const file = caseForLevel(l.number),
           result = p.results[String(l.number)],
           locked = l.number > p.unlocked;
-        return `${l.number === 1 || l.number === 16 ? `<div class="chapter-heading"><span>${chapterForLevel(l.number).name}</span><small>LEVELS ${chapterForLevel(l.number).first}–${chapterForLevel(l.number).last}</small></div>` : ""}<button type="button" class="level-card ${locked ? "locked" : result ? "completed" : "current"}" data-action="briefing" data-level="${l.number}" aria-label="Level ${l.number}: ${escape(file.name)}${locked ? ", locked preview" : ""}"><span class="level-number">${String(l.number).padStart(2, "0")}</span><img src="/${portraitPath(file)}" alt="" loading="lazy"/><span class="level-status">${icon(locked ? "lock" : result ? "check" : "play")}</span><h2>${escape(file.shortName)}</h2><span class="level-speed">${icon("speed")} ${l.runnerSpeed} km/h</span><small>${result ? `${result.bestMoves} moves · captured` : locked ? `After Level ${l.number - 1}` : "Ready to pursue"}</small></button>`;
+        return `${ECONOMY.chapters.some((chapter) => chapter.first === l.number) ? `<div class="chapter-heading"><span>${chapterForLevel(l.number).name}</span><small>LEVELS ${chapterForLevel(l.number).first}–${chapterForLevel(l.number).last}</small></div>` : ""}<button type="button" class="level-card ${locked ? "locked" : result ? "completed" : "current"}" data-action="briefing" data-level="${l.number}" aria-label="Level ${l.number}: ${escape(file.name)}${locked ? ", locked preview" : ""}"><span class="level-number">${String(l.number).padStart(2, "0")}</span><img src="/${portraitPath(file)}" alt="" loading="lazy"/><span class="level-status">${icon(locked ? "lock" : result ? "check" : "play")}</span><h2>${escape(file.shortName)}</h2><span class="level-speed">${icon("speed")} ${l.runnerSpeed} km/h</span><small>${result ? `${result.bestMoves} moves · captured` : locked ? `After Level ${l.number - 1}` : "Ready to pursue"}</small></button>`;
       })
       .join(
         "",
-      )}</section><div class="future-country">${icon("lock")}<span>More countries coming after the USA</span></div>`,
+      )}</section><div class="future-country">${icon("lock")}<span>More patrol zones coming after Europe</span></div>`,
   );
 }
 function caseContent(l: Mission, expanded = false) {
@@ -357,7 +383,7 @@ function renderAcademy() {
       })
       .join(
         "",
-      )}</section><article class="slot-upgrade" data-slot-upgrade><span class="specialist-icon">${icon("squad")}</span><div><h2>Fourth deployment slot</h2><p>${slotCount(p) === 4 ? "Owned · take four squads into any level" : p.unlocked < ECONOMY.fourthSlot.unlock ? "Unlocks at Level 15" : "Add another squad to your deployment"}</p></div>${slotCount(p) === 4 ? `<span class="badge">${icon("check")} OWNED</span>` : button(`${icon("plus")} ${icon("coin")} ${ECONOMY.fourthSlot.price}`, "buy-slot", `data-network ${p.unlocked < ECONOMY.fourthSlot.unlock || p.wallet < ECONOMY.fourthSlot.price || !!client.response.active ? "disabled" : ""}`, "button secondary")}${client.response.active && slotCount(p) < 4 ? `<small>Finish or abandon your saved level before expanding.</small>` : ""}</article><div class="patrol-row">${INITIAL_SQUADS.map((id) => `<div>${unitIcon(id)}<strong>${squadName(id)}</strong><small>${ECONOMY.patrolSpeedKmh} km/h</small></div>`).join("")}</div><p class="fine-print">Training runs while away. Empty deployment slots are allowed.</p>${button(`${icon("play")} Play Level ${p.unlocked}`, "choose", `data-level="${p.unlocked}"`, "button secondary full")}`,
+      )}</section><article class="slot-upgrade" data-slot-upgrade><span class="specialist-icon">${icon("squad")}</span><div><h2>Fourth deployment slot</h2><p>${slotCount(p) === 4 ? "Owned · take four squads into any level" : p.unlocked < ECONOMY.fourthSlot.unlock ? `Unlocks at Level ${ECONOMY.fourthSlot.unlock}` : "Add another squad to your deployment"}</p></div>${slotCount(p) === 4 ? `<span class="badge">${icon("check")} OWNED</span>` : button(`${icon("plus")} ${icon("coin")} ${ECONOMY.fourthSlot.price}`, "buy-slot", `data-network ${p.unlocked < ECONOMY.fourthSlot.unlock || p.wallet < ECONOMY.fourthSlot.price || !!client.response.active ? "disabled" : ""}`, "button secondary")}${client.response.active && slotCount(p) < 4 ? `<small>Finish or abandon your saved level before expanding.</small>` : ""}</article><div class="patrol-row">${INITIAL_SQUADS.map((id) => `<div>${unitIcon(id)}<strong>${squadName(id)}</strong><small>${ECONOMY.patrolSpeedKmh} km/h</small></div>`).join("")}</div><p class="fine-print">Training runs while away. Empty deployment slots are allowed.</p>${button(`${icon("play")} Play Level ${p.unlocked}`, "choose", `data-level="${p.unlocked}"`, "button secondary full")}`,
   );
   renderCoach();
 }
@@ -410,7 +436,7 @@ function restoreGame() {
   if (
     game.outcome.kind === "playing" &&
     ((requiredField && !validField) ||
-      (levelNumber === 3 && academyLesson(player())))
+      (levelNumber === ACADEMY_LESSON_LEVEL && academyLesson(player())))
   ) {
     client.backupForTutorial();
     roster = requiredField
@@ -433,6 +459,8 @@ function restoreGame() {
     active.selection.every((id, slot) => id === INITIAL_SQUADS[slot]) &&
     game.outcome.kind === "playing" &&
     !!guidedOrder(game);
+  fieldBriefing = guide && game.ordersUsed === 0 ? 0 : FIELD_BRIEFING.length;
+  fieldDebrief = null;
   return true;
 }
 async function renderPlay() {
@@ -539,6 +567,7 @@ function renderHUD() {
 }
 function selectSquad(index: number) {
   if (!game || game.activeOrder || game.outcome.kind !== "playing") return;
+  if (guide && (fieldBriefing < FIELD_BRIEFING.length || fieldDebrief)) return;
   const order = guide ? guidedOrder(game) : null;
   if (order && order.squad !== index) {
     notice(
@@ -559,11 +588,7 @@ function selectSquad(index: number) {
 function selectPost(index: number) {
   if (!game || game.activeOrder || game.outcome.kind !== "playing") return;
   audio.unlock();
-  const order = guide ? guidedOrder(game) : null;
-  if (order && index !== order.border) {
-    notice(`Choose highlighted Post ${order.border + 1} to continue training.`);
-    return;
-  }
+  if (guide && (fieldBriefing < FIELD_BRIEFING.length || fieldDebrief)) return;
   if (game.securedBorders.has(index)) {
     notice("Choose an unguarded post.");
     return;
@@ -588,7 +613,14 @@ function issueMove() {
   )
     return;
   const index = selectedSquad;
+  const taught = guide ? guidedOrder(game) : null;
+  if (taught && (taught.squad !== index || taught.border !== selectedPost)) {
+    notice(`Previews are free. Deploy Squad ${String.fromCharCode(65 + taught.squad)} to the glowing Post ${taught.border + 1} to continue training.`);
+    return;
+  }
+  const leaving = game.squads[index].border;
   if (!game.issueOrder(index, selectedPost)) return;
+  if (taught) fieldDebrief = debriefFor(index, leaving, taught.border);
   audio.effect("deploy");
   moveLog.push({ squad: index, border: selectedPost });
   selectedPost = null;
@@ -630,6 +662,7 @@ function animate() {
         audio.effect("arrive");
         map?.revealSquad(game.runner.position);
         void saveCurrent();
+        if (fieldDebrief) renderCoach();
       }
     }
   };
@@ -711,7 +744,7 @@ function showResult(won: boolean) {
     gross = base * multiplier;
   panel.innerHTML = `<div class="result-medal">${icon(won ? "trophy" : "reset")}</div><span class="eyebrow">${won ? "CASE CLOSED" : "REGROUP"}</span><h1>${won ? `${escape(targetFile().shortName)} captured` : "They got away"}</h1><p>${won ? `${game.ordersUsed} moves · ${game.ordersUsed < 3 ? "Lightning response" : game.ordersUsed <= 5 ? "Sharp tactics" : "Mission complete"}` : game.outcome.kind === "lost" && game.outcome.reason === "budget" ? "Moves exhausted. Train or try another approach." : "The fugitive reached a land exit."}</p>
   ${won ? `<section class="reward-breakdown" aria-label="Reward calculation"><div class="reward-equation"><span><small>BASE</small>${icon("coin")} ${money(base)}</span><b>×</b><span><small>${game.ordersUsed} MOVES</small>${multiplier}</span><b>=</b><span><small>LEVEL TOTAL</small>${icon("coin")} ${money(gross)}</span></div>${resultBefore.paid ? `<p class="replay-reward">Best reward already collected: ${money(resultBefore.paid)}. Replays pay only the improvement.</p>` : ""}<div class="reward-earned"><span>NEW COINS</span><strong>+ ${money(award ?? 0)}</strong></div><div class="balance-equation">Your balance <b>${money(resultBefore.wallet)} + ${money(award ?? 0)} = ${money(player().wallet)}</b></div></section>` : ""}
-  <div class="result-actions">${won ? (levelNumber < ECONOMY.levelCount ? button(`${levelNumber === 15 ? "USA · LEVEL 16" : "NEXT LEVEL"} ${icon("arrow")}`, "next", "", "button primary full") : button(`${icon("levels")} CAMPAIGN COMPLETE`, "levels", "", "button primary full")) : button(`${icon("reset")} TRY AGAIN`, "retry", "", "button primary full")}${button(`${icon("home")} HOME`, "home", "", "button secondary full")}${!won ? button(`${icon("academy")} Academy`, "academy", "", "text-button") : ""}</div>`;
+  <div class="result-actions">${won ? (levelNumber < ECONOMY.levelCount ? button(`${ECONOMY.chapters.some((chapter) => chapter.first === levelNumber + 1) ? `${chapterForLevel(levelNumber + 1).name.toUpperCase()} · LEVEL ${levelNumber + 1}` : "NEXT LEVEL"} ${icon("arrow")}`, "next", "", "button primary full") : button(`${icon("levels")} CAMPAIGN COMPLETE`, "levels", "", "button primary full")) : button(`${icon("reset")} TRY AGAIN`, "retry", "", "button primary full")}${button(`${icon("home")} HOME`, "home", "", "button secondary full")}${!won ? button(`${icon("academy")} Academy`, "academy", "", "text-button") : ""}</div>`;
   renderCoach();
   panel.setAttribute("aria-label", won ? "Capture reward" : "Retry mission");
   if (!coachLesson)
@@ -720,6 +753,20 @@ function showResult(won: boolean) {
       ?.focus({ preventScroll: true });
 }
 
+/** Plain explanation of the move that just resolved, for the Level 1 lesson. */
+function debriefFor(squad: number, from: number | null, to: number) {
+  const letter = String.fromCharCode(65 + squad);
+  const left = game ? ECONOMY.maxMoves - game.ordersUsed : 0;
+  return {
+    title: "What just happened",
+    body: `${from === null ? `Squad ${letter}` : `Squad ${letter} left Post ${from + 1}, so that border opened behind it. It`} closed Post ${to + 1} the moment it arrived. The fugitive saw the new wall and changed course toward the nearest open border. You have ${left} moves left.`,
+  };
+}
+/** True when the fugitive's current escape route crosses the given border. */
+function routeCrosses(border: number) {
+  if (!game) return false;
+  return game.runner.route.some((point) => point.node !== null && board.nodes[point.node]?.border === border);
+}
 function renderCoach() {
   const host = document.querySelector<HTMLElement>("#coach-host");
   if (!host) return;
@@ -734,7 +781,8 @@ function renderCoach() {
     title = "",
     body = "",
     step = "",
-    done = false;
+    done = false,
+    next = "";
   if (route === "roster" && levelNumber === 1 && needsFieldLesson(player())) {
     const missing = INITIAL_SQUADS.find((id) => !roster.includes(id));
     selector = missing
@@ -754,34 +802,54 @@ function renderCoach() {
   ) {
     const order = guidedOrder(game);
     if (!order) return;
-    if (game.activeOrder) {
+    const squadLetter = String.fromCharCode(65 + order.squad);
+    if (fieldBriefing < FIELD_BRIEFING.length) {
+      const card = FIELD_BRIEFING[fieldBriefing];
+      selector = card.selector;
+      title = card.title;
+      body = card.body();
+      next = fieldBriefing === FIELD_BRIEFING.length - 1 ? "START PLANNING" : "NEXT";
+    } else if (fieldDebrief && !game.activeOrder) {
+      selector = ".runner-marker";
+      title = fieldDebrief.title;
+      body = fieldDebrief.body;
+      next = "CONTINUE";
+    } else if (game.activeOrder) {
       selector = "#journey";
       title = "Watch both paths";
       body =
-        "Both move together. Your old border opens; the new one closes on arrival.";
+        "Your squad and the fugitive move together. The border your squad left is open now; the new one closes only when the squad arrives.";
     } else if (selectedSquad === null) {
       selector = `[data-action="select-squad"][data-squad="${order.squad}"]`;
-      title = `Choose Squad ${String.fromCharCode(65 + order.squad)}`;
+      title = `Choose Squad ${squadLetter}`;
       body =
         selectedPost === null
-          ? "Choose your squad. You can pick a post first, too."
-          : `Post ${selectedPost + 1} is selected. Choose this squad to preview the chase.`;
+          ? `One squad moves per turn while the others keep their borders closed. Send Squad ${squadLetter} this turn.`
+          : `Post ${selectedPost + 1} is selected. Choose Squad ${squadLetter} to preview the chase.`;
     } else if (selectedPost === null) {
       selector = `[data-border="${order.border}"]`;
       title = `Close Post ${order.border + 1}`;
-      body =
-        "Tap the glowing post. Guarded borders block the fugitive’s land escape.";
+      body = routeCrosses(order.border)
+        ? `The fugitive is running for the border at Post ${order.border + 1}. Closing it blocks that route. You can tap other posts to compare previews.`
+        : `Closing Post ${order.border + 1} shrinks the area the fugitive can reach. You can tap other posts to compare previews.`;
+    } else if (selectedPost !== order.border) {
+      selector = `[data-border="${order.border}"]`;
+      const verdict = forecast?.outcome.kind === "lost" ? "the fugitive escapes" : forecast?.outcome.kind === "won" ? "this would capture them" : "the fugitive keeps an open route";
+      title = `Preview: ${verdict}`;
+      body = `Follow the gold line to see where the fugitive would run if Squad ${squadLetter} went to Post ${selectedPost + 1}. Now compare the glowing Post ${order.border + 1}.`;
     } else {
       selector = '[data-action="deploy"]';
       title = "Read the chase, then deploy";
-      body = "Blue: your squad. Gold: the fugitive. Deploy spends one move.";
+      body = forecast?.outcome.kind === "won"
+        ? "Blue is your squad, gold is the fugitive. Once this border closes they have no way out. Deploy spends one move."
+        : "Blue is your squad, gold is the fugitive. This closure leaves the fugitive a shorter route that you can close next. Deploy spends one move.";
     }
     step = `FIRST CAPTURE · MOVE ${game.activeOrder ? game.ordersUsed : game.ordersUsed + 1} / ${game.setup.witness.length}`;
     coachLesson = "field";
   } else if (academyLesson(player()) && !(route === "play" && !game?.won)) {
     const phase = academyLesson(player());
     coachLesson = "academy";
-    step = "LEVEL 3 · RAPID ACTION";
+    step = `LEVEL ${ACADEMY_LESSON_LEVEL} · RAPID ACTION`;
     if (route !== "academy") {
       selector =
         route === "play" && game?.won
@@ -790,8 +858,8 @@ function renderCoach() {
       title = "Rapid Action unlocked!";
       body =
         route === "play"
-          ? "Continue to Level 3. Your first specialist is ready to recruit."
-          : "Open the Academy. Your two wins cover a recruit and its first upgrade.";
+          ? `Continue to Level ${ACADEMY_LESSON_LEVEL}. Your first specialist is ready to recruit.`
+          : "Open the Academy. Your wins so far cover a recruit and its first upgrade.";
     } else if (phase === "purchase") {
       selector = '[data-action="purchase"][data-id="rapid"]';
       title = "Recruit Rapid Action";
@@ -828,24 +896,31 @@ function renderCoach() {
   }
   target.classList.add("coach-target");
   target.setAttribute("aria-describedby", "coach-copy");
+  const briefing = coachLesson === "field" && route === "play" && fieldBriefing < FIELD_BRIEFING.length;
+  const debriefing = coachLesson === "field" && route === "play" && !!fieldDebrief && !game?.activeOrder;
   const phase = done
     ? "timer"
     : route === "roster"
       ? "roster"
       : route === "play" && game?.outcome.kind === "playing"
-        ? game.activeOrder
-          ? "moving"
-          : selectedSquad === null
-            ? "squad"
-            : selectedPost === null
-              ? "post"
-              : "deploy"
+        ? briefing
+          ? "brief"
+          : debriefing
+            ? "debrief"
+            : game.activeOrder
+              ? "moving"
+              : selectedSquad === null
+                ? "squad"
+                : selectedPost === null
+                  ? "post"
+                  : "deploy"
         : route === "academy"
           ? (academyLesson(player()) ?? "academy")
           : "academy";
   const stages =
     coachLesson === "field"
       ? [
+          ["info", "BRIEF"],
           ["squad", "SQUAD"],
           ["focus", "POST"],
           ["arrow", "DEPLOY"],
@@ -856,24 +931,17 @@ function renderCoach() {
           ["rapid", "RECRUIT"],
           ["clock", "TRAIN"],
         ];
+  const fieldProgress: Record<string, number> = { roster: 0, brief: 0, squad: 1, post: 2, deploy: 3, moving: 4, debrief: 4 };
   const progress =
     coachLesson === "field"
-      ? phase === "roster"
-        ? 0
-        : phase === "squad"
-          ? 0
-          : phase === "post"
-            ? 1
-            : phase === "deploy"
-              ? 2
-              : 3
+      ? (fieldProgress[phase] ?? 4)
       : phase === "purchase"
         ? 1
         : phase === "train" || phase === "timer"
           ? 2
           : 0;
   host.dataset.phase = phase;
-  host.innerHTML = `<aside class="coach command-coach" aria-label="Tutorial" data-lesson="${coachLesson}" data-phase="${phase}" aria-live="polite"><div class="coach-top"><span class="commander-badge">${icon("commander")}</span><div><strong>FIELD COMMAND</strong><small>${step}</small></div><span class="radio-signal"><i></i><i></i><i></i></span></div><div class="coach-stage-track">${stages.map(([symbol, label], i) => `<span class="${i <= progress || (coachLesson === "field" && selectedPost !== null && i === 1) ? "lit" : ""} ${i === progress ? "current" : ""}">${icon(symbol)}<small>${label}</small></span>`).join("")}</div><h2>${title}</h2><p id="coach-copy">${body}</p>${done ? button(`UNDERSTOOD ${icon("arrow")}`, "lesson-done", "", "button primary full") : `<div class="coach-required">${icon("lock")} Follow the glowing control</div>`}</aside>`;
+  host.innerHTML = `<aside class="coach command-coach" aria-label="Tutorial" data-lesson="${coachLesson}" data-phase="${phase}" aria-live="polite"><div class="coach-top"><span class="commander-badge">${icon("commander")}</span><div><strong>FIELD COMMAND</strong><small>${step}</small></div><span class="radio-signal"><i></i><i></i><i></i></span></div><div class="coach-stage-track">${stages.map(([symbol, label], i) => `<span class="${i <= progress || (coachLesson === "field" && selectedPost !== null && i === 2) ? "lit" : ""} ${i === progress ? "current" : ""}">${icon(symbol)}<small>${label}</small></span>`).join("")}</div><h2>${title}</h2><p id="coach-copy">${body}</p>${next ? button(`${next} ${icon("arrow")}`, "coach-next", "", "button primary full") : done ? button(`UNDERSTOOD ${icon("arrow")}`, "lesson-done", "", "button primary full") : `<div class="coach-required">${icon(coachLesson === "field" && route === "play" ? "info" : "lock")} ${coachLesson === "field" && route === "play" ? "Previews are free · only Deploy spends a move" : "Follow the glowing control"}</div>`}</aside>`;
 
   const key = `${route}:${selector}:${title}`;
   if (key !== coachKey) {
@@ -933,6 +1001,7 @@ root.addEventListener(
       action === "toggle-audio" ||
       action === "dismiss" ||
       action === "lesson-done" ||
+      action === "coach-next" ||
       (action === "home" && game?.won && coachLesson === "academy")
     )
       return;
@@ -940,9 +1009,12 @@ root.addEventListener(
       const order = guidedOrder(game),
         post = element.closest<HTMLElement>("[data-border]"),
         squad = element.closest<HTMLElement>('[data-action="select-squad"]');
+      const planning = fieldBriefing >= FIELD_BRIEFING.length && !fieldDebrief && !game.activeOrder;
+      // Deploy explains itself when the previewed plan is not the taught one.
+      if (planning && action === "deploy") return;
       if (
         order &&
-        ((post && Number(post.dataset.border) === order.border) ||
+        ((post && (planning || Number(post.dataset.border) === order.border)) ||
           (squad && Number(squad.dataset.squad) === order.squad))
       )
         return;
@@ -1090,6 +1162,18 @@ root.addEventListener("click", (event) => {
     renderHUD();
     return;
   }
+  if (action === "coach-next") {
+    if (fieldBriefing < FIELD_BRIEFING.length) {
+      fieldBriefing++;
+      track("guide_step_view", { guide_step: `brief_${fieldBriefing}`, guide_move: 0 });
+      if (fieldBriefing === FIELD_BRIEFING.length && game) {
+        const order = guidedOrder(game);
+        if (order) map?.revealPost(order.border);
+      }
+    } else fieldDebrief = null;
+    renderHUD();
+    return;
+  }
   if (action === "lesson-done") {
     if (coachLesson !== "academy" || academyLesson(player()) !== "timer")
       return;
@@ -1161,7 +1245,7 @@ root.addEventListener("click", (event) => {
         );
         return;
       }
-      if (levelNumber === 3 && academyLesson(player())) {
+      if (levelNumber === ACADEMY_LESSON_LEVEL && academyLesson(player())) {
         go("academy");
         return;
       }

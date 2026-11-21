@@ -125,3 +125,27 @@ Implementation/verification sequence: extend campaign resolution and save
 compatibility; add the slot and USA cases/portraits; author and replay all ten new
 winning witnesses with weaker-roster comparisons; then test migration, country
 transition, locked previews, four-slot layouts, saves, telemetry and live delivery.
+
+
+## Gentler curve, slower unlocks and the Europe zone (2026-11-20)
+
+- Level 5 was a sudden difficulty jump. Levels 1–8 are now two-move wins that the
+  three basic Patrol Squads can solve, with slow fugitives (40–62 km/h) and at
+  least two or three winning first moves. Specialists become necessary from
+  Level 11. The whole tier plan lives in `progressionV2.campaignPlan`.
+- Unlocks are paced to match: Rapid Action at Level 6, Helicopter at Level 11,
+  Marksman at Level 16. The fourth slot stays at Level 15. The mandatory Academy
+  lesson moves with Rapid Action to Level 6.
+- Rewards fall to 12 coins plus 1 per level, before the move multiplier, keeping
+  earnings close to what the Academy can absorb. Slowest-tier wins on Levels 1–5
+  still fund the Rapid recruit and its first upgrade.
+- A combined Europe patrol zone (France, Germany, Belgium, the Netherlands,
+  Luxembourg, Switzerland, Austria, Czechia) adds Levels 26–40 as the hardest
+  stretch. Shared national boundaries are internal borders.
+- Existing saves keep their unlocked level, wallet, squads, training and results.
+  Each country keeps its level numbers, so active attempts still replay on their
+  own map; the content at an existing number may now be a new layout. Winners of
+  Level 25 unlock Level 26 without another payout.
+- The Level 1 tutorial no longer forces every click. Players read self-paced
+  briefing cards, compare free previews on any post, and read a debrief after
+  each move. Only Deploy is limited to the taught move.

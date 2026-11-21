@@ -21,25 +21,25 @@ import type { CountryBoard, StartingSetup } from "./types";
 test("reward tiers and replay differences cannot farm money", () => {
   assert.deepEqual(
     [2, 3, 5, 6, 15].map((n) => rewardFor(1, n)),
-    [90, 60, 60, 30, 30],
+    [36, 24, 24, 12, 12],
   );
   let p = newPlayer();
   let result = awardWin(p, 1, 6);
-  assert.equal(result.reward, 30);
+  assert.equal(result.reward, 12);
   p = result.player;
   result = awardWin(p, 1, 5);
-  assert.equal(result.reward, 30);
+  assert.equal(result.reward, 12);
   p = result.player;
   result = awardWin(p, 1, 4);
   assert.equal(result.reward, 0);
   assert.equal(result.player.results["1"].bestMoves, 4);
   p = result.player;
   result = awardWin(p, 1, 2);
-  assert.equal(result.reward, 30);
+  assert.equal(result.reward, 12);
   p = result.player;
   assert.equal(awardWin(p, 1, 2).reward, 0);
   assert.equal(awardWin(p, 1, 7).reward, 0);
-  assert.equal(p.wallet, 90);
+  assert.equal(p.wallet, 36);
   assert.throws(() => awardWin(p, 3, 2), /locked/);
   assert.throws(() => rewardFor(1, 0));
   assert.throws(() => rewardFor(1, 16));
@@ -49,9 +49,9 @@ test("specialists unlock, buy once and train sequentially with a supplied clock"
   p.wallet = 500;
   assert.throws(
     () => applyAction(p, { kind: "purchase", squad: "rapid" }, 0),
-    /Level 3/,
+    /Level 6/,
   );
-  p.unlocked = 3;
+  p.unlocked = 6;
   p = applyAction(p, { kind: "purchase", squad: "rapid" }, 1000);
   assert.equal(p.wallet, 475);
   assert.throws(
@@ -87,7 +87,7 @@ test("specialists unlock, buy once and train sequentially with a supplied clock"
 });
 test("empty slots and simultaneous training are legal; duplicate and unowned selections are rejected", () => {
   let p = newPlayer();
-  p.unlocked = 15;
+  p.unlocked = 16;
   p.wallet = 1000;
   for (const squad of ["rapid", "helicopter", "marksman"] as const) {
     p = applyAction(p, { kind: "purchase", squad }, 0);
@@ -124,109 +124,57 @@ test("empty slots and simultaneous training are legal; duplicate and unowned sel
   );
 });
 
-const board: CountryBoard = JSON.parse(
-  readFileSync(
-    new URL("../../public/data/india.json", import.meta.url),
-    "utf8",
-  ),
-);
-const campaign = JSON.parse(
-  readFileSync(
-    new URL("../../public/data/india-campaign.json", import.meta.url),
-    "utf8",
-  ),
-);
-const navigation = new Navigation(board);
-test("all 15 India missions have distinct spawns and verified upgraded winning witnesses", () => {
-  assert.equal(campaign.levels.length, 15);
-  assert.equal(
-    new Set(campaign.levels.map((m: Mission) => m.runnerNode)).size,
-    15,
-  );
-  assert.equal(
-    campaign.configHash,
-    createHash("sha256").update(JSON.stringify(ECONOMY)).digest("hex"),
-    "Regenerate campaign after tuning changes",
-  );
-  assert.equal(
-    campaign.geometryHash,
-    createHash("sha256")
-      .update(
-        JSON.stringify([board.land, board.borders, board.nodes, board.links]),
-      )
-      .digest("hex"),
-  );
-  let basicFailures = 0;
-  for (const mission of campaign.levels as Mission[]) {
-    const p = newPlayer();
-    p.unlocked = 15;
-    mission.recommended.forEach(
-      ({ id, step }) => (p.squads[id] = { step, training: null }),
-    );
-    const attempt = createMission(
-      board,
-      mission,
-      p,
-      mission.recommended.map((x) => x.id),
-      0,
-      navigation,
-    );
-    assert.equal(attempt.game.outcome.kind, "playing");
-    const replay = replayAttempt(
-      board,
-      { ...attempt, moves: mission.witness },
-      navigation,
-    );
-    assert(replay.won, mission.id);
-    assert(replay.ordersUsed <= 15);
-    assert.equal(mission.verification!.moves, replay.ordersUsed);
-    const basic = newPlayer();
-    basic.unlocked = 15;
-    const game = createMission(
-      board,
-      mission,
-      basic,
-      ["patrol-1", "patrol-2", "patrol-3"],
-      0,
-      navigation,
-    ).game;
-    for (const move of mission.witness) {
-      if (!game.issueOrder(move.squad, move.border)) break;
-      game.resolveOrder();
-    }
-    if (!game.won) basicFailures++;
-  }
-  assert(
-    basicFailures >= 10,
-    "Later witnesses must require stronger capabilities, not just new labels",
-  );
+const hashOf = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const chapters = ECONOMY.chapters.map((chapter) => {
+  const board: CountryBoard = JSON.parse(readFileSync(new URL(`../../public/data/${chapter.country}.json`, import.meta.url), "utf8"));
+  const campaign = JSON.parse(readFileSync(new URL(`../../public/data/${chapter.country}-campaign.json`, import.meta.url), "utf8"));
+  return { chapter, board, campaign, navigation: new Navigation(board) };
 });
-test("minimum rewards cover every available upgrade before the next specialist unlock", () => {
+test("every campaign level follows the difficulty plan with a verified winning witness", () => {
+  const all: Mission[] = chapters.flatMap(({ campaign }) => campaign.levels);
+  assert.deepEqual(all.map((m) => m.number), Array.from({ length: ECONOMY.levelCount }, (_, i) => i + 1));
+  for (const { chapter, board, campaign, navigation } of chapters) {
+    assert.equal(campaign.levels.length, chapter.last - chapter.first + 1);
+    assert.equal(new Set(campaign.levels.map((m: Mission) => m.runnerNode)).size, campaign.levels.length, `${chapter.country}: distinct spawns`);
+    assert.equal(campaign.configHash, hashOf(ECONOMY), "Regenerate campaign after tuning changes");
+    assert.equal(campaign.geometryHash, hashOf([board.land, board.borders, board.nodes, board.links]));
+    for (const mission of campaign.levels as Mission[]) {
+      const tier = ECONOMY.campaignPlan.find((t) => mission.number >= t.levels[0] && mission.number <= t.levels[1])!;
+      assert.deepEqual(mission.recommended.map(({ id, step }) => [id, step]), tier.roster.map(([id, step]) => [id, step]), `${mission.id}: roster`);
+      assert.equal(mission.runnerSpeed, ECONOMY.opponents[mission.number - 1].speedKmh);
+      const p = newPlayer();
+      p.unlocked = ECONOMY.levelCount;
+      if (mission.recommended.length === 4) { p.deploymentSlots = 4; p.selection.push(null); }
+      mission.recommended.forEach(({ id, step }) => (p.squads[id] = { step, training: null }));
+      const attempt = createMission(board, mission, p, mission.recommended.map((x) => x.id), 0, navigation);
+      assert.equal(attempt.game.outcome.kind, "playing");
+      const replay = replayAttempt(board, { ...attempt, moves: mission.witness }, navigation);
+      assert(replay.won, mission.id);
+      assert.equal(mission.verification!.moves, replay.ordersUsed);
+      assert(replay.ordersUsed >= tier.moves[0] && replay.ordersUsed <= tier.moves[1], `${mission.id}: ${replay.ordersUsed} moves outside ${tier.moves}`);
+      if (tier.basicMustFail) assert.equal(mission.verification!.basicWitnessWins, false, `${mission.id}: needs its specialists`);
+    }
+  }
+  // The opening stretch is gentle: patrol-only, two-move wins, slow fugitives.
+  for (const mission of all.slice(0, 8)) {
+    assert.equal(mission.witness.length, 2, mission.id);
+    assert(mission.verification!.basicWitnessWins, `${mission.id}: basic patrols can win`);
+    assert(mission.runnerSpeed <= 62);
+  }
+  for (let i = 1; i < all.length; i++) assert(all[i].runnerSpeed > all[i - 1].runnerSpeed, "Speeds rise level by level");
+});
+test("rewards fund the Academy lesson without leaving far more money than the Academy can absorb", () => {
   const allTraining = ECONOMY.upgradeCosts.reduce((a, b) => a + b, 0);
-  const earnedBefore = (level: number) =>
-    Array.from({ length: level - 1 }, (_, i) => rewardFor(i + 1, 15)).reduce(
-      (a, b) => a + b,
-      0,
-    );
-  assert(earnedBefore(3) >= ECONOMY.catalog.rapid.price);
-  assert(
-    earnedBefore(6) >=
-      ECONOMY.catalog.rapid.price +
-        allTraining +
-        ECONOMY.catalog.helicopter.price,
-  );
-  assert(
-    earnedBefore(10) >=
-      ECONOMY.catalog.rapid.price +
-        ECONOMY.catalog.helicopter.price +
-        allTraining * 2 +
-        ECONOMY.catalog.marksman.price,
-  );
-  assert(
-    earnedBefore(11) >=
-      Object.values(ECONOMY.catalog).reduce((n, s) => n + s.price, 0) +
-        allTraining * 3,
-  );
+  const earned = (through: number, moves: number) =>
+    Array.from({ length: through }, (_, i) => rewardFor(i + 1, moves)).reduce((a, b) => a + b, 0);
+  const rapid = ECONOMY.catalog.rapid, helicopter = ECONOMY.catalog.helicopter;
+  // Slowest wins before the lesson still cover the recruit and first upgrade.
+  assert(earned(rapid.unlock - 1, 15) >= rapid.price + ECONOMY.upgradeCosts[0]);
+  // Even perfect play through India stays within 30% of everything India can buy.
+  const spendableInIndia = rapid.price + helicopter.price + allTraining * 2 + ECONOMY.fourthSlot.price;
+  assert(earned(15, 2) <= spendableInIndia * 1.3, `${earned(15, 2)} coins vs ${spendableInIndia} spendable`);
+  // Two-move-tier play through India still affords the fourth slot by its unlock.
+  assert(earned(ECONOMY.fourthSlot.unlock, 2) >= rapid.price + helicopter.price + ECONOMY.fourthSlot.price);
 });
 function fixture(): {
   board: CountryBoard;

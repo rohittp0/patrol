@@ -39,6 +39,11 @@ Subject briefs for the shared direction:
 | [milfajt.webp](../public/portraits/milfajt.webp) | Ferkó Milfajt, young nineteenth-century Hungarian outlaw, dark hair and moustache. |
 | [sobri.webp](../public/portraits/sobri.webp) | Jóska Sobri, young nineteenth-century Hungarian outlaw, wavy dark hair and moustache. |
 
+Europe cases Mesrine, Cartouche, Schinderhannes, Grasel, Biggs, de Lichte,
+Mandrin, Hiasl, Bonnot, Loutrel, Spaggiari and Carlos currently use interim ink
+silhouettes in the shared palette. Replace each with a generated portrait using
+the shared direction above, keeping the same file name.
+
 Historical text and links are maintained separately in `src/game/case-files.ts`.
 Changing an illustration does not change the sourced historical account.
 
